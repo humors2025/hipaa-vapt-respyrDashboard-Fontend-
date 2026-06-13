@@ -6,7 +6,6 @@ import Image from "next/image";
 import { UserProfile } from "./user-profile";
 import { fetchClientsDashboard } from "../services/authService";
 import { cookieManager } from "../lib/cookies";
-import { resolveProfileImage } from "../lib/profileImage";
 
 function decodeJwt(token) {
   try {
@@ -196,9 +195,10 @@ export default function ClientLists() {
   };
 
   const getZoneColor = (zone) => {
-    if (zone === "Optimal") return "#3FAF58";
-    if (zone === "Moderate") return "#FFBF2D";
-    if (zone === "Focus") return "#E48326";
+    // Optimal -> Strong, Moderate -> Steady, Focus -> Building
+    if (zone === "Optimal" || zone === "Strong") return "#3FAF58";
+    if (zone === "Moderate" || zone === "Steady") return "#FFBF2D";
+    if (zone === "Focus" || zone === "Building") return "#E48326";
     return "#535359";
   };
 
@@ -367,11 +367,10 @@ export default function ClientLists() {
                 <div className="flex gap-1.5 items-center">
                   <div>
                     <Image
-                      src={resolveProfileImage(client.p_image, "/icons/Ellipse 668.svg")}
+                      src={client.p_image || "/icons/Ellipse 668.svg"}
                       width={40}
                       height={40}
                       alt="profile"
-                      unoptimized
                       className="w-10 h-10 rounded-full"
                     />
                   </div>

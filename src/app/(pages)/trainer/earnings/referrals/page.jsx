@@ -13,6 +13,7 @@ import {
 } from "@/services/authService";
 import Cookies from "js-cookie";
 import * as CountryFlags from "country-flag-icons/react/3x2";
+import { countries as COUNTRY_DATA } from "countries-list";
 
 function decodeJwt(token) {
   try {
@@ -62,74 +63,15 @@ function getTrialCountdown(sentOnDate) {
   return { days, expired: false };
 }
 
-// Country dial codes for the mobile input
-const COUNTRIES = [
-  { code: "AF", name: "Afghanistan", dial: "+93" },
-  { code: "AL", name: "Albania", dial: "+355" },
-  { code: "DZ", name: "Algeria", dial: "+213" },
-  { code: "AR", name: "Argentina", dial: "+54" },
-  { code: "AU", name: "Australia", dial: "+61" },
-  { code: "AT", name: "Austria", dial: "+43" },
-  { code: "BH", name: "Bahrain", dial: "+973" },
-  { code: "BD", name: "Bangladesh", dial: "+880" },
-  { code: "BE", name: "Belgium", dial: "+32" },
-  { code: "BR", name: "Brazil", dial: "+55" },
-  { code: "BG", name: "Bulgaria", dial: "+359" },
-  { code: "CA", name: "Canada", dial: "+1" },
-  { code: "CL", name: "Chile", dial: "+56" },
-  { code: "CN", name: "China", dial: "+86" },
-  { code: "CO", name: "Colombia", dial: "+57" },
-  { code: "HR", name: "Croatia", dial: "+385" },
-  { code: "CZ", name: "Czechia", dial: "+420" },
-  { code: "DK", name: "Denmark", dial: "+45" },
-  { code: "EG", name: "Egypt", dial: "+20" },
-  { code: "FI", name: "Finland", dial: "+358" },
-  { code: "FR", name: "France", dial: "+33" },
-  { code: "DE", name: "Germany", dial: "+49" },
-  { code: "GR", name: "Greece", dial: "+30" },
-  { code: "HK", name: "Hong Kong", dial: "+852" },
-  { code: "HU", name: "Hungary", dial: "+36" },
-  { code: "IN", name: "India", dial: "+91" },
-  { code: "ID", name: "Indonesia", dial: "+62" },
-  { code: "IE", name: "Ireland", dial: "+353" },
-  { code: "IL", name: "Israel", dial: "+972" },
-  { code: "IT", name: "Italy", dial: "+39" },
-  { code: "JP", name: "Japan", dial: "+81" },
-  { code: "JO", name: "Jordan", dial: "+962" },
-  { code: "KE", name: "Kenya", dial: "+254" },
-  { code: "KW", name: "Kuwait", dial: "+965" },
-  { code: "MY", name: "Malaysia", dial: "+60" },
-  { code: "MX", name: "Mexico", dial: "+52" },
-  { code: "MA", name: "Morocco", dial: "+212" },
-  { code: "NL", name: "Netherlands", dial: "+31" },
-  { code: "NZ", name: "New Zealand", dial: "+64" },
-  { code: "NG", name: "Nigeria", dial: "+234" },
-  { code: "NO", name: "Norway", dial: "+47" },
-  { code: "OM", name: "Oman", dial: "+968" },
-  { code: "PK", name: "Pakistan", dial: "+92" },
-  { code: "PH", name: "Philippines", dial: "+63" },
-  { code: "PL", name: "Poland", dial: "+48" },
-  { code: "PT", name: "Portugal", dial: "+351" },
-  { code: "QA", name: "Qatar", dial: "+974" },
-  { code: "RO", name: "Romania", dial: "+40" },
-  { code: "RU", name: "Russia", dial: "+7" },
-  { code: "SA", name: "Saudi Arabia", dial: "+966" },
-  { code: "SG", name: "Singapore", dial: "+65" },
-  { code: "ZA", name: "South Africa", dial: "+27" },
-  { code: "KR", name: "South Korea", dial: "+82" },
-  { code: "ES", name: "Spain", dial: "+34" },
-  { code: "LK", name: "Sri Lanka", dial: "+94" },
-  { code: "SE", name: "Sweden", dial: "+46" },
-  { code: "CH", name: "Switzerland", dial: "+41" },
-  { code: "TW", name: "Taiwan", dial: "+886" },
-  { code: "TH", name: "Thailand", dial: "+66" },
-  { code: "TR", name: "Turkey", dial: "+90" },
-  { code: "UA", name: "Ukraine", dial: "+380" },
-  { code: "AE", name: "United Arab Emirates", dial: "+971" },
-  { code: "GB", name: "United Kingdom", dial: "+44" },
-  { code: "US", name: "United States", dial: "+1" },
-  { code: "VN", name: "Vietnam", dial: "+84" },
-]
+// Country list for the mobile-number input, sourced from the `countries-list`
+// package. Entries without an available flag (in country-flag-icons) are filtered
+// out, then sorted alphabetically by name.
+const COUNTRIES = Object.entries(COUNTRY_DATA)
+  .map(([code, data]) => ({
+    code,
+    name: data.name,
+    dial: `+${Array.isArray(data.phone) ? data.phone[0] : data.phone}`,
+  }))
   .filter((c) => CountryFlags[c.code])
   .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -738,40 +680,7 @@ function PendingInvites({
                       )}
                     </td>
                     <td className="py-2.5 px-4">
-                      {(() => {
-                        const countdown =
-                          inv.status === "accepted"
-                            ? getTrialCountdown(inv.sent_on_date)
-                            : null;
-
-                        // For accepted clients, show the trial countdown instead of the badge.
-                        if (countdown) {
-                          if (countdown.expired) {
-                            return (
-                              <div className="flex items-center gap-3">
-                                <span className="inline-flex rounded-full text-[11px] font-semibold px-2.5 py-0.5 bg-[#FCEAEB] text-[#B5363A] whitespace-nowrap">
-                                  Expired
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleExtendClick(inv, index)}
-                                  disabled={actionInProgress[`extend-${uniqueKey}`]}
- className="rounded-[8px] border border-[#E1E6ED] px-3 py-1.5 text-[12px] font-semibold text-[#535359] disabled:opacity-40 hover:bg-[#F5F7FA] transition-colors cursor-pointer whitespace-nowrap"
-                                >
-                                  {actionInProgress[`extend-${uniqueKey}`] ? "Extending..." : "+7 days"}
-                                </button>
-                              </div>
-                            );
-                          }
-                          return (
-                            <span className="inline-flex rounded-full text-[11px] font-semibold px-2.5 py-0.5 bg-[#E5F6EE] text-[#1F7A4A] whitespace-nowrap">
-                              {countdown.days} {countdown.days === 1 ? "day" : "days"} remaining
-                            </span>
-                          );
-                        }
-
-                        return getStatusBadge(inv.status);
-                      })()}
+                      {getStatusBadge(inv.status)}
                     </td>
                     <td className="py-2.5 px-4 text-[#A1A1A1]">
                       {inv.sent_on_date ? new Date(inv.sent_on_date).toLocaleString("en-US", {

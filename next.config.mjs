@@ -1,7 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    domains: ['humorstech.com'],
+    remotePatterns: [
+      { protocol: 'https', hostname: 'humorstech.com' },
+      { protocol: 'https', hostname: 'www.admin.respyr.ai' },
+    ],
   },
 
   // Phase 1 route migration: old top-level routes were moved under /trainer/*.

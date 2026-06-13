@@ -98,36 +98,23 @@ function SegmentedProgressBar({
   );
 }
 
-// One paragraph with its own independent "View all / View less" toggle.
+// One paragraph of trainer/insight text.
 function ExpandableText({ label, body }) {
-  const [expanded, setExpanded] = useState(false);
-
   if (!body) return null;
 
   return (
     <div className="flex flex-col gap-1 items-start w-full">
-      <p
-        className={`text-[#738298] text-[12px] font-normal leading-[130%] ${
-          expanded ? "" : "line-clamp-3"
-        }`}
-      >
+      <p className="text-[#738298] text-[12px] font-normal leading-[130%]">
         <b className="font-semibold">{label}</b>
         {body}
       </p>
-
-      <button
-        type="button"
-        onClick={() => setExpanded((prev) => !prev)}
-        className="text-[#308BF9] text-[12px] font-semibold leading-normal tracking-[-0.24px] underline cursor-pointer"
-      >
-        {expanded ? "View less" : "View all"}
-      </button>
     </div>
   );
 }
 
 export default function FatUsePatternTrend() {
   const [showPopup, setShowPopup] = useState(false);
+  const [activeTab, setActiveTab] = useState("meaning");
 
   const clientIndividualProfile = useSelector(
     (state) => state.clientIndividualProfile.data
@@ -205,7 +192,7 @@ export default function FatUsePatternTrend() {
           filledColor={statusColor}
         />
 
-        <div className="flex items-baseline">
+        <div className="flex items-center">
           <div className="flex items-baseline gap-[4px]">
             <p className="text-[#252525] text-[72px] font-normal leading-none tracking-[-1.44px]">
               {value !== "NA" && !isNaN(Number(value))
@@ -217,21 +204,43 @@ export default function FatUsePatternTrend() {
               %
             </p>
           </div>
+
+          <ExpandableText body={trainerState} />
         </div>
       </div>
 
       <div className="flex flex-col gap-2.5 items-start">
-        <ExpandableText body={trainerState} />
+        <div className="flex items-center gap-2 w-full">
+          <button
+            type="button"
+            onClick={() => setActiveTab("meaning")}
+            className={`text-[12px] font-semibold leading-normal tracking-[-0.24px] px-[18px] py-1.5 rounded-[24px] cursor-pointer transition-colors ${
+              activeTab === "meaning"
+                ? "bg-[#308BF9] text-white"
+                : "bg-[#F2F5F9] text-[#738298]"
+            }`}
+          >
+            Meaning
+          </button>
 
-        <ExpandableText
-          label="Meaning: "
-          body={trainerMeaning}
-        />
+          <button
+            type="button"
+            onClick={() => setActiveTab("deepScience")}
+            className={`text-[12px] font-semibold leading-normal tracking-[-0.24px] px-[18px] py-1.5 rounded-[24px] cursor-pointer transition-colors ${
+              activeTab === "deepScience"
+                ? "bg-[#308BF9] text-white"
+                : "bg-[#F2F5F9] text-[#738298]"
+            }`}
+          >
+            Deep Science
+          </button>
+        </div>
 
-        <ExpandableText
-          label="Deep Science: "
-          body={trainerDeepScience}
-        />
+        {activeTab === "meaning" ? (
+          <ExpandableText body={trainerMeaning} />
+        ) : (
+          <ExpandableText body={trainerDeepScience} />
+        )}
       </div>
     </div>
 
