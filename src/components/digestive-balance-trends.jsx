@@ -1,0 +1,281 @@
+"use client";
+
+import Image from "next/image";
+import { useState } from "react";
+import SomeInfoPopup from "./pop-folder/some-info-popup";
+import ExpandableText from "./ExpandableText";
+
+function SegmentedProgressBar({
+  value = 85,
+  totalSegments = 55,
+  labels = [0, 50, 70, 100],
+  segmentWeights = [80, 82, 172],
+  filledColor = "#FFBF2D",
+  emptyColor = "#E1E6ED",
+}) {
+  const safeValue = Math.max(0, Math.min(100, Number(value) || 0));
+
+  const totalWeight = segmentWeights.reduce((a, b) => a + b, 0);
+
+  const labelLeftPct = [0];
+  for (let i = 0; i < segmentWeights.length; i++) {
+    labelLeftPct.push(labelLeftPct[i] + (segmentWeights[i] / totalWeight) * 100);
+  }
+
+  const zoneSegments = (() => {
+    const raw = segmentWeights.map((w) => (w / totalWeight) * totalSegments);
+    const base = raw.map((x) => Math.floor(x));
+    let used = base.reduce((a, b) => a + b, 0);
+
+    const fracOrder = raw
+      .map((x, i) => ({ i, frac: x - Math.floor(x) }))
+      .sort((a, b) => b.frac - a.frac);
+
+    let idx = 0;
+    while (used < totalSegments) {
+      base[fracOrder[idx % fracOrder.length].i] += 1;
+      used += 1;
+      idx += 1;
+    }
+    return base;
+  })();
+
+  const ranges = [
+    { from: 0, to: 50, weight: segmentWeights[0], segs: zoneSegments[0] },
+    { from: 50, to: 70, weight: segmentWeights[1], segs: zoneSegments[1] },
+    { from: 70, to: 100, weight: segmentWeights[2], segs: zoneSegments[2] },
+  ];
+
+  const filledByRange = ranges.map((r) => {
+    const overlap = Math.max(0, Math.min(safeValue, r.to) - r.from);
+    const span = r.to - r.from;
+    return Math.round((overlap / span) * r.segs);
+  });
+
+  return (
+    <div className="w-full">
+      <div className="relative h-4 mb-[6px] w-full">
+        {labels.map((lab, index) => {
+          let alignment = "-translate-x-1/2";
+          if (index === 0) alignment = "translate-x-0";
+          if (index === labels.length - 1) alignment = "-translate-x-full";
+
+          return (
+            <span
+              key={lab}
+              className={`absolute text-[8px] font-normal text-[#535359] leading-[110%] tracking-[-0.16px] ${alignment}`}
+              style={{ left: `${labelLeftPct[index]}%` }}
+            >
+              {lab}
+            </span>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center gap-[3px] w-full">
+        {ranges.map((r, ri) => (
+          <div
+            key={ri}
+            className="flex gap-[3px] items-center"
+            style={{ width: `${(r.weight / totalWeight) * 100}%` }}
+          >
+            {Array.from({ length: r.segs }).map((_, si) => {
+              const isFilled = si < filledByRange[ri];
+              return (
+                <div
+                  key={si}
+                  className="flex-1 h-[40px]"
+                  style={{
+                    backgroundColor: isFilled ? filledColor : emptyColor,
+                  }}
+                />
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const getZoneColor = (zone) => {
+  switch (zone?.toLowerCase()) {
+    case "optimal":
+      return "#3FAF58";
+    case "moderate":
+      return "#FFBF2D";
+    case "focus":
+      return "#E48326";
+    default:
+      return "#3FAF58";
+  }
+};
+
+const getZoneDisplay = (zone) => {
+  switch (zone?.toLowerCase()) {
+    case "optimal":
+      return { text: "Optimal", color: "#3FAF58" };
+    case "moderate":
+      return { text: "Moderate", color: "#FFBF2D" };
+    case "focus":
+      return { text: "Focus", color: "#E48326" };
+    default:
+      return { text: zone || "Optimal", color: "#3FAF58" };
+  }
+};
+
+export default function DigestiveBalanceTrends({ data }) {
+  const [showPopup, setShowPopup] = useState(false);
+  const [popupType, setPopupType] = useState(null);
+
+  const nutrientUtilization = data?.items?.find(
+    (item) => item.title === "Nutrient Utilization Trend"
+  );
+
+  const digestiveActivity = data?.items?.find(
+    (item) => item.title === "Digestive Activity Trend"
+  );
+  
+
+  const nutrientScore = nutrientUtilization ? Math.round(nutrientUtilization.score) : "NA";
+  const digestiveScore = digestiveActivity ? Math.round(digestiveActivity.score) : "NA";
+
+  const nutrientZone = nutrientUtilization?.zone || "Optimal";
+  const digestiveZone = digestiveActivity?.zone || "Optimal";
+
+  const nutrientZoneInfo = getZoneDisplay(nutrientZone);
+  const digestiveZoneInfo = getZoneDisplay(digestiveZone);
+
+  return (
+    <>
+      <div className="flex gap-[97px] ">
+        {nutrientUtilization && (
+        <div className="flex flex-col gap-[25px] w-full">
+          <div className="flex flex-col gap-2.5">
+            <div className="flex gap-[5px] items-center">
+              <p className="text-[#252525] text-[12px] font-normal leading-[110%] tracking-[-0.24px] whitespace-nowrap">
+                {nutrientUtilization?.title || "Nutrient Utilization Trend"}
+              </p>
+              <Image
+                src="/icons/hugeicons_information-circle1.svg"
+                alt="info"
+                width={20}
+                height={20}
+               onClick={() => {
+    setPopupType("nutrient");
+    setShowPopup(true);
+  }}
+                className="cursor-pointer"
+              />
+            </div>
+
+            <div
+              className="w-[100px] flex items-center justify-center px-[25px] py-1.5 rounded-[24px]"
+              style={{ backgroundColor: nutrientZoneInfo.color }}
+            >
+              <p className="text-[#FFFFFF] text-[12px] font-semibold leading-normal tracking-[-0.24px]">
+                {nutrientZoneInfo.text}
+              </p>
+            </div>
+          </div>
+
+          <SegmentedProgressBar
+            value={nutrientScore}
+            totalSegments={55}
+            labels={[0, 50, 70, 100]}
+            segmentWeights={[80, 82, 172]}
+            filledColor={getZoneColor(nutrientZone)}
+          />
+
+          <div className="flex flex-col gap-4 items-baseline">
+            <div className="flex items-baseline gap-[4px]">
+              <p className="text-[#252525] text-[72px] font-normal leading-none tracking-[-1.44px]">
+                {nutrientScore}
+              </p>
+
+              <p className="text-[#252525] text-[20px] font-semibold leading-none tracking-[-0.4px] pr-[13px]">
+                %
+              </p>
+            </div>
+
+        
+
+<div className="flex flex-col gap-2.5 items-start w-full">
+  <ExpandableText body={digestiveActivity?.trainer_state} />
+  <ExpandableText label="Meaning: " body={digestiveActivity?.trainer_score_meaning} />
+  <ExpandableText label="Deep Science: " body={digestiveActivity?.trainer_score_deep_science} />
+</div>
+          </div>
+        </div>
+        )}
+
+        <div className="flex flex-col gap-[25px] w-full">
+          <div className="flex flex-col gap-2.5">
+            <div className="flex gap-[5px] items-center">
+              <p className="text-[#252525] text-[12px] font-normal leading-[110%] tracking-[-0.24px] whitespace-nowrap">
+                {digestiveActivity?.title || "Digestive Activity Trend"}
+              </p>
+              <Image
+                src="/icons/hugeicons_information-circle1.svg"
+                alt="info"
+                width={20}
+                height={20}
+                onClick={() => {
+                  setPopupType("digestive");
+                  setShowPopup(true);
+                }}
+                className="cursor-pointer"
+              />
+            </div>
+
+            <div
+              className="w-[100px] flex items-center justify-center px-[25px] py-1.5 rounded-[24px]"
+              style={{ backgroundColor: digestiveZoneInfo.color }}
+            >
+              <p className="text-[#FFFFFF] text-[12px] font-semibold leading-normal tracking-[-0.24px]">
+                {digestiveZoneInfo.text}
+              </p>
+            </div>
+          </div>
+
+          <SegmentedProgressBar
+            value={digestiveScore}
+            totalSegments={55}
+            labels={[0, 50, 70, 100]}
+            segmentWeights={[80, 82, 172]}
+            filledColor={getZoneColor(digestiveZone)}
+          />
+
+          <div className="flex flex-col gap-4 items-baseline">
+            <div className="flex items-baseline gap-[4px]">
+              <p className="text-[#252525] text-[72px] font-normal leading-none tracking-[-1.44px]">
+                {digestiveScore}
+              </p>
+
+              <p className="text-[#252525] text-[20px] font-semibold leading-none tracking-[-0.4px] pr-[13px]">
+                %
+              </p>
+            </div>
+
+<div className="flex flex-col gap-2.5 items-start w-full">
+              <ExpandableText body={digestiveActivity?.trainer_state} />
+              <ExpandableText label="Meaning: " body={digestiveActivity?.trainer_score_meaning} />
+              <ExpandableText label="Deep Science: " body={digestiveActivity?.trainer_score_deep_science} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {showPopup && (
+  <div
+    className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+    onClick={() => setShowPopup(false)}
+  >
+    <SomeInfoPopup 
+     type={popupType} 
+    onClose={() => setShowPopup(false)} />
+  </div>
+)}
+    </>
+  );
+}

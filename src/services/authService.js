@@ -1,0 +1,1733 @@
+
+// services/authService.js
+
+import { apiFetcher } from "../config/fetcher";
+import { API_ENDPOINTS } from "../config/apiConfig";
+import { cookieManager } from "../lib/cookies";
+import Cookies from "js-cookie";
+import { getSuperAdminPartnerCode } from "../lib/superAdminContext";
+import { refreshAccessToken } from "../lib/tokenRefresh";
+
+function withSuperAdminPartnerCode(payload) {
+  const partnerCode = getSuperAdminPartnerCode();
+  if (partnerCode) {
+    return { ...payload, dietitian_id: partnerCode };
+  }
+  return payload;
+}
+
+
+
+function decodeAccessTokenFromCookie() {
+  try {
+    const token = Cookies.get("access_token");
+
+    if (!token) {
+      return null;
+    }
+
+    const payload = token.split(".")[1];
+
+    if (!payload) {
+      return null;
+    }
+
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((char) => {
+          return `%${`00${char.charCodeAt(0).toString(16)}`.slice(-2)}`;
+        })
+        .join("")
+    );
+
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+}
+
+function getActorUserIdFromAccessToken() {
+  const decoded = decodeAccessTokenFromCookie();
+  if (decoded?.user_id || decoded?.email) {
+    return decoded.user_id ?? decoded.email;
+  }
+
+  const userCookie = Cookies.get("user");
+  if (userCookie) {
+    try {
+      const user = JSON.parse(userCookie);
+      return user?.user_id ?? user?.email ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+
+
+export const loginService = async (email, password) => {
+  return apiFetcher(API_ENDPOINTS.AUTH.LOGIN, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      identifier: email,
+      password: password,
+    }),
+  });
+};
+
+// Exchange the stored refresh_token for a fresh access token. Normally you
+// don't need to call this directly — apiFetcher refreshes automatically on a
+// 401 and retries the request. Exposed for explicit/proactive refreshes (e.g.
+// a timer that renews before expiry). Returns the new access token or null.
+export const refreshTokenService = async () => {
+  return refreshAccessToken();
+};
+
+export const sendOtpService = async (email) => {
+  return apiFetcher(API_ENDPOINTS.AUTH.SEND_OTP, {
+    method: "POST",
+    body: JSON.stringify({
+      email: email,
+    }),
+  });
+};
+
+
+export const updatePasswordService = async (dieticianId, password) => {
+  return apiFetcher(API_ENDPOINTS.AUTH.UPDATEPASSWORDSERVICE, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      dietician_id: dieticianId,
+      password: password,
+    }),
+  });
+};
+
+
+
+export const resetPasswordService = async (email, password) => {
+  return apiFetcher(API_ENDPOINTS.AUTH.RESET_PASSWORD, {
+    method: "POST",
+    body: JSON.stringify({
+      email: email,
+      password: password,
+    }),
+  });
+};
+
+
+export const updateDietPlanStatusService = async (dieticianId) => {
+  return apiFetcher(API_ENDPOINTS.AUTH.DIETPLANSTATUS, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      dietitian_id: dieticianId,
+    }),
+  });
+};
+
+
+export const fetchClientsWithDietPlan = async (dieticianId) => {
+  return apiFetcher(API_ENDPOINTS.CLIENT.CLIENTTABLE, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      dietician_id: dieticianId,
+    }),
+  });
+};
+
+
+export const fetchTrainerAdminClientsListDirService = async ({
+  page = 1,
+  limit = 10,
+  search = "",
+} = {}) => {
+  const accessToken = Cookies.get("access_token");
+
+  if (!accessToken) {
+    throw new Error("Access token missing. Please login again.");
+  }
+
+  const decoded = decodeAccessTokenFromCookie();
+
+  const actorUserId = decoded?.user_id ?? decoded?.email;
+  const trainerId = decoded?.partner_code ?? decoded?.dietician_id ?? decoded?.sub;
+
+  if (!actorUserId || !trainerId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  const res = await apiFetcher(API_ENDPOINTS.CLIENT.TRAINERADMINCLIENTSLISTDIR, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      trainer_id: trainerId,
+      page,
+      limit,
+      search,
+    }),
+  });
+
+  if (res && res.status === false) {
+    throw new Error(res.message || "Failed to fetch clients");
+  }
+
+  return res;
+};
+
+
+
+
+
+export const fetchScoreTrend = async (dieticianId, profileId, mode) => {
+  return apiFetcher(API_ENDPOINTS.PROFILESCOREANALYSIS.GRAPH, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      dietitian_id: dieticianId,
+      profile_id: profileId,
+      // dietitian_id: "RespyrD02",
+      // profile_id: "profile3",
+      //mode: mode.toLowerCase(), 
+    }),
+  });
+};  
+
+
+
+export const fetchScoresInsight = async (dieticianId, profileId, date) => {
+  try {
+    const response = await apiFetcher(API_ENDPOINTS.PROFILESCOREANALYSIS.SCORESINSIGHT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        dietician_id: dieticianId,
+        profile_id: profileId,
+        date: date,
+      }),
+    });
+
+    return response;
+  } catch (error) {
+    // If it's the "no data" error, return a special object instead of throwing
+    if (error.message === "No test_data found for given inputs") {
+      return { noData: true, message: error.message };
+    }
+    // Re-throw other errors
+    throw error;
+  }
+};
+
+
+
+
+export const submitPlanSummaryService = async (planData) => {
+  return apiFetcher(API_ENDPOINTS.PLAN.PLANSUMMARYFORM, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(planData),
+  });
+};
+
+
+
+export const fetchClientProfileData = async (dieticianId, profileId) => {
+  return apiFetcher(API_ENDPOINTS.CLIENTPROFILE.CLIENTPROFILEDATA, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      dietician_id: dieticianId,
+      profile_id: profileId,
+    }),
+  });
+};
+
+
+
+
+// export const fetchWeeklyAnalysisComplete = async (requestData) => {
+//   return apiFetcher(API_ENDPOINTS.MEALANALYSIS.WEEKLYANALYSISCOMPLETE, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify(requestData),
+//   });
+// };
+
+export const checkWeeklyAnalysisService = async (dieticianId, profileId, startDate, endDate) => {
+  return apiFetcher(API_ENDPOINTS.MEALANALYSIS.CHECKWEEKLYANALYSIS, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      dietician_id: dieticianId,
+      profile_id: profileId,
+      start_date: startDate,
+      end_date: endDate,
+    }),
+  });
+};
+
+
+export const saveWeeklyFoodJson = async (dietitian_id, profile_id, start_date, end_date, food_json) => {
+  return apiFetcher(API_ENDPOINTS.MEALANALYSIS.ADDFOOD, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      dietitian_id: dietitian_id,
+      profile_id: profile_id,
+      start_date: start_date,
+      end_date: end_date,
+      food_json: food_json,
+    }),
+  });
+};
+
+
+// services/authService.js
+
+export const fetchSavedWeeklyFoodJson = async (profileId, startDate, endDate, dieticianId = null) => {
+  // Build query parameters
+  const params = new URLSearchParams();
+  params.append('profile_id', profileId);
+  params.append('start_date', startDate);
+  params.append('end_date', endDate);
+  
+  // Add dietitian_id if provided
+  if (dieticianId) {
+    params.append('dietician_id', dieticianId);
+  }
+  
+  // Make GET request with query parameters
+  const url = `${API_ENDPOINTS.MEALANALYSIS.GETFOOD}?${params.toString()}`;
+  
+  try {
+    const response = await apiFetcher(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    
+    return response;
+  } catch (error) {
+    // Check if it's the "no data found" error
+    if (error.message?.includes("No data found") || 
+        error.data?.message?.includes("No data found") ||
+        error.message === "Weekly food data not found") {
+      
+      // Return a special response object instead of throwing
+      return { 
+        success: false, 
+        noData: true, 
+        message: "No data found for this week" 
+      };
+    }
+    
+    // Re-throw other errors
+    throw error;
+  }
+};
+
+  
+export const fetchWeeklyAnalysisComplete1 = async (requestData) => {
+  return apiFetcher(API_ENDPOINTS.MEALANALYSIS.WEEKLYANALYSISCOMPLETE1, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(requestData),
+      timeoutMs: 180000,
+  });
+};
+
+
+
+export const fetchDashboardTableCards = async (dieticianId) => {
+  return apiFetcher(API_ENDPOINTS.DASHBOARD.TABLECARDS, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      dietician_id: dieticianId,
+    }),
+  });
+};
+
+
+
+export const fetchTestAnalytics = async (dieticianId, date = "") => {
+  return apiFetcher(API_ENDPOINTS.DASHBOARD.TESTANALYTICS, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      dietitian_id: dieticianId,
+      date: date,
+    }),
+  });
+};
+
+
+
+export const fetchTestRemaining = async (dieticianId) => {
+  return apiFetcher(API_ENDPOINTS.TESTINFO.TESTREMAINING, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      dietitian_id: dieticianId,
+    }),
+  });
+};
+
+
+
+export const fetchClientLog = async (dieticianId, clientId) => {
+  return apiFetcher(API_ENDPOINTS.PLANHISTORY.CLIENTLOG, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      dietitian_id: dieticianId,
+      client_id: clientId,
+    }),
+  });
+};
+
+
+
+export const updateDietPlanJsonService = async (login_id, profile_id, diet_plan_id, diet_json) => {
+  return apiFetcher(API_ENDPOINTS.PLAN.DIETPLAN, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      login_id: login_id,
+      profile_id: profile_id,
+      diet_plan_id: diet_plan_id,
+      diet_json: JSON.stringify(diet_json),
+    }),
+  });
+};
+
+export const updateDietPlanFoodService = async (payload) => {
+  return apiFetcher(API_ENDPOINTS.PLAN.UPDATEDIETFOOD, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+};
+
+
+
+export const fetchDietPlanJsonService = async (login_id, profile_id, diet_plan_id) => {
+  return apiFetcher(API_ENDPOINTS.PLAN.DIETPLANJSON, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      login_id: login_id,
+      profile_id: profile_id,
+      diet_plan_id: diet_plan_id,
+    }),
+  });
+};
+
+
+
+
+export const deleteDietPlanService = async (dietPlanId, clientId, dietitianId) => {
+  return apiFetcher(API_ENDPOINTS.PLAN.DELETEDIETPLAN, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      diet_plan_id: String(dietPlanId),
+      client_id: String(clientId),
+      dietitian_id: String(dietitianId),
+    }),
+  });
+};
+
+
+
+export const fetchClientsDashboard = async (
+  dieticianId,
+  type = "all",
+  page = 1,
+  date,
+  { masking = false } = {}
+) => {
+  const endpoint = masking
+    ? API_ENDPOINTS.CLIENT.CLIENTS_DASHBOARD_MASKED
+    : API_ENDPOINTS.CLIENT.CLIENTS_DASHBOARD;
+
+  const body = {
+    dietician_id: dieticianId,
+    type: type,
+    page: page,
+    date: date,
+  };
+
+  if (masking) {
+    const decoded = decodeAccessTokenFromCookie();
+    const actorUserId = decoded?.user_id;
+    if (actorUserId) {
+      body.actor_user_id = actorUserId;
+    }
+  }
+
+  const accessToken = Cookies.get("access_token");
+
+  return apiFetcher(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+};
+
+
+export const fetchCalendarData = async (dieticianId) => {
+  const accessToken = Cookies.get("access_token");
+
+  if (!accessToken) {
+    throw new Error("Access token missing. Please login again.");
+  }
+
+  const partnerCode = getSuperAdminPartnerCode();
+  const effectiveDietitianId = partnerCode || dieticianId;
+
+  return apiFetcher(API_ENDPOINTS.CALENDER.CALENDERTABLE, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      dietician_id: effectiveDietitianId,
+    }),
+  });
+};
+
+
+
+export const fetchClientProfileDetails = async (profileId, range = "weekly", dietitianId) => {
+  if (!profileId) {
+    throw new Error("Profile ID is required");
+  }
+
+  if (!dietitianId) {
+    throw new Error("Dietitian ID is required");
+  }
+
+  const partnerCode = getSuperAdminPartnerCode();
+  const effectiveDietitianId = partnerCode || dietitianId;
+  const url = `${API_ENDPOINTS.CLIENTPROFILE.CLIENTPROFILEDETAILS}?profile_id=${encodeURIComponent(
+    profileId
+  )}&range=${encodeURIComponent(range)}&dietitian_id=${encodeURIComponent(effectiveDietitianId)}`;
+
+  return apiFetcher(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+};
+
+
+
+export const fetchClientIndividualProfile = async (profileId, date, dietitianId, { masking = false } = {}) => {
+  const endpoint = masking
+    ? API_ENDPOINTS.CLIENTPROFILE.CLIENTINDIVIDUALPROFILEMASKING
+    : API_ENDPOINTS.CLIENTPROFILE.CLIENTINDIVIDUALPROFILE;
+
+  const basePayload = {
+    profile_id: profileId,
+    date: date,
+    dietitian_id: dietitianId,
+  };
+
+  if (masking) {
+    const decoded = decodeAccessTokenFromCookie();
+    const actorUserId = decoded?.user_id;
+    if (actorUserId) {
+      basePayload.actor_user_id = actorUserId;
+    }
+  }
+
+  return apiFetcher(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(withSuperAdminPartnerCode(basePayload)),
+  });
+};
+
+
+
+// Add to authService.js
+export const fetchClientProfileDatesList = async (profileId, dietitianId) => {
+  return apiFetcher(API_ENDPOINTS.CLIENTPROFILE.CLIENTPROFILEDATESLIST, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(withSuperAdminPartnerCode({
+      profile_id: profileId,
+       dietitian_id: dietitianId,
+    })),
+  });
+};
+
+
+
+export const searchClientsService = async (dieticianId, searchTerm) => {
+  return apiFetcher(API_ENDPOINTS.SEARCH.SEARCHCLIENT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      dietician_id: dieticianId,
+      search: searchTerm,
+    }),
+  });
+};
+
+
+
+export const fetchDietAnalysisPlan = async (
+  profileId,
+  weekStartDate,
+  weekEndDate,
+  dietitianId
+) => {
+  return apiFetcher(API_ENDPOINTS.DIETANALYSIS.DIETANALYSISPLAN, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(withSuperAdminPartnerCode({
+      profile_id: profileId,
+      week_start_date: weekStartDate,
+      week_end_date: weekEndDate,
+       dietitian_id: dietitianId,
+    })),
+  });
+};
+
+
+export const fetchClientWeeklyDates = async (profileId, dietitianId) => {
+  try {
+    const accessToken = Cookies.get("access_token");
+    const response = await apiFetcher(API_ENDPOINTS.CLIENTPROFILE.CLIENTWEEKLYDATES, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(withSuperAdminPartnerCode({
+        profile_id: profileId,
+        dietitian_id: dietitianId,
+      })),
+    });
+    
+    return response;
+  } catch (error) {
+    // Check if it's the "no weekly data found" error
+    if (error.message?.includes("No weekly data found") || 
+        error.data?.message?.includes("No weekly data found")) {
+      // Return a special response object instead of throwing
+      return { 
+        status: false, 
+        message: error.message || "No weekly data found for last 3 months",
+        profile_id: profileId
+      };
+    }
+    // Re-throw other errors
+    throw error;
+  }
+};
+
+
+
+export const fetchMacroSummaryByDate = async (profileId, date, dietitianId) => {
+  return apiFetcher(API_ENDPOINTS.MACROSANALYSIS.GETMACROSUMMARY, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(withSuperAdminPartnerCode({
+      profile_id: profileId,
+      dietitian_id: dietitianId,
+      date: date,
+    })),
+  });
+};
+
+
+export const fetchHabitsMonitoringData = async (profileId, dietitianId) => {
+  return apiFetcher(API_ENDPOINTS.HABITMONITORING.GETHABITSDATA, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(withSuperAdminPartnerCode({
+      profile_id: profileId,
+      dietitian_id: dietitianId,
+    })),
+  });
+};
+
+
+export const fetchHabitDetail = async (profileId, dietitianId, selectedHabitId) => {
+  return apiFetcher(API_ENDPOINTS.HABITMONITORING.GETHABITDETAIL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(withSuperAdminPartnerCode({
+      dietitian_id: dietitianId,
+      profile_id: profileId,
+      selected_habit_id: selectedHabitId,
+    })),
+  });
+};
+
+
+export const updatePerformanceLevel = async (dietitianId, profileId, levelType) => {
+  return apiFetcher(API_ENDPOINTS.LEVELUPDATE.LEVEL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      dietitian_id: dietitianId,
+      profile_id: profileId,
+      level_type: levelType,
+    }),
+  });
+};
+
+
+export const getClientProfileDetails = async (profileId, dietitianId) => {
+  return apiFetcher(API_ENDPOINTS.CLIENTPROFILE.GETCLIENTPROFILEDETAILS, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(withSuperAdminPartnerCode({
+      profile_id: profileId,
+      dietitian_id: dietitianId,
+    })),
+  });
+};
+
+
+
+export const fetchTrainerDirection = async (profileId, dietitianId, date) => {
+  return apiFetcher(API_ENDPOINTS.TRAINER.TRAINERDIRECTION, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(withSuperAdminPartnerCode({
+      profile_id: profileId,
+      dietitian_id: dietitianId,
+      date: date,
+    })),
+  });
+};
+
+
+
+export const approveDietPlanService = async (profileId, dieticianId, id, status) => {
+  return apiFetcher(API_ENDPOINTS.DIETANALYSIS.APPROVALPLAN, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      profile_id: profileId,
+      dietician_id: dieticianId,
+      id: id,
+      status: status,
+    }),
+  });
+};
+
+
+
+export const inviteTrainerAdminService = async ({
+  firstName,
+  lastName,
+  email,
+  phone,
+}) => {
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.INVITETRAINERADMIN, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Cookies.get("access_token")}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      first_name: firstName,
+      last_name: lastName,
+      email: email,
+      phone: phone,
+    }),
+  });
+};
+
+
+
+
+export const fetchTrainerAdminListService = async () => {
+  const accessToken = Cookies.get("access_token");
+
+  if (!accessToken) {
+    throw new Error("Access token missing. Please login again.");
+  }
+
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.TRAINERADMINLIST, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ actor_user_id: actorUserId }),
+  });
+};
+
+
+export const fetchAllTrainersForSuperAdminService = async ({
+  page = 1,
+  limit = 10,
+  search = "",
+  trainerAdminUserId = "",
+  status = "all",
+} = {}) => {
+  const accessToken = Cookies.get("access_token");
+
+  if (!accessToken) {
+    throw new Error("Access token missing. Please login again.");
+  }
+
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.LISTALLTRAINERSFORSUPERADMIN, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      page,
+      limit,
+      search,
+      trainer_admin_user_id: trainerAdminUserId,
+      status,
+    }),
+  });
+};
+
+
+// Super admin: all clients across the entire network
+// (super-admin-all-clients-overview.php).
+// actor_user_id  -> user_id decoded from the access token
+// dietitian_id   -> partner_code decoded from the access token (used as a
+//                   filter; pass a specific code to scope to one dietitian,
+//                   or "" to list every client in the network)
+export const fetchSuperAdminAllClientsOverviewService = async ({
+  page = 1,
+  limit = 10,
+  search = "",
+  date = "",
+  type = "all",
+  dietitianId = "",
+} = {}) => {
+  const accessToken = Cookies.get("access_token");
+
+  if (!accessToken) {
+    throw new Error("Access token missing. Please login again.");
+  }
+
+  const decoded = decodeAccessTokenFromCookie();
+  const actorUserId = decoded?.user_id ?? decoded?.email ?? getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.SUPERADMINALLCLIENTSOVERVIEW, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      page,
+      limit,
+      search,
+      date,
+      type,
+      // Empty string lists every client in the network; pass a specific
+      // partner_code (dietitian_id) to scope the result to one dietitian.
+      dietitian_id: dietitianId || "",
+    }),
+  });
+};
+
+
+export const fetchTrainerClientsOverviewForSuperAdminService = async ({
+  trainerId,
+  page = 1,
+  limit = 10,
+  search = "",
+} = {}) => {
+  const accessToken = Cookies.get("access_token");
+
+  if (!accessToken) {
+    throw new Error("Access token missing. Please login again.");
+  }
+
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  if (!trainerId) {
+    throw new Error("Trainer ID is required.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.TRAINERCLIENTSOVERVIEWFORSUPERADMIN, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      trainer_id: trainerId,
+      page,
+      limit,
+      search,
+    }),
+  });
+};
+
+
+export const fetchSuperAdminOverviewService = async () => {
+  const accessToken = Cookies.get("access_token");
+
+  if (!accessToken) {
+    throw new Error("Access token missing. Please login again.");
+  }
+
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.SUPERADMINOVERVIEW, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ actor_user_id: actorUserId }),
+  });
+};
+
+export const fetchDownstreamUsersService = async (actorUserId) => {
+  if (!actorUserId) {
+    throw new Error("Actor user ID missing.");
+  }
+
+  const res = await fetch(API_ENDPOINTS.ADMINPANEL.LISTUSERSINTERNAL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ actor_user_id: actorUserId }),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch downstream users");
+  }
+
+  return res.json();
+};
+
+export const fetchTrainerAdminOverviewService = async (actorUserId) => {
+  if (!actorUserId) {
+    throw new Error("Actor user ID missing.");
+  }
+
+  const accessToken = Cookies.get("access_token");
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.TRAINERLISTINVITES, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify({ actor_user_id: actorUserId }),
+  });
+};
+
+
+export const inviteTrainerClientService = async ({
+  firstName,
+  lastName,
+  email,
+  phone,
+}) => {
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.INVITETRAINER, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Cookies.get("access_token")}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      first_name: firstName,
+      last_name: lastName,
+      email: email,
+      phone: phone,
+    }),
+  });
+};
+
+
+// Super admin invites a trainer directly (super-admin-invite-trainer.php).
+// Same payload shape as the trainer-admin invite; actor_user_id is taken from
+// the super admin's access token (user_id).
+export const superAdminInviteTrainerService = async ({
+  firstName,
+  lastName,
+  email,
+  phone,
+}) => {
+  const accessToken = Cookies.get("access_token");
+
+  if (!accessToken) {
+    throw new Error("Access token missing. Please login again.");
+  }
+
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.SUPERADMININVITETRAINER, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      first_name: firstName,
+      last_name: lastName,
+      email: email,
+      phone: phone,
+    }),
+  });
+};
+
+
+export const resendTrainerAdminInviteService = async ({ invitationId }) => {
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.RESENDUSERINVITE, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Cookies.get("access_token")}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      invite_id: invitationId,
+    }),
+  });
+};
+
+export const resendUserInviteService = async ({ inviteId }) => {
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.RESENDUSERINVITE, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Cookies.get("access_token")}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      invite_id: inviteId,
+    }),
+  });
+};
+
+// Super admin resends a trainer invite (super-admin-resend-trainers.php).
+// Same payload as the trainer-admin resend; actor_user_id comes from the
+// super admin's access token (user_id).
+export const superAdminResendTrainerInviteService = async ({ inviteId }) => {
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.SUPERADMINRESENDTRAINER, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Cookies.get("access_token")}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      invite_id: inviteId,
+    }),
+  });
+};
+
+export const revokeTrainerAdminInviteService = async ({ invitationId, reason }) => {
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.REVOKEUSERINVITE, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Cookies.get("access_token")}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      invite_id: invitationId,
+      reason: reason ?? "",
+    }),
+  });
+};
+
+export const resendTrainerClientInviteService = async ({ inviteId, trainerID, clientName, clientMobile, clientEmail, plan }) => {
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.INVITETRAINER, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Cookies.get("access_token")}`,
+    },
+    body: JSON.stringify({
+      trainer_id: trainerID,
+      client_name: clientName,
+      client_mobile: clientMobile,
+      client_email: clientEmail,
+      plan: plan,
+      resend: true,
+    }),
+  });
+};
+
+export const revokeTrainerClientInviteService = async ({ inviteId, reason }) => {
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.REVOKEUSERINVITE, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Cookies.get("access_token")}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      invite_id: inviteId,
+      reason: reason ?? "",
+    }),
+  });
+};
+
+// Super admin revokes a trainer invite (super-admin-revoke-trainers.php).
+// Same payload as the trainer-admin revoke; actor_user_id comes from the
+// super admin's access token (user_id).
+export const superAdminRevokeTrainerInviteService = async ({ inviteId, reason }) => {
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.SUPERADMINREVOKETRAINER, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Cookies.get("access_token")}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      invite_id: inviteId,
+      reason: reason ?? "",
+    }),
+  });
+};
+
+export const validateInviteTokenService = async (token) => {
+  return apiFetcher(`${API_ENDPOINTS.ADMINPANEL.VALIDATEINVITETOKEN}?token=${encodeURIComponent(token)}`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+};
+
+export const previewInviteService = async (token) => {
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.INVITEPREVIEW, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ token }),
+  });
+};
+
+export const acceptInviteService = async (payload) => {
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.ACCEPTINVITE, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const fetchTrainerClientInvitesService = async ({ actorUserId }) => {
+  if (!actorUserId) {
+    throw new Error("Actor user ID missing. Please login again.");
+  }
+
+  const accessToken = Cookies.get("access_token");
+
+  if (!accessToken) {
+    throw new Error("Access token missing. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.TRAINERLISTINVITES, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+    }),
+  });
+};
+
+
+export const fetchTrainerAdminTrainerSummaryService = async (page = 1) => {
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.TRAINERADMINTRAINERSUMMARY, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Cookies.get("access_token")}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      page: page,
+    }),
+  });
+};
+
+
+// Super admin's trainer summary (super-admin-trainers-summary.php). Same
+// request/response shape as the trainer-admin summary; actor_user_id comes
+// from the super admin's access token (user_id).
+export const fetchSuperAdminTrainerSummaryService = async (page = 1) => {
+  const accessToken = Cookies.get("access_token");
+
+  if (!accessToken) {
+    throw new Error("Access token missing. Please login again.");
+  }
+
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.SUPERADMINTRAINERSUMMARY, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      page: page,
+    }),
+  });
+};
+
+
+
+export const sendTrainerClientInviteService = async ({
+  trainerId,
+  clientName,
+  clientMobile,
+  clientEmail,
+  planCode,
+}) => {
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.SENDTRAINERCLIENTINVITE, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Cookies.get("access_token")}`,
+    },
+    body: JSON.stringify({
+      trainer_id: trainerId,
+      client_name: clientName,
+      client_mobile: clientMobile,
+      client_email: clientEmail,
+      plan_code: planCode,
+    }),
+  });
+};
+
+
+export const fetchReferralClientListService = async (page = 1, limit = 10) => {
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.REFERRALCLIENTLIST, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Cookies.get("access_token")}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      page: page,
+      limit: limit,
+    }),
+  });
+};
+
+
+export const revokeClientSubscriptionInviteService = async ({ subscriptionId, reason }) => {
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.REVOKECLIENTSUBSCRIPTIONINVITE, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Cookies.get("access_token")}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      subscription_id: subscriptionId,
+      reason: reason || "",
+    }),
+  });
+};
+
+
+export const resendClientSubscriptionInviteService = async ({ subscriptionId }) => {
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.RESENDCLIENTSUBSCRIPTIONINVITE, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Cookies.get("access_token")}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      subscription_id: subscriptionId,
+    }),
+  });
+};
+
+
+
+// // services/authService.js
+
+// import { apiFetcher } from "../config/fetcher";
+// import { API_ENDPOINTS } from "../config/apiConfig";
+
+
+// export const loginService = async (email, password) => {
+//   return apiFetcher(API_ENDPOINTS.AUTH.LOGIN, {
+//     method: "POST",
+//     body: JSON.stringify({
+//       identifier: email,
+//       password: password,
+//     }),
+//   });
+// };
+
+// export const sendOtpService = async (email) => {
+//   return apiFetcher(API_ENDPOINTS.AUTH.SEND_OTP, {
+//     method: "POST",
+//     body: JSON.stringify({
+//       email: email,
+//     }),
+//   });
+// };
+
+// export const resetPasswordService = async (email, password) => {
+//   return apiFetcher(API_ENDPOINTS.AUTH.RESET_PASSWORD, {
+//     method: "POST",
+//     body: JSON.stringify({
+//       email: email,
+//       password: password,
+//     }),
+//   });
+// };
+
+
+// export const updateDietPlanStatusService = async (dieticianId) => {
+//   return apiFetcher(API_ENDPOINTS.AUTH.DIETPLANSTATUS, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify({
+//       dietitian_id: dieticianId,
+//     }),
+//   });
+// };
+
+
+// export const fetchClientsWithDietPlan = async (dieticianId) => {
+//   return apiFetcher(API_ENDPOINTS.CLIENT.CLIENTTABLE, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify({
+//       dietician_id: dieticianId,
+//     }),
+//   });
+// };
+
+
+
+
+
+// export const fetchScoreTrend = async (dieticianId, profileId, mode) => {
+//   return apiFetcher(API_ENDPOINTS.PROFILESCOREANALYSIS.GRAPH, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify({
+//       dietitian_id: dieticianId,
+//       profile_id: profileId,
+//       // dietitian_id: "RespyrD02",
+//       // profile_id: "profile3",
+//       //mode: mode.toLowerCase(), 
+//     }),
+//   });
+// };  
+
+
+
+// export const fetchScoresInsight = async (dieticianId, profileId, date) => {
+//   try {
+//     const response = await apiFetcher(API_ENDPOINTS.PROFILESCOREANALYSIS.SCORESINSIGHT, {
+//       method: "POST",
+//       headers: {
+//         "Content-Type": "application/json",
+//       },
+//       body: JSON.stringify({
+//         dietician_id: dieticianId,
+//         profile_id: profileId,
+//         date: date,
+//       }),
+//     });
+
+//     return response;
+//   } catch (error) {
+//     // If it's the "no data" error, return a special object instead of throwing
+//     if (error.message === "No test_data found for given inputs") {
+//       return { noData: true, message: error.message };
+//     }
+//     // Re-throw other errors
+//     throw error;
+//   }
+// };
+
+
+
+
+// export const submitPlanSummaryService = async (planData) => {
+//   return apiFetcher(API_ENDPOINTS.PLAN.PLANSUMMARYFORM, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify(planData),
+//   });
+// };
+
+
+
+// export const fetchClientProfileData = async (dieticianId, profileId) => {
+//   return apiFetcher(API_ENDPOINTS.CLIENTPROFILE.CLIENTPROFILEDATA, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify({
+//       dietician_id: dieticianId,
+//       profile_id: profileId,
+//     }),
+//   });
+// };
+
+
+
+
+// // export const fetchWeeklyAnalysisComplete = async (requestData) => {
+// //   return apiFetcher(API_ENDPOINTS.MEALANALYSIS.WEEKLYANALYSISCOMPLETE, {
+// //     method: "POST",
+// //     headers: {
+// //       "Content-Type": "application/json",
+// //     },
+// //     body: JSON.stringify(requestData),
+// //   });
+// // };
+
+// export const checkWeeklyAnalysisService = async (dieticianId, profileId, startDate, endDate) => {
+//   return apiFetcher(API_ENDPOINTS.MEALANALYSIS.CHECKWEEKLYANALYSIS, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify({
+//       dietician_id: dieticianId,
+//       profile_id: profileId,
+//       start_date: startDate,
+//       end_date: endDate,
+//     }),
+//   });
+// };
+
+
+// export const fetchWeeklyAnalysisComplete1 = async (requestData) => {
+//   return apiFetcher(API_ENDPOINTS.MEALANALYSIS.WEEKLYANALYSISCOMPLETE1, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify(requestData),
+//   });
+// };
+
+
+
+// export const fetchDashboardTableCards = async (dieticianId) => {
+//   return apiFetcher(API_ENDPOINTS.DASHBOARD.TABLECARDS, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify({
+//       dietician_id: dieticianId,
+//     }),
+//   });
+// };
+
+
+
+// export const fetchTestAnalytics = async (dieticianId, date = "") => {
+//   return apiFetcher(API_ENDPOINTS.DASHBOARD.TESTANALYTICS, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify({
+//       dietitian_id: dieticianId,
+//       date: date,
+//     }),
+//   });
+// };
+
+
+
+// export const fetchTestRemaining = async (dieticianId) => {
+//   return apiFetcher(API_ENDPOINTS.TESTINFO.TESTREMAINING, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify({
+//       dietitian_id: dieticianId,
+//     }),
+//   });
+// };
+
+
+
+// export const fetchClientLog = async (dieticianId, clientId) => {
+//   return apiFetcher(API_ENDPOINTS.PLANHISTORY.CLIENTLOG, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify({
+//       dietitian_id: dieticianId,
+//       client_id: clientId,
+//     }),
+//   });
+// };
+
+
+
+// export const updateDietPlanJsonService = async (login_id, profile_id, diet_plan_id, diet_json) => {
+//   return apiFetcher(API_ENDPOINTS.PLAN.DIETPLAN, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify({
+//       login_id: login_id,
+//       profile_id: profile_id,
+//       diet_plan_id: diet_plan_id,
+//       diet_json: JSON.stringify(diet_json), 
+//     }),
+//   });
+// };
+
+
+
+// export const fetchDietPlanJsonService = async (login_id, profile_id, diet_plan_id) => {
+//   return apiFetcher(API_ENDPOINTS.PLAN.DIETPLANJSON, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify({
+//       login_id: login_id,
+//       profile_id: profile_id,
+//       diet_plan_id: diet_plan_id,
+//     }),
+//   });
+// };
+
+
+
+
+// export const deleteDietPlanService = async (dietPlanId, clientId, dietitianId) => {
+//   return apiFetcher(API_ENDPOINTS.PLAN.DELETEDIETPLAN, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify({
+//       diet_plan_id: String(dietPlanId),
+//       client_id: String(clientId),
+//       dietitian_id: String(dietitianId),
+//     }),
+//   });
+// };
