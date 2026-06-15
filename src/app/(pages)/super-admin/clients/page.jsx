@@ -7,6 +7,7 @@ import {
   fetchDownstreamUsersService,
 } from "@/services/authService";
 import { getCurrentUser } from "@/lib/user";
+import { zoneLabel } from "@/lib/utils";
 
 export default function SuperAdminClientsPage() {
   const [trainerAdmins, setTrainerAdmins] = useState([]);
@@ -233,14 +234,14 @@ export default function SuperAdminClientsPage() {
                     {c.zone ? (
                       <span
                         className={`inline-flex rounded-full text-[11px] font-semibold px-2.5 py-0.5 ${
-                          c.zone === "Optimal"
+                          c.zone === "Optimal" || c.zone === "Strong"
                             ? "bg-[#E5F6EE] text-[#1F7A4A]"
-                            : c.zone === "Moderate"
+                            : c.zone === "Moderate" || c.zone === "Steady"
                             ? "bg-[#FFF4E0] text-[#A66B00]"
                             : "bg-[#FCEAEB] text-[#B5363A]"
                         }`}
                       >
-                        {c.zone}
+                        {zoneLabel(c.zone)}
                       </span>
                     ) : (
                       <span className="text-[#A1A1A1]">-</span>

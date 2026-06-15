@@ -175,15 +175,18 @@ function SegmentedProgressBar({
 const getZoneConfig = (zone) => {
     switch (zone?.toLowerCase()) {
         case 'optimal':
-            return { text: 'Optimal', color: '#3FAF58' };
+        case 'strong':
+            return { text: 'Strong', color: '#3FAF58' };
         case 'moderate':
-            return { text: 'Moderate', color: '#FFBF2D' };
+        case 'steady':
+            return { text: 'Steady', color: '#FFBF2D' };
         case 'focus':
-            return { text: 'Focus', color: '#E48326' };
+        case 'building':
+            return { text: 'Building', color: '#E48326' };
         case 'attention':
             return { text: 'Attention', color: '#E65C3A' };
         default:
-            return { text: zone || 'Moderate', color: '#FFBF2D' };
+            return { text: zone || 'Steady', color: '#FFBF2D' };
     }
 };
 
@@ -205,8 +208,8 @@ export default function MetabolicRecoveryTrends({ data }) {
     const recoveryScore = recoveryActivity ? Math.round(recoveryActivity.score) : "NA";
 
     // Get zones
-    const metabolicZone = metabolicLoad?.zone || "Moderate";
-    const recoveryZone = recoveryActivity?.zone || "Focus";
+    const metabolicZone = metabolicLoad?.zone || "Steady";
+    const recoveryZone = recoveryActivity?.zone || "Building";
 
     // Get zone configurations
     const metabolicZoneConfig = getZoneConfig(metabolicZone);

@@ -6,6 +6,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useSearchParams } from "next/navigation";
 import { IoIosArrowDown } from "react-icons/io";
+import { zoneLabel } from "@/lib/utils";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -329,7 +330,7 @@ function TrendCard({
           style={{ backgroundColor: statusColor }}
         >
           <p className="text-white text-[12px] font-semibold leading-normal tracking-[-0.24px]">
-            {status}
+            {zoneLabel(status)}
           </p>
         </div>
       </div>
@@ -457,8 +458,8 @@ export default function TrendPopUp({ closePopup, profileId: profileIdProp }) {
     {
       id: "digestive_balance_trend",
       title: "Digestive Activity Trend",
-      status: digestiveItems?.[0]?.zone || "Optimal",
-      statusColor: getZoneColor(digestiveItems?.[0]?.zone || "Optimal"),
+      status: digestiveItems?.[0]?.zone || "Strong",
+      statusColor: getZoneColor(digestiveItems?.[0]?.zone || "Strong"),
       cards:
         digestiveItems?.map((item, index) => ({
           id: `digestive_balance_trend-${index}`,
@@ -476,8 +477,8 @@ export default function TrendPopUp({ closePopup, profileId: profileIdProp }) {
     {
       id: "fuel_and_energy_trend",
       title: "Fuel Utilization Trend",
-      status: fuelItems?.[0]?.zone || "Focus",
-      statusColor: getZoneColor(fuelItems?.[0]?.zone || "Focus"),
+      status: fuelItems?.[0]?.zone || "Building",
+      statusColor: getZoneColor(fuelItems?.[0]?.zone || "Building"),
       cards:
         fuelItems?.map((item, index) => ({
           id: `fuel_and_energy_trend-${index}`,
@@ -495,8 +496,8 @@ export default function TrendPopUp({ closePopup, profileId: profileIdProp }) {
     {
       id: "metabolic_recovery_trend",
       title: "Metabolic Load Trend",
-      status: metabolicItems?.[0]?.zone || "Moderate",
-      statusColor: getZoneColor(metabolicItems?.[0]?.zone || "Moderate"),
+      status: metabolicItems?.[0]?.zone || "Steady",
+      statusColor: getZoneColor(metabolicItems?.[0]?.zone || "Steady"),
       cards:
         metabolicItems?.map((item, index) => ({
           id: `metabolic_recovery_trend-${index}`,
@@ -578,7 +579,7 @@ export default function TrendPopUp({ closePopup, profileId: profileIdProp }) {
                           className="text-[12px] font-semibold leading-[126%] tracking-[-0.24px]"
                           style={{ color: tab.statusColor }}
                         >
-                          {tab.status}
+                          {zoneLabel(tab.status)}
                         </p>
                       </div>
                     );

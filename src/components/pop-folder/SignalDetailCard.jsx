@@ -6,10 +6,14 @@
 //   - info-popup.jsx (Fat-use Pattern Trend — shows all 6 sub-scores)
 //   - some-info-popup.jsx (per-trend popups — shows one sub-score)
 
+// Canonical zone palette — must match zoneToColor() in trends.jsx:
+//   optimal/strong  -> green   #3FAF58
+//   moderate/steady -> yellow  #FFBF2D
+//   focus/building  -> orange  #E48326  (the engine has NO red zone)
 const COLOR = {
   green:  "#3FAF58",
-  yellow: "#F8B10F",
-  red:    "#DA5747",
+  yellow: "#FFBF2D",
+  orange: "#E48326",
 };
 
 // Map flag/tier → semantic color. Mirrors the engine's _classify_pattern:
@@ -22,12 +26,12 @@ const COLOR = {
 export function colorForSignal(flag, tier) {
   if (tier === "best")     return COLOR.green;
   if (tier === "mid")      return COLOR.yellow;
-  if (tier === "limiter")  return COLOR.red;
+  if (tier === "limiter")  return COLOR.orange;
 
   // Tier missing — fall back to flag.
   if (flag === "strong" || flag === "ideal")    return COLOR.green;
   if (flag === "moderate")                       return COLOR.yellow;
-  if (flag === "low" || flag === "low_limiter" || flag === "high_limiter") return COLOR.red;
+  if (flag === "low" || flag === "low_limiter" || flag === "high_limiter") return COLOR.orange;
 
   // Unknown — render as neutral yellow so it visibly stands out for review.
   return COLOR.yellow;

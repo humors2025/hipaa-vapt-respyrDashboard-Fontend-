@@ -1,8 +1,5 @@
 
 
-
-
-
 "use client";
 
 import React, { useMemo, useState, useEffect } from "react";
@@ -10,6 +7,7 @@ import { IoIosArrowDown } from "react-icons/io";
 import Graph from "./graph";
 import { fetchScoreTrend, fetchScoresInsight } from "../services/authService";
 import { useSearchParams } from "next/navigation";
+import { zoneLabel } from "@/lib/utils";
 import { cookieManager } from "../lib/cookies";
 import { useDispatch } from "react-redux";
 import { setScoresInsight } from "../store/scoresInsightSlice";
@@ -333,7 +331,7 @@ function TrendsComponent({ selectedDate, showMainMarker = true, compactGraphs = 
         percentage: "-",
         colors: getZoneSegmentsForScoreType(titles.firstScoreType),
         markers: getMarkersForScoreType(titles.firstScoreType),
-        status: "Optimal",
+        status: "Strong",
         statusColor: "#3FAF58",
         interpretation: "-",
         intervention: "-",
@@ -342,7 +340,7 @@ function TrendsComponent({ selectedDate, showMainMarker = true, compactGraphs = 
         percentage: "-",
         colors: getZoneSegmentsForScoreType(titles.secondScoreType),
         markers: getMarkersForScoreType(titles.secondScoreType),
-        status: "Optimal",
+        status: "Strong",
         statusColor: "#3FAF58",
         interpretation: "-",
         intervention: "-",
@@ -395,9 +393,9 @@ function TrendsComponent({ selectedDate, showMainMarker = true, compactGraphs = 
 
   const zoneToColor = (zone) => {
     const z = normalizeZone(zone);
-    if (z === "optimal") return "#3FAF58";
-    if (z === "moderate") return "#FFBF2D";
-    if (z === "focus") return "#E48326";
+    if (z === "optimal" || z === "strong") return "#3FAF58";
+    if (z === "moderate" || z === "steady") return "#FFBF2D";
+    if (z === "focus" || z === "building") return "#E48326";
     return "#3FAF58";
   };
 
@@ -588,7 +586,7 @@ function TrendsComponent({ selectedDate, showMainMarker = true, compactGraphs = 
           <div className="mx-3 h-4 w-px bg-[#252525]"></div>
 
           <p className="text-[20px] md:text-[25px] font-semibold" style={{ color: getStatusColor() }}>
-            {config.status}
+            {zoneLabel(config.status)}
           </p>
         </div>
 
@@ -831,9 +829,9 @@ function TrendsComponent({ selectedDate, showMainMarker = true, compactGraphs = 
     const z1 = normalizeZone(zone1);
     const z2 = normalizeZone(zone2);
 
-    if (z1 === "focus" || z2 === "focus") return "#E48326";
-    if (z1 === "moderate" || z2 === "moderate") return "#FFBF2D";
-    if (z1 === "optimal" || z2 === "optimal") return "#3FAF58";
+    if (z1 === "focus" || z2 === "focus" || z1 === "building" || z2 === "building") return "#E48326";
+    if (z1 === "moderate" || z2 === "moderate" || z1 === "steady" || z2 === "steady") return "#FFBF2D";
+    if (z1 === "optimal" || z2 === "optimal" || z1 === "strong" || z2 === "strong") return "#3FAF58";
 
     return "#E1E6ED";
   };
@@ -1343,9 +1341,6 @@ function TrendsComponent({ selectedDate, showMainMarker = true, compactGraphs = 
 }
 
 export default React.memo(TrendsComponent);
-
-
-
 
 
 

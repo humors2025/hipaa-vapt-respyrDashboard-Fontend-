@@ -491,6 +491,47 @@ export const deleteDietPlanService = async (dietPlanId, clientId, dietitianId) =
 
 
 
+// export const fetchClientsDashboard = async (
+//   dieticianId,
+//   type = "all",
+//   page = 1,
+//   date,
+//   { masking = false } = {}
+// ) => {
+//   const endpoint = masking
+//     ? API_ENDPOINTS.CLIENT.CLIENTS_DASHBOARD_MASKED
+//     : API_ENDPOINTS.CLIENT.CLIENTS_DASHBOARD;
+
+//   const body = {
+//     dietician_id: dieticianId,
+//     type: type,
+//     page: page,
+//     date: date,
+//   };
+
+//   if (masking) {
+//     const decoded = decodeAccessTokenFromCookie();
+//     const actorUserId = decoded?.user_id;
+//     if (actorUserId) {
+//       body.actor_user_id = actorUserId;
+//     }
+//   }
+
+//   const accessToken = Cookies.get("access_token");
+
+//   return apiFetcher(endpoint, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//       Authorization: `Bearer ${accessToken}`,
+//     },
+//     body: JSON.stringify(body),
+//   });
+// };
+
+
+
+
 export const fetchClientsDashboard = async (
   dieticianId,
   type = "all",
@@ -509,21 +550,18 @@ export const fetchClientsDashboard = async (
     date: date,
   };
 
-  if (masking) {
-    const decoded = decodeAccessTokenFromCookie();
-    const actorUserId = decoded?.user_id;
-    if (actorUserId) {
-      body.actor_user_id = actorUserId;
-    }
+  // actor_user_id is the user_id decoded from the access_token cookie.
+  // Required by the API on both the normal and masked routes.
+  const decoded = decodeAccessTokenFromCookie();
+  const actorUserId = decoded?.user_id;
+  if (actorUserId) {
+    body.actor_user_id = actorUserId;
   }
-
-  const accessToken = Cookies.get("access_token");
 
   return apiFetcher(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify(body),
   });

@@ -6,6 +6,7 @@ import Image from "next/image";
 import { UserProfile } from "./user-profile";
 import { fetchClientsDashboard } from "../services/authService";
 import { cookieManager } from "../lib/cookies";
+import { zoneLabel } from "@/lib/utils";
 
 function decodeJwt(token) {
   try {
@@ -393,7 +394,7 @@ export default function ClientLists() {
                         className="text-[12px] font-semibold"
                         style={{ color: getZoneColor(client.zone) }}
                       >
-                        {client.zone || "--"}
+                        {client.zone ? zoneLabel(client.zone) : "--"}
                       </p>
 
                       <div className="mx-1.5">

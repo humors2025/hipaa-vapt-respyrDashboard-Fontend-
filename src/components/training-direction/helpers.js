@@ -19,8 +19,11 @@ export function round(n) {
 // Status pill tokens — keep aligned with the dashboard's existing palette.
 export const STATUS_TONE = {
   Optimal:  { bg: "#E5F6EE", text: "#1F7A4A", border: "#A8E0C2" },
+  Strong:   { bg: "#E5F6EE", text: "#1F7A4A", border: "#A8E0C2" },
   Moderate: { bg: "#FFF4E0", text: "#A66B00", border: "#F0CB87" },
+  Steady:   { bg: "#FFF4E0", text: "#A66B00", border: "#F0CB87" },
   Focus:    { bg: "#FCEAEB", text: "#B5363A", border: "#F0AAB0" },
+  Building: { bg: "#FCEAEB", text: "#B5363A", border: "#F0AAB0" },
 };
 
 export const FATIGUE_TONE = {

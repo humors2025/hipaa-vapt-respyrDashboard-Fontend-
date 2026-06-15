@@ -7,6 +7,7 @@ import {
     selectTrainerDirectionData,
     selectTrainerDirectionLoading,
 } from "../store/trainerDirectionSlice"
+import { zoneLabel } from "@/lib/utils"
 
 export default function OverviewTab() {
 
@@ -214,7 +215,7 @@ export default function OverviewTab() {
                     <div className='flex items-center gap-2.5 flex-wrap'>
                         <div className='px-3 py-[5px] bg-[#3B5BDB] rounded-[25px] flex-shrink-0'>
                             <span className='text-[#FFFFFF] text-[10px] font-semibold leading-[110%] tracking-[-0.2px]'>
-                                {readinessSnapshot?.status || "Focus"}
+                                {zoneLabel(readinessSnapshot?.status) || "Building"}
                             </span>
                         </div>
 

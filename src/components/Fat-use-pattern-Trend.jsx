@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useSelector } from "react-redux";
 import { useState } from "react";
 import InfoPopUp from "./pop-folder/info-popup";
+import { zoneLabel } from "@/lib/utils";
 
 function SegmentedProgressBar({
   value = 85,
@@ -148,8 +149,11 @@ export default function FatUsePatternTrend() {
 
   const statusColorMap = {
     Moderate: "#FFBF2D",
+    Steady: "#FFBF2D",
     Optimal: "#3FAF58",
+    Strong: "#3FAF58",
     Focus: "#E48326",
+    Building: "#E48326",
   };
 
   const statusColor = statusColorMap[status] || "#3FAF58";
@@ -178,7 +182,7 @@ export default function FatUsePatternTrend() {
           style={{ backgroundColor: statusColor }}
         >
           <p className="text-white text-[12px] font-semibold leading-normal tracking-[-0.24px]">
-            {status}
+            {zoneLabel(status)}
           </p>
         </div>
       </div>

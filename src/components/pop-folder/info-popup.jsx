@@ -69,15 +69,19 @@ const TREND_TO_MARKER = {
   Nutrient_Utilization_Trend: { marker: "hydrogen", signal: "Nutrient Utilization" },
 };
 
-const ZONE_TO_TIER = {
-  optimal: "best",
-  strong: "best",
-  moderate: "mid",
-  steady: "mid",
-  focus: "limiter",
-  building: "limiter",
-  attention: "limiter",
-  weak: "limiter",
+// Engine v4.6.9 uses zones (Building / Steady / Strong), NOT the legacy
+// best/mid/limiter tiers. Map each zone straight to a color flag so the card
+// colors correctly WITHOUT inventing a "limiter" label that isn't in the data.
+//   strong/optimal -> green | steady/moderate -> yellow | building/weak -> red
+const ZONE_TO_FLAG = {
+  optimal: "strong",
+  strong: "strong",
+  moderate: "moderate",
+  steady: "moderate",
+  focus: "low",
+  building: "low",
+  attention: "low",
+  weak: "low",
 };
 
 function buildSignalsByMarkerFromMetabolism(metabolismScores) {
@@ -95,12 +99,14 @@ function buildSignalsByMarkerFromMetabolism(metabolismScores) {
       signal,
       marker_source: marker,
       zone_label: zone,
-      tier: ZONE_TO_TIER[String(zone).toLowerCase()] || "",
-      flag: "",
+      tier: "",
+      flag: ZONE_TO_FLAG[String(zone).toLowerCase()] || "",
       score: rawScore == null ? null : Math.round(Number(rawScore)),
-      threshold_rule: t.what_is_this_score || "",
+      threshold_rule: t.ppm_band
+        ? `${t.ppm_band}${t.ppm_band_range ? ` · ${t.ppm_band_range}` : ""}`
+        : t.what_is_this_score || "",
       trainer_interpretation:
-        t.interpretation || t.trainer_score_meaning || t.client_state || "",
+        t.trainer_score_meaning || t.client_score_meaning || t.client_state || "",
     });
   });
 
@@ -113,6 +119,7 @@ export default function InfoPopUp({ onClose }) {
   );
 
   const rawJson = clientIndividualProfile?.data?.raw_json || {};
+  console.log("Raw JSON Info popup:", rawJson);
 
   // Title follows whichever composite trend the response carries.
   const trendLabel = rawJson?.Muscle_Gain_Trend

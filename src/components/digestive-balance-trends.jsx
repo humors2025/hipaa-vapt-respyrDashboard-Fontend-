@@ -164,10 +164,13 @@ function SegmentedProgressBar({
 const getZoneColor = (zone) => {
   switch (zone?.toLowerCase()) {
     case "optimal":
+    case "strong":
       return "#3FAF58";
     case "moderate":
+    case "steady":
       return "#FFBF2D";
     case "focus":
+    case "building":
       return "#E48326";
     default:
       return "#3FAF58";
@@ -177,13 +180,16 @@ const getZoneColor = (zone) => {
 const getZoneDisplay = (zone) => {
   switch (zone?.toLowerCase()) {
     case "optimal":
-      return { text: "Optimal", color: "#3FAF58" };
+    case "strong":
+      return { text: "Strong", color: "#3FAF58" };
     case "moderate":
-      return { text: "Moderate", color: "#FFBF2D" };
+    case "steady":
+      return { text: "Steady", color: "#FFBF2D" };
     case "focus":
-      return { text: "Focus", color: "#E48326" };
+    case "building":
+      return { text: "Building", color: "#E48326" };
     default:
-      return { text: zone || "Optimal", color: "#3FAF58" };
+      return { text: zone || "Strong", color: "#3FAF58" };
   }
 };
 
@@ -203,8 +209,8 @@ export default function DigestiveBalanceTrends({ data }) {
   const nutrientScore = nutrientUtilization ? Math.round(nutrientUtilization.score) : "NA";
   const digestiveScore = digestiveActivity ? Math.round(digestiveActivity.score) : "NA";
 
-  const nutrientZone = nutrientUtilization?.zone || "Optimal";
-  const digestiveZone = digestiveActivity?.zone || "Optimal";
+  const nutrientZone = nutrientUtilization?.zone || "Strong";
+  const digestiveZone = digestiveActivity?.zone || "Strong";
 
   const nutrientZoneInfo = getZoneDisplay(nutrientZone);
   const digestiveZoneInfo = getZoneDisplay(digestiveZone);

@@ -11,6 +11,7 @@
 // Re-skinned to dashboard tokens. Defensive on every field.
 
 import { fmt, round, STATUS_TONE, FATIGUE_TONE, MARKER_TONE, signalAccent } from "./helpers";
+import { zoneLabel } from "@/lib/utils";
 
 // ---------- Shared tiny bits ----------
 
@@ -65,7 +66,7 @@ function ReadinessHero({ snap, oneLiner, tp }) {
           <div className="flex flex-col gap-2 pb-2">
             <div className="text-[18px] font-bold">{snap.training_mode || "—"}</div>
             <div className="flex items-center gap-2 flex-wrap">
-              {statusTone && <Pill tone={statusTone}>{status}</Pill>}
+              {statusTone && <Pill tone={statusTone}>{zoneLabel(status)}</Pill>}
               {fatigueTone && <Pill tone={fatigueTone}>{snap.fatigue_risk} fatigue</Pill>}
               {dayFocus && (
                 <span className="text-[12px] opacity-90">

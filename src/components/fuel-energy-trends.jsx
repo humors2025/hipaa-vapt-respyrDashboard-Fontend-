@@ -174,15 +174,18 @@ function SegmentedProgressBar({
 const getZoneConfig = (zone) => {
     switch(zone?.toLowerCase()) {
         case 'optimal':
-            return { text: 'Optimal', color: '#3FAF58' };
+        case 'strong':
+            return { text: 'Strong', color: '#3FAF58' };
         case 'moderate':
-            return { text: 'Moderate', color: '#FFBF2D' };
+        case 'steady':
+            return { text: 'Steady', color: '#FFBF2D' };
         case 'focus':
-            return { text: 'Focus', color: '#E48326' };
+        case 'building':
+            return { text: 'Building', color: '#E48326' };
         case 'attention':
             return { text: 'Attention', color: '#E65C3A' };
         default:
-            return { text: zone || 'Moderate', color: '#FFBF2D' };
+            return { text: zone || 'Steady', color: '#FFBF2D' };
     }
 };
 
@@ -204,8 +207,8 @@ export default function FuelEnergyTrends({ data }) {
     const energyScore = energySource ? Math.round(energySource.score) : "NA";
     
     // Get zones
-    const fuelZone = fuelUtilization?.zone || "Moderate";
-    const energyZone = energySource?.zone || "Focus";
+    const fuelZone = fuelUtilization?.zone || "Steady";
+    const energyZone = energySource?.zone || "Building";
     
     // Get zone configurations
     const fuelZoneConfig = getZoneConfig(fuelZone);

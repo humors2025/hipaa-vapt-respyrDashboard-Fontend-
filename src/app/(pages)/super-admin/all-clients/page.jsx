@@ -14,6 +14,7 @@ import {
   selectAllClientsLoading,
   selectAllClientsError,
 } from "@/store/superAdminAllClientsSlice";
+import { zoneLabel } from "@/lib/utils";
 
 const PAGE_LIMIT = 10;
 
@@ -72,16 +73,16 @@ function StatusBadge({ status }) {
 function ZoneBadge({ zone }) {
   if (!zone) return <span className="text-[#A1A1A1]">-</span>;
   const cls =
-    zone === "Optimal"
+    zone === "Optimal" || zone === "Strong"
       ? "bg-[#E5F6EE] text-[#1F7A4A]"
-      : zone === "Moderate"
+      : zone === "Moderate" || zone === "Steady"
       ? "bg-[#FFF4E0] text-[#A66B00]"
       : "bg-[#FCEAEB] text-[#B5363A]";
   return (
     <span
       className={`inline-flex rounded-full text-[11px] font-semibold px-2.5 py-0.5 ${cls}`}
     >
-      {zone}
+      {zoneLabel(zone)}
     </span>
   );
 }
