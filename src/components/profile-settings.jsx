@@ -5,6 +5,29 @@ import Image from "next/image";
 import { IoIosArrowForward } from "react-icons/io";
 import Cookies from "js-cookie";
 
+// Decode the payload (2nd segment) of a JWT. Returns null on any malformed
+// input rather than throwing, so callers can treat it as "no token".
+function decodeJwtPayload(token) {
+  try {
+    if (!token || typeof token !== "string") return null;
+
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => `%${`00${c.charCodeAt(0).toString(16)}`.slice(-2)}`)
+        .join("")
+    );
+
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
 export default function ProfileSettings() {
   const [activeItem, setActiveItem] = useState("Account");
 
@@ -32,11 +55,25 @@ export default function ProfileSettings() {
     setActiveItem(itemId);
   };
 
-  // ✅ read dietician cookie
+  // ✅ bind from the decoded access_token (falls back to the dietician cookie)
   useEffect(() => {
-    const DIETICIAN_COOKIE_KEY = "dietician";
+    // The access_token JWT carries the freshest profile in its `dietician`
+    // claim ({ name, email, phone_no, dietician_id, ... }). Prefer it; fall
+    // back to the legacy `dietician` cookie when the token is missing.
+    const payload = decodeJwtPayload(Cookies.get("access_token"));
+    const fromToken = payload?.dietician;
 
-    const raw = Cookies.get(DIETICIAN_COOKIE_KEY);
+    if (fromToken) {
+      setForm({
+        name: fromToken.name || "",
+        reference: fromToken.dietician_id || payload?.dietician_id || "",
+        mobile: fromToken.phone_no || fromToken.phone || fromToken.mobile || "",
+        email: fromToken.email || payload?.user_id || "",
+      });
+      return;
+    }
+
+    const raw = Cookies.get("dietician");
     if (!raw) return;
 
     let dietician;
