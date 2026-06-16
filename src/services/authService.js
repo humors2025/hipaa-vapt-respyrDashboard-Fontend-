@@ -1301,15 +1301,15 @@ export const validateInviteTokenService = async (token) => {
   });
 };
 
-// export const previewInviteService = async (token) => {
-//   return apiFetcher(API_ENDPOINTS.ADMINPANEL.INVITEPREVIEW, {
-//     method: "POST",
-//     headers: {
-//       "Content-Type": "application/json",
-//     },
-//     body: JSON.stringify({ token }),
-//   });
-// };
+export const previewInviteService = async (token) => {
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.INVITEPREVIEW, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ token }),
+  });
+};
 
 export const acceptInviteService = async (payload) => {
   return apiFetcher(API_ENDPOINTS.ADMINPANEL.ACCEPTINVITE, {
