@@ -33,6 +33,7 @@ import {
 } from "../services/authService";
 
 import { cookieManager } from "../lib/cookies";
+import { zoneLabel } from "@/lib/utils";
 
 function decodeJwt(token) {
   try {
@@ -109,7 +110,11 @@ const transformDatesToDisplay = () => {
     score: dateObj.fat_loss_metabolism_score
       ? `${dateObj.fat_loss_metabolism_score}%`
       : "NA",
-    status: dateObj.zone || "NA",
+    status:
+      dateObj.zone_label ||
+      dateObj.status_label ||
+      zoneLabel(dateObj.zone) ||
+      "NA",
     kcal: dateObj.final_macro_summary?.calories
       ? `${dateObj.final_macro_summary.calories} Kcal`
       : "NA",
@@ -131,6 +136,7 @@ const transformDatesToDisplay = () => {
   };
 
   const testDateData = transformDatesToDisplay();
+  console.log("testDateData139:-", testDateData);
   const weekData = transformWeeklyDatesToDisplay();
 
   const getSelectedWeekInfo = () => {
@@ -409,6 +415,7 @@ const transformDatesToDisplay = () => {
   };
 
   const visibleItems = currentData.slice(startIndex, startIndex + ITEMS_TO_SHOW);
+  console.log("visibleItems412:-", visibleItems);
 
 
   if (isLoadingWeeklyData) {
@@ -594,7 +601,7 @@ const transformDatesToDisplay = () => {
               </div>
             </div>
 
-            {showWhenNotSuperAdmin && (
+            {/* {showWhenNotSuperAdmin && ( */}
               <div className="flex gap-[30px]">
                 <Image
                   src="/icons/hugeicons_file-export.svg"
@@ -614,7 +621,7 @@ const transformDatesToDisplay = () => {
                   onClick={() => setIsSidebarOpen(true)}
                 />
               </div>
-            )}
+            {/* )} */}
           </div>
 
           <div className="flex py-[11px] pl-[5px]">

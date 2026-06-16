@@ -94,8 +94,28 @@ export const refreshTokenService = async () => {
 export const sendOtpService = async (email) => {
   return apiFetcher(API_ENDPOINTS.AUTH.SEND_OTP, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({
       email: email,
+    }),
+  });
+};
+
+// Verifies the emailed OTP. On success the API returns a short-lived
+// `reset_token` (hex, expires in `reset_token_expires_in` seconds) that must be
+// passed back to update_diatitian_password — the OTP itself is only checked
+// server-side and never returned to the client.
+export const verifyOtpService = async (email, otp) => {
+  return apiFetcher(API_ENDPOINTS.AUTH.VERIFY_OTP, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email: email,
+      otp: otp,
     }),
   });
 };
@@ -116,12 +136,19 @@ export const updatePasswordService = async (dieticianId, password) => {
 
 
 
-export const resetPasswordService = async (email, password) => {
+// Final step: set the new password. `resetToken` is the token returned by
+// verifyOtpService and proves the OTP was verified for this email.
+export const resetPasswordService = async (email, resetToken, password, confirmPassword) => {
   return apiFetcher(API_ENDPOINTS.AUTH.RESET_PASSWORD, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({
       email: email,
+      reset_token: resetToken,
       password: password,
+      confirm_password: confirmPassword,
     }),
   });
 };

@@ -5,7 +5,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { sendOtpService, resetPasswordService } from "@/services/authService";
+import {
+  sendOtpService,
+  verifyOtpService,
+  resetPasswordService,
+} from "@/services/authService";
 import { toast } from "sonner";
 import Link from "next/link";
 import Image from "next/image";
@@ -27,8 +31,7 @@ function PasswordRule({ label, active }) {
 export default function ResetPassword() {
   const [step, setStep] = useState("reset");
   const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState(["", "", "", ""]);
-  const [serverOtp, setServerOtp] = useState("");
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [emailError, setEmailError] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -38,6 +41,7 @@ export default function ResetPassword() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [otpError, setOtpError] = useState("");
+  const [resetToken, setResetToken] = useState("");
 
   const inputRefs = useRef([]);
   const router = useRouter();
@@ -128,7 +132,6 @@ export default function ResetPassword() {
 
       if (response.success) {
         toast.success(response.message || "OTP sent successfully.");
-        setServerOtp(String(response.otp));
         setStep("otp");
         setResendTimer(60);
       } else {
@@ -158,7 +161,6 @@ export default function ResetPassword() {
       if (response.success) {
         toast.success("OTP resent successfully!");
         setResendTimer(60);
-        setServerOtp(String(response.otp));
       } else {
         toast.error(response.message || "Failed to resend OTP.");
       }
@@ -167,18 +169,39 @@ export default function ResetPassword() {
     }
   };
 
-  // Verify OTP
-  const handleOtpSubmit = (e) => {
+  // Verify OTP (server-side — the code is emailed, never returned to the client)
+  const handleOtpSubmit = async (e) => {
     e.preventDefault();
     const enteredOtp = otp.join("");
 
-    if (enteredOtp === serverOtp) {
-      toast.success("OTP verified successfully!");
-      setStep("forgot");
-      setOtpError("");
-    } else {
-      toast.error("Invalid OTP. Please enter the correct code.");
-      setOtpError("Invalid OTP. Please enter the correct code.");
+    if (enteredOtp.length !== otp.length) {
+      setOtpError("Please enter the complete OTP.");
+      return;
+    }
+
+    setLoading(true);
+    setOtpError("");
+
+    try {
+      const response = await verifyOtpService(email, enteredOtp);
+
+      if (response.success) {
+        // Capture the short-lived reset_token; it's required to set the new password.
+        setResetToken(response.reset_token || "");
+        toast.success(response.message || "OTP verified successfully!");
+        setStep("forgot");
+      } else {
+        const msg = response.message || "Invalid OTP. Please enter the correct code.";
+        toast.error(msg);
+        setOtpError(msg);
+      }
+    } catch (error) {
+      const msg =
+        error.data?.message || "Invalid OTP. Please enter the correct code.";
+      toast.error(msg);
+      setOtpError(msg);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -239,16 +262,36 @@ export default function ResetPassword() {
       return;
     }
 
+    if (!resetToken) {
+      toast.error("Your reset session has expired. Please verify the OTP again.");
+      setStep("reset");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const res = await resetPasswordService(email, password);
+      const res = await resetPasswordService(
+        email,
+        resetToken,
+        password,
+        confirmPassword
+      );
       toast.success(res.message || "Password updated successfully.");
       setTimeout(() => {
         router.push("/");
       }, 1000);
     } catch (error) {
-      toast.error(error.data?.message || "Something went wrong. Try again.");
+      // 400/401 here usually means the reset_token expired — send the user back to OTP.
+      if (error.status === 400 || error.status === 401) {
+        toast.error(
+          error.data?.message || "Your reset session has expired. Please verify again."
+        );
+        setResetToken("");
+        setStep("otp");
+      } else {
+        toast.error(error.data?.message || "Something went wrong. Try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -326,20 +369,21 @@ export default function ResetPassword() {
               Enter OTP
             </h2>
             <p className="text-[#A1A1A1] text-[14px] font-normal leading-[110%] tracking-[-0.24px] text-center mt-4">
-              We sent a 4-digit OTP to your email.
+              We sent a 6-digit OTP to your email.
             </p>
 
             <form onSubmit={handleOtpSubmit} className="mt-[73px] space-y-6">
-              <div className="flex justify-center gap-4" onPaste={handlePaste}>
+              <div className="flex justify-center gap-2" onPaste={handlePaste}>
                 {otp.map((digit, index) => (
                   <input
                     key={index}
                     type="text"
+                    inputMode="numeric"
                     value={digit}
                     onChange={(e) => handleOtpChange(e.target.value, index)}
                     onKeyDown={(e) => handleKeyDown(e, index)}
                     ref={(el) => (inputRefs.current[index] = el)}
-                    className="w-12 h-12 border border-[#E1E6ED] rounded-lg text-center text-lg focus:outline-none focus:ring-1 focus:ring-[#E1E6ED] peer"
+                    className="w-11 h-12 border border-[#E1E6ED] rounded-lg text-center text-lg focus:outline-none focus:ring-1 focus:ring-[#E1E6ED] peer"
                     maxLength="1"
                   />
                 ))}
@@ -353,9 +397,10 @@ export default function ResetPassword() {
 
               <button
                 type="submit"
-                className="w-full mt-4 cursor-pointer bg-[#308BF9] text-white py-[15px] rounded-lg font-semibold border border-transparent hover:bg-white hover:text-[#252525] hover:border-[#308BF9] transition"
+                disabled={loading}
+                className="w-full mt-4 cursor-pointer bg-[#308BF9] text-white py-[15px] rounded-lg font-semibold border border-transparent hover:bg-white hover:text-[#252525] hover:border-[#308BF9] transition disabled:opacity-60"
               >
-                Verify OTP
+                {loading ? "Verifying..." : "Verify OTP"}
               </button>
             </form>
 

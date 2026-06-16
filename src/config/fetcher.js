@@ -24,12 +24,18 @@ export async function apiFetcher(endpoint, options = {}) {
   // access_token cookie — so individual callers don't have to set the
   // Authorization header themselves. A token a caller passes explicitly in
   // options.headers still wins (it's spread last over the default below).
+  // Default to JSON unless the caller is sending FormData (the browser must set
+  // the multipart boundary itself, so we leave Content-Type unset for those).
+  const isFormData =
+    typeof FormData !== "undefined" && fetchOptions.body instanceof FormData;
+
   const doFetch = (overrideToken) => {
     const token = overrideToken || Cookies.get("access_token");
     return fetch(`${API_BASE_URL}${endpoint}`, {
       ...fetchOptions,
       signal: controller?.signal,
       headers: {
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(fetchOptions.headers || {}),
         ...(overrideToken
