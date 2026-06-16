@@ -15,7 +15,8 @@ export const API_ENDPOINTS = {
     // LOGIN: "/humors_app/app_final/dieticianapp/web/api/dietician_login",
     LOGIN: `/${API_VERSION}/auth/login`,
     REFRESH_TOKEN: `/${API_VERSION}/auth/refresh-token`,
-    SEND_OTP: `/${API_VERSION}/humors_app/app_final/dieticianapp/web/api/send_diatitian_otp`,
+     SEND_OTP: `/${API_VERSION}//auth/send_diatitian_otp`,
+    // SEND_OTP: `/${API_VERSION}/humors_app/app_final/dieticianapp/web/api/send_diatitian_otp`,
     RESET_PASSWORD: `/${API_VERSION}/humors_app/app_final/dieticianapp/web/api/update_diatitian_password`,
     DIETPLANSTATUS: `/${API_VERSION}/dietitian/api/web/update_diet_plan_status`,
     UPDATEPASSWORDSERVICE: `/${API_VERSION}/dietitian/api/web/reset_password`

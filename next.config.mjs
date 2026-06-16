@@ -2,8 +2,9 @@
 const nextConfig = {
   images: {
     remotePatterns: [
-      { protocol: 'https', hostname: 'humorstech.com' },
-      { protocol: 'https', hostname: 'www.admin.respyr.ai' },
+      // { protocol: 'https', hostname: 'humorstech.com' },
+      // { protocol: 'https', hostname: 'www.admin.respyr.ai' },
+      { protocol: 'https', hostname: 'api.respyr.ai' },
     ],
   },
 
