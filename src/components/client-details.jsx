@@ -136,6 +136,7 @@ const transformDatesToDisplay = () => {
   };
 
   const testDateData = transformDatesToDisplay();
+  console.log("Transformed testDateData139:", testDateData);
   const weekData = transformWeeklyDatesToDisplay();
 
   const getSelectedWeekInfo = () => {
@@ -414,7 +415,6 @@ const transformDatesToDisplay = () => {
   };
 
   const visibleItems = currentData.slice(startIndex, startIndex + ITEMS_TO_SHOW);
-  console.log("visibleItems412:-", visibleItems);
 
 
   if (isLoadingWeeklyData) {
