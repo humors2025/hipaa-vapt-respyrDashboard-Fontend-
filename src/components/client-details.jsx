@@ -136,7 +136,6 @@ const transformDatesToDisplay = () => {
   };
 
   const testDateData = transformDatesToDisplay();
-  console.log("testDateData139:-", testDateData);
   const weekData = transformWeeklyDatesToDisplay();
 
   const getSelectedWeekInfo = () => {

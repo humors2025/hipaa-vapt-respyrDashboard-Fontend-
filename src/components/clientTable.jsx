@@ -124,16 +124,29 @@ export default function ClientTable({
 
 
   // Helper function to format last tested text
+// The API tags last_logged_date with "Z" (UTC) but the value is actually
+// server local wall-clock time (p_created has no timezone at all). Parsing it
+// as UTC shifts it into the future, so we read the wall-clock components and
+// build a local Date instead of trusting the "Z".
+const parseServerDate = (dateString) => {
+  const m = String(dateString).match(
+    /(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})/
+  );
+  if (!m) return new Date(dateString);
+  return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+};
+
 const formatLastLoggedDate = (dateString) => {
   if (!dateString) return "No test yet";
 
   try {
-    const testDate = new Date(dateString);
+    const testDate = parseServerDate(dateString);
     const now = new Date();
 
     if (isNaN(testDate.getTime())) return "No test yet";
 
-    const diffMs = now - testDate;
+    // Clamp small negative diffs (clock skew) to 0.
+    const diffMs = Math.max(0, now - testDate);
     const diffMinutes = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
 
