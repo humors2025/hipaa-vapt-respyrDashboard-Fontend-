@@ -554,7 +554,7 @@ export default function DietPlan() {
               })}
             </div>
 
-            <div className="pt-5 pb-[43px] pl-[15px] pr-2.5 border-4 border-[#F5F7FA] rounded-[15px] flex-1 h-[360px] xl:h-[400px] 2xl:h-[440px] overflow-y-auto scroll-hide">
+            <div className="pt-5 pb-[15px] pl-[15px] pr-2.5 border-4 border-[#F5F7FA] rounded-[15px] flex-1 h-[360px] xl:h-[400px] 2xl:h-[440px] flex flex-col scroll-hide">
               {dietAnalysisLoading ? (
                 <div className="h-full flex items-center justify-center">
                   <p className="text-[#738298] text-[13px] xl:text-[14px] 2xl:text-[15px] font-medium">
@@ -568,9 +568,9 @@ export default function DietPlan() {
                   </p>
                 </div>
               ) : currentMealFoods.length > 0 ? (
-                <div className="flex flex-col gap-10">
-                  {/* Meal totals bar */}
-                  <div className="flex items-center gap-2 flex-wrap px-2 py-2 bg-[#F5F7FA] rounded-[8px]">
+                <div className="flex flex-col h-full min-h-0 gap-4">
+                  {/* Meal totals bar — fixed */}
+                  <div className="shrink-0 flex items-center gap-2 flex-wrap px-2 py-2 bg-[#F5F7FA] rounded-[8px]">
                     <span className="text-[11px] xl:text-[12px] font-bold text-[#252525]">
                       {currentMealTotals.calories} kcal
                     </span>
@@ -588,6 +588,9 @@ export default function DietPlan() {
                       Fb {currentMealTotals.fiber_g}g
                     </span>
                   </div>
+
+                  {/* Scrollable food list */}
+                  <div className="flex-1 min-h-0 overflow-y-auto scroll-hide flex flex-col gap-10 pr-1">
                   {currentMealFoods.map((food, index) => (
                     <div
                       key={`${currentMealKey}-${index}`}
@@ -647,31 +650,29 @@ export default function DietPlan() {
                               </div>
                             </div>
 
-                            {/* Edit/Remove — hidden once the plan is approved */}
-                            {!isApproved && (
-                              <div className="flex items-center gap-1 shrink-0 mt-0.5">
-                                <button
-                                  onClick={() => startEditFood(index, food)}
-                                  className="p-1.5 rounded-[6px] hover:bg-[#EEF4FE] cursor-pointer transition-colors"
-                                  title="Edit food"
-                                >
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#308BF9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                  </svg>
-                                </button>
-                                <button
-                                  onClick={() => removeFoodFromPlan(activeDay - 1, currentMealKey, index)}
-                                  className="p-1.5 rounded-[6px] hover:bg-[#E76F511A] cursor-pointer transition-colors"
-                                  title="Remove food"
-                                >
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E76F51" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <polyline points="3 6 5 6 21 6" />
-                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                  </svg>
-                                </button>
-                              </div>
-                            )}
+                            {/* Edit/Remove — always visible, even when approved */}
+                            <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                              <button
+                                onClick={() => startEditFood(index, food)}
+                                className="p-1.5 rounded-[6px] hover:bg-[#EEF4FE] cursor-pointer transition-colors"
+                                title="Edit food"
+                              >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#308BF9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => removeFoodFromPlan(activeDay - 1, currentMealKey, index)}
+                                className="p-1.5 rounded-[6px] hover:bg-[#E76F511A] cursor-pointer transition-colors"
+                                title="Remove food"
+                              >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E76F51" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="3 6 5 6 21 6" />
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                </svg>
+                              </button>
+                            </div>
                           </div>
 
                           {/* Inline edit panel */}
@@ -722,8 +723,10 @@ export default function DietPlan() {
                       </div>
                     </div>
                   ))}
+                  </div>
 
-
+                  {/* Fixed footer — Save/Discard + Add Food */}
+                  <div className="shrink-0 flex flex-col gap-3 pt-1">
                     {/* Save / Discard bar — always visible when there are pending edits */}
                   {hasEdits && (
                     <div className="flex items-center gap-2 mt-3 px-3 py-2.5 rounded-[10px] border border-[#308BF9] bg-[#EEF4FE]">
@@ -749,8 +752,8 @@ export default function DietPlan() {
 
 
 
-                  {/* Add Food button — hidden once the plan is approved */}
-                  {canEdit && !isApproved && (
+                  {/* Add Food button — always visible when editable */}
+                  {canEdit && (
                     <button
                       onClick={() => setShowAddFoodModal(true)}
                       className="flex items-center gap-2 px-3 py-2.5 rounded-[10px] border border-dashed border-[#308BF9] text-[#308BF9] hover:bg-[#EEF4FE] cursor-pointer transition-colors"
@@ -764,8 +767,8 @@ export default function DietPlan() {
                       </span>
                     </button>
                   )}
+                  </div>
 
-                
                 </div>
               ) : (
                 <div className="h-full flex flex-col items-center justify-center gap-3">

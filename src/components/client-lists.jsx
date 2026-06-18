@@ -7,6 +7,7 @@ import { UserProfile } from "./user-profile";
 import { fetchClientsDashboard } from "../services/authService";
 import { cookieManager } from "../lib/cookies";
 import { zoneLabel } from "@/lib/utils";
+import { resolveProfileImage } from "../lib/profileImage";
 
 function decodeJwt(token) {
   try {
@@ -377,11 +378,16 @@ export default function ClientLists() {
                 <div className="flex gap-1.5 items-center">
                   <div>
                     <Image
-                      src={client.p_image || "/icons/Ellipse 668.svg"}
+                      src={resolveProfileImage(client.p_image)}
                       width={40}
                       height={40}
                       alt="profile"
-                      className="w-10 h-10 rounded-full"
+                      // Same-origin proxy reads the access_token cookie; Next's
+                      // optimizer fetches server-side WITHOUT that cookie (→ 401
+                      // / broken image), so load it directly like the other
+                      // avatars in clientTable/rightSidebar.
+                      unoptimized
+                      className="w-10 h-10 rounded-full object-cover"
                     />
                   </div>
 

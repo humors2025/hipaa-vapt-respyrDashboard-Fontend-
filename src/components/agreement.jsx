@@ -3,14 +3,18 @@
 import { useRef, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import html2canvas from 'html2canvas'
+import { toast } from 'sonner'
 
-// html2canvas (1.4.x) can't parse modern `oklch()` colors that Tailwind v4 /
-// shadcn themes emit. Before capturing, walk the cloned DOM and rewrite any
-// oklch color value to an RGB equivalent (a canvas 2D context normalizes any
-// valid CSS color the browser understands into rgb/hex form).
-const OKLCH_PROPS = [
+// html2canvas (1.4.x) can't parse modern CSS color functions that Tailwind v4 /
+// shadcn themes emit — `oklch()`, `oklab()`, `lab()`, `lch()`, and especially
+// `color-mix()` (which Tailwind v4 uses for any color with an opacity modifier,
+// e.g. `border-[#e48326]/20`). Before capturing, walk the cloned DOM and rewrite
+// these to an RGB equivalent (a canvas 2D context normalizes any valid CSS color
+// the browser understands into rgb/hex form).
+const COLOR_PROPS = [
   'color',
   'backgroundColor',
+  'backgroundImage',
   'borderTopColor',
   'borderRightColor',
   'borderBottomColor',
@@ -18,9 +22,14 @@ const OKLCH_PROPS = [
   'outlineColor',
   'textDecorationColor',
   'columnRuleColor',
+  'boxShadow',
   'fill',
   'stroke',
 ]
+
+// Color functions html2canvas 1.4.x cannot parse.
+const MODERN_COLOR_RE = /(?:color-mix|oklch|oklab|lab|lch|hwb|color)\(/i
+const MODERN_COLOR_FN = /(?:color-mix|oklch|oklab|lab|lch|hwb|color)\(/gi
 
 function makeColorConverter() {
   const ctx = document.createElement('canvas').getContext('2d')
@@ -35,6 +44,40 @@ function makeColorConverter() {
   }
 }
 
+// Replace every modern color-function call embedded in a value (handles plain
+// color values as well as gradients / shadows that embed them) with its RGB
+// equivalent, matching balanced parentheses so nested functions are captured.
+function convertEmbeddedColors(value, convert) {
+  let out = ''
+  let last = 0
+  let m
+  MODERN_COLOR_FN.lastIndex = 0
+  while ((m = MODERN_COLOR_FN.exec(value))) {
+    const start = m.index
+    let depth = 0
+    let end = -1
+    for (let k = start + m[0].length - 1; k < value.length; k++) {
+      const c = value[k]
+      if (c === '(') depth++
+      else if (c === ')') {
+        depth--
+        if (depth === 0) {
+          end = k
+          break
+        }
+      }
+    }
+    if (end === -1) break
+    const fnStr = value.slice(start, end + 1)
+    const rgb = convert(fnStr)
+    out += value.slice(last, start) + (rgb || fnStr)
+    last = end + 1
+    MODERN_COLOR_FN.lastIndex = last
+  }
+  out += value.slice(last)
+  return out
+}
+
 function scrubOklch(doc) {
   try {
     const win = doc.defaultView || window
@@ -43,16 +86,16 @@ function scrubOklch(doc) {
     for (const el of els) {
       if (!el || el.nodeType !== 1) continue
       const cs = win.getComputedStyle(el)
-      for (const prop of OKLCH_PROPS) {
+      for (const prop of COLOR_PROPS) {
         const v = cs[prop]
-        if (v && v.indexOf('oklch') !== -1) {
-          const rgb = convert(v)
-          if (rgb) el.style[prop] = rgb
+        if (v && MODERN_COLOR_RE.test(v)) {
+          const converted = convertEmbeddedColors(v, convert)
+          if (converted && converted !== v) el.style[prop] = converted
         }
       }
     }
   } catch (err) {
-    console.warn('oklch scrub failed', err)
+    console.warn('color scrub failed', err)
   }
 }
 
@@ -156,11 +199,13 @@ export default function Agreement({ onAccept, onDecline }) {
     setGenerating(true)
     try {
       const pdf = termsRef.current ? await buildAgreementPdf(termsRef.current) : null
+      if (!pdf) throw new Error('Agreement PDF could not be generated')
       onAccept?.(pdf)
     } catch (err) {
       console.error('Failed to generate agreement PDF', err)
-      // Don't block the user if PDF capture fails — continue without it.
-      onAccept?.(null)
+      // The signed PDF is required to complete signup, so don't advance to the
+      // password step without it — keep the user here and let them retry.
+      toast.error('Could not prepare the agreement document. Please try again.')
     } finally {
       setGenerating(false)
     }
