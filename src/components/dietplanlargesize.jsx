@@ -86,8 +86,9 @@ export default function DietPlanLargeSize() {
     try {
       setIsApproving(true);
 
-      const dieticianCookie = cookieManager.getJSON("dietician");
-      const dieticianId = dieticianCookie?.dietician_id;
+      const token = cookieManager.get("access_token");
+      const decoded = token ? decodeJwt(token) : null;
+      const dieticianId = decoded?.dietician_id;
 
       const planId = dietAnalysisData?.data?.id;
 

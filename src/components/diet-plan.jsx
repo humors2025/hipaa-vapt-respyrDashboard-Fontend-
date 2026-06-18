@@ -62,7 +62,7 @@ export default function DietPlan() {
 
   // status_value (approval) only controls mobile app visibility — trainer
   // dashboard editing must work for both status=0 (draft) and status=1 (approved).
-  const canEdit = !isSuperAdmin;
+  const canEdit = true;
   const hasEdits = pendingOps.length > 0;
 
   useEffect(() => {
@@ -343,7 +343,9 @@ export default function DietPlan() {
   const saveAllChanges = async () => {
     if (pendingOps.length === 0) return;
     const raw = dietAnalysisData?.data || {};
-    const cookieDieticianId = cookieManager.getJSON("dietician")?.dietician_id;
+    const token = cookieManager.get("access_token");
+    const decoded = token ? decodeJwt(token) : null;
+    const cookieDieticianId = decoded?.dietician_id;
 
     // Build a normalised selectedWeek — fall back to cookie / URL where the
     // response object doesn't carry the field. Backend column is dietitian_id (no 'e').
@@ -392,7 +394,7 @@ export default function DietPlan() {
 
       // Fire-and-forget edit log for preference learning
       if (originalDaysRef.current && editedPlan?.days) {
-        const dieticianId = cookieManager.getJSON("dietician")?.dietician_id;
+        const dieticianId = decoded?.dietician_id;
         fetch("/api/diet-plan/log-edit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -426,8 +428,9 @@ export default function DietPlan() {
   const handleApproveConfirm = async () => {
     try {
       setIsApproving(true);
-      const dieticianCookie = cookieManager.getJSON("dietician");
-      const dieticianId = dieticianCookie?.dietician_id;
+      const token = cookieManager.get("access_token");
+      const decoded = token ? decodeJwt(token) : null;
+      const dieticianId = decoded?.dietician_id;
       const planId = dietAnalysisData?.data?.id;
 
       if (!profileId || !dieticianId || !planId) {
@@ -644,8 +647,8 @@ export default function DietPlan() {
                               </div>
                             </div>
 
-                            {/* Edit/Remove — always visible when plan is editable */}
-                            {canEdit && editingFoodIndex !== index && (
+                            {/* Edit/Remove — hidden once the plan is approved */}
+                            {!isApproved && (
                               <div className="flex items-center gap-1 shrink-0 mt-0.5">
                                 <button
                                   onClick={() => startEditFood(index, food)}
@@ -746,8 +749,8 @@ export default function DietPlan() {
 
 
 
-                  {/* Add Food button — always visible when editable */}
-                  {canEdit && (
+                  {/* Add Food button — hidden once the plan is approved */}
+                  {canEdit && !isApproved && (
                     <button
                       onClick={() => setShowAddFoodModal(true)}
                       className="flex items-center gap-2 px-3 py-2.5 rounded-[10px] border border-dashed border-[#308BF9] text-[#308BF9] hover:bg-[#EEF4FE] cursor-pointer transition-colors"
@@ -786,7 +789,7 @@ export default function DietPlan() {
             </div>
           </div>
 
-          {!isSuperAdmin && (
+          {/* {!isSuperAdmin && ( */}
             <div className="flex gap-2.5 justify-end mt-2">
               {!isApproved && (
                 <p className="py-[11px] text-[#535359] text-[10px] xl:text-[11px] 2xl:text-[12px] font-normal leading-normal tracking-[-0.2px]">
@@ -828,7 +831,7 @@ export default function DietPlan() {
                 </div>
               </div>
             </div>
-          )}
+          {/* )} */}
         </div>
       </div>
 

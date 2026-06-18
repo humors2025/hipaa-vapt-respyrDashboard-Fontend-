@@ -1348,6 +1348,34 @@ export const acceptInviteService = async (payload) => {
   });
 };
 
+
+export const createAgreementUploadUrlService = async (payload) => {
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.AGREEMENTUPLOADURL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const uploadAgreementPdfToS3 = async (uploadUrl, file) => {
+  const res = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/pdf",
+    },
+    body: file,
+  });
+
+  if (!res.ok) {
+    throw new Error("Agreement PDF upload failed");
+  }
+
+  return true;
+};
+
+
 export const fetchTrainerClientInvitesService = async ({ actorUserId }) => {
   if (!actorUserId) {
     throw new Error("Actor user ID missing. Please login again.");

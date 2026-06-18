@@ -10,8 +10,14 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { cookieManager } from "@/lib/cookies";
-import { previewInviteService, acceptInviteService } from "@/services/authService";
+import {
+  previewInviteService,
+  acceptInviteService,
+  createAgreementUploadUrlService,
+  uploadAgreementPdfToS3,
+} from "@/services/authService";
 import Agreement from "@/components/agreement";
+
 
 /* ---------------- Icons ---------------- */
 
@@ -198,10 +204,34 @@ function SignupForm() {
       };
 
       // Attach the signed agreement PDF (base64 data URL) if it was captured.
-      if (agreementPdf) {
-        payload.agreement_pdf = await fileToBase64(agreementPdf);
-        payload.agreement_pdf_name = agreementPdf.name;
-      }
+      // if (agreementPdf) {
+      //   payload.agreement_pdf = await fileToBase64(agreementPdf);
+      //   payload.agreement_pdf_name = agreementPdf.name;
+      // }
+
+
+      if (!agreementPdf) {
+  toast.error("Agreement PDF is missing. Please accept the agreement again.");
+  setAgreed(false);
+  return;
+}
+
+const uploadUrlRes = await createAgreementUploadUrlService({
+  token,
+  content_type: agreementPdf.type || "application/pdf",
+  size_bytes: agreementPdf.size,
+  file_name: agreementPdf.name,
+});
+
+const uploadUrlData = uploadUrlRes?.data || uploadUrlRes;
+
+await uploadAgreementPdfToS3(uploadUrlData.upload_url, agreementPdf);
+
+payload.agreement_s3_key = uploadUrlData.key;
+payload.agreement_pdf_name =
+  agreementPdf.name || "device-evaluation-agreement.pdf";
+
+  
 
       await acceptInviteService(payload);
 

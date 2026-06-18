@@ -117,6 +117,7 @@ export const API_ENDPOINTS = {
 
     VALIDATEINVITETOKEN: `/${API_VERSION}/dietitian/api/web/validate-invite-token`,
     ACCEPTINVITE: `/${API_VERSION}/dietitian/api/web/accept-invite`,
+    AGREEMENTUPLOADURL: `/${API_VERSION}/dietitian/api/web/agreement-upload-url`,
     INVITEPREVIEW: `/${API_VERSION}/dietitian/api/web/invite-preview`,
 
     // Internal Next.js API routes (relative — not prefixed with API_BASE_URL)
