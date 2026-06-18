@@ -49,6 +49,22 @@ function decodeAccessTokenFromCookie() {
   }
 }
 
+// Reads dietician_id straight from the decoded access_token cookie. The backend
+// (requireProfileAccess) binds identity to the JWT — the requested dietitian_id
+// must equal the token's dietician_id — so this is the only correct value to send.
+// Note the token spells the claim `dietician_id` (with a "c"); we also fall back
+// to the nested `dietician` object if the top-level claim is absent.
+function getDietitianIdFromAccessToken() {
+  const decoded = decodeAccessTokenFromCookie();
+  return decoded?.dietician_id ?? decoded?.dietician?.dietician_id ?? null;
+}
+
+// Reads profile_id from the current page URL query string (?profile_id=...).
+function getProfileIdFromUrl() {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("profile_id");
+}
+
 function getActorUserIdFromAccessToken() {
   const decoded = decodeAccessTokenFromCookie();
   if (decoded?.user_id || decoded?.email) {
@@ -675,16 +691,24 @@ export const fetchClientIndividualProfile = async (profileId, date, dietitianId,
 
 
 // Add to authService.js
+// Payload is sourced from the session: profile_id from the URL, dietitian_id from
+// the access_token cookie. The backend binds identity to the JWT and requires the
+// requested dietitian_id to equal the token's dietician_id, so we always send the
+// token value and do NOT apply the partner_code override here (that would send the
+// owning trainer's id and get rejected with a 403).
 export const fetchClientProfileDatesList = async (profileId, dietitianId) => {
+  const resolvedProfileId = profileId ?? getProfileIdFromUrl();
+  const resolvedDietitianId = getDietitianIdFromAccessToken();
+
   return apiFetcher(API_ENDPOINTS.CLIENTPROFILE.CLIENTPROFILEDATESLIST, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(withSuperAdminPartnerCode({
-      profile_id: profileId,
-       dietitian_id: dietitianId,
-    })),
+    body: JSON.stringify({
+      profile_id: resolvedProfileId,
+      dietitian_id: resolvedDietitianId,
+    }),
   });
 };
 
@@ -729,16 +753,21 @@ export const fetchDietAnalysisPlan = async (
 export const fetchClientWeeklyDates = async (profileId, dietitianId) => {
   try {
     const accessToken = Cookies.get("access_token");
+    // profile_id from URL, dietitian_id from the access_token (JWT-bound identity
+    // the backend requires). No partner_code override — see fetchClientProfileDatesList.
+    const resolvedProfileId = profileId ?? getProfileIdFromUrl();
+    const resolvedDietitianId = getDietitianIdFromAccessToken();
+
     const response = await apiFetcher(API_ENDPOINTS.CLIENTPROFILE.CLIENTWEEKLYDATES, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify(withSuperAdminPartnerCode({
-        profile_id: profileId,
-        dietitian_id: dietitianId,
-      })),
+      body: JSON.stringify({
+        profile_id: resolvedProfileId,
+        dietitian_id: resolvedDietitianId,
+      }),
     });
     
     return response;

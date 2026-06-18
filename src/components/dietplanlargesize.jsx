@@ -2,16 +2,29 @@
 
 import Image from "next/image";
 import { toast } from "sonner";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import {
   selectDietAnalysisData,
   selectDietAnalysisError,
   selectDietAnalysisLoading,
+  setWeeklyJsonData,
+  updateEditedDays,
 } from "../store/dietAnalysisSlice";
 import ApproveConfirmationPopup from "./pop-folder/approve-confirmation-popup";
-import { approveDietPlanService } from "../services/authService";
+import DiscardConfirmationPopup from "./pop-folder/discard-confirmation-popup";
+import FoodEditPanel from "./pop-folder/food-edit-panel";
+import FoodSearchModal from "./pop-folder/food-search-modal";
+import {
+  approveDietPlanService,
+  updateDietPlanFoodService,
+} from "../services/authService";
+import {
+  buildAddPayload,
+  buildDeletePayload,
+  buildUpdatePayload,
+} from "../lib/food-update";
 import { cookieManager } from "../lib/cookies";
 
 function decodeJwt(token) {
@@ -44,6 +57,25 @@ export default function DietPlanLargeSize() {
   const [isApproving, setIsApproving] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
+  // Edit state — edit controls are always visible on editable plans.
+  const [editedPlan, setEditedPlan] = useState(null);
+  // Which food is being edited, keyed as `${mealKey}:${foodIndex}` because the
+  // large view shows all four meals at once.
+  const [editingKey, setEditingKey] = useState(null);
+  // Snapshot of the food being edited, taken when the panel opens, so live
+  // edits can be reverted if the trainer hits "Cancel".
+  const editSnapshotRef = useRef(null);
+  // Which meal column the "Add food" modal is open for (mealKey or null).
+  const [addFoodMealKey, setAddFoodMealKey] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [pendingOps, setPendingOps] = useState([]);
+  const [showDiscardPopup, setShowDiscardPopup] = useState(false);
+
+  // status_value (approval) only controls mobile app visibility — trainer
+  // dashboard editing must work for both status=0 (draft) and status=1 (approved).
+  const canEdit = !isSuperAdmin;
+  const hasEdits = pendingOps.length > 0;
+
   useEffect(() => {
     const token = cookieManager.get("access_token");
     const decoded = token ? decodeJwt(token) : null;
@@ -53,42 +85,275 @@ export default function DietPlanLargeSize() {
   const searchParams = useSearchParams();
   const profileId = searchParams.get("profile_id");
 
+  const dispatch = useDispatch();
   const dietAnalysisData = useSelector(selectDietAnalysisData);
   const dietAnalysisLoading = useSelector(selectDietAnalysisLoading);
   const dietAnalysisError = useSelector(selectDietAnalysisError);
+
+  const originalDaysRef = useRef(null);
 
   const weeklyPlanData = dietAnalysisData?.data?.food_json || {
     days: [],
     weekly_json_data: {},
   };
 
-  const days = useMemo(() => {
+  const planDays = useMemo(() => {
     return weeklyPlanData?.days || [];
   }, [weeklyPlanData]);
 
-  // Reset activeDayIndex when days change or diet data reloads
+  // Reset state when the diet plan reloads. Depend on plan id only — not the
+  // full object — so our own updateEditedDays dispatches don't re-trigger this.
   useEffect(() => {
     setActiveDayIndex(0);
-
     const statusValue = dietAnalysisData?.data?.status_value;
-
     // Handles both number 1 and string "1"
     setIsApproved(Number(statusValue) === 1);
-
     setShowApprovePopup(false);
-  }, [dietAnalysisData]);
+    setEditedPlan(null);
+    setEditingKey(null);
+    setAddFoodMealKey(null);
+    setPendingOps([]);
+    setShowDiscardPopup(false);
+    if (dietAnalysisData?.data?.food_json?.days) {
+      originalDaysRef.current = JSON.parse(
+        JSON.stringify(dietAnalysisData.data.food_json.days)
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dietAnalysisData?.data?.id]);
+
+  // Working data: edited copy if edits exist, otherwise original.
+  const workingDays = editedPlan?.days || planDays;
 
   const selectedDay = useMemo(() => {
-    return days[activeDayIndex] || null;
-  }, [days, activeDayIndex]);
+    return workingDays[activeDayIndex] || null;
+  }, [workingDays, activeDayIndex]);
+
+  // Live preview: reflect in-progress edits so day macro totals update in real
+  // time.
+  useEffect(() => {
+    if (editedPlan?.days) {
+      dispatch(updateEditedDays(editedPlan.days));
+    }
+  }, [editedPlan, dispatch]);
+
+  // ── Edit helpers — mirror diet-plan.jsx, lazily creating editedPlan ──
+
+  const updateFoodInPlan = useCallback(
+    (dayIndex, mealKey, foodIndex, updatedFood) => {
+      const dayCode = planDays[dayIndex]?.day_code || `d${dayIndex + 1}`;
+      setEditedPlan((prev) => {
+        const base = prev || { days: JSON.parse(JSON.stringify(planDays)) };
+        const newDays = JSON.parse(JSON.stringify(base.days));
+        if (newDays[dayIndex]?.[mealKey]?.foods?.[foodIndex]) {
+          newDays[dayIndex][mealKey].foods[foodIndex] = updatedFood;
+        }
+        return { ...base, days: newDays };
+      });
+      setPendingOps((ops) => [
+        ...ops,
+        { action: "update", dayCode, mealType: mealKey, foodIndex, food: updatedFood },
+      ]);
+      editSnapshotRef.current = null;
+      setEditingKey(null);
+    },
+    [planDays]
+  );
+
+  // Live preview: reflect in-progress edits without recording a pending op or
+  // closing the panel — those happen only on "Done" (updateFoodInPlan).
+  const updateFoodLive = useCallback(
+    (dayIndex, mealKey, foodIndex, updatedFood) => {
+      setEditedPlan((prev) => {
+        const base = prev || { days: JSON.parse(JSON.stringify(planDays)) };
+        const newDays = JSON.parse(JSON.stringify(base.days));
+        if (newDays[dayIndex]?.[mealKey]?.foods?.[foodIndex]) {
+          newDays[dayIndex][mealKey].foods[foodIndex] = updatedFood;
+        }
+        return { ...base, days: newDays };
+      });
+    },
+    [planDays]
+  );
+
+  // Open the editor for a food, snapshotting it first so Cancel can revert
+  // any live edits.
+  const startEditFood = useCallback((mealKey, foodIndex, food) => {
+    editSnapshotRef.current = JSON.parse(JSON.stringify(food));
+    setEditingKey(`${mealKey}:${foodIndex}`);
+  }, []);
+
+  // Cancel editing: restore the pre-edit snapshot, then close the panel.
+  const cancelEditFood = useCallback((dayIndex, mealKey, foodIndex) => {
+    const snapshot = editSnapshotRef.current;
+    if (snapshot) {
+      setEditedPlan((prev) => {
+        if (!prev) return prev;
+        const newDays = JSON.parse(JSON.stringify(prev.days));
+        if (newDays[dayIndex]?.[mealKey]?.foods?.[foodIndex]) {
+          newDays[dayIndex][mealKey].foods[foodIndex] = snapshot;
+        }
+        return { ...prev, days: newDays };
+      });
+    }
+    editSnapshotRef.current = null;
+    setEditingKey(null);
+  }, []);
+
+  const removeFoodFromPlan = useCallback(
+    (dayIndex, mealKey, foodIndex) => {
+      const dayCode = planDays[dayIndex]?.day_code || `d${dayIndex + 1}`;
+      setEditedPlan((prev) => {
+        const base = prev || { days: JSON.parse(JSON.stringify(planDays)) };
+        const newDays = JSON.parse(JSON.stringify(base.days));
+        if (newDays[dayIndex]?.[mealKey]?.foods) {
+          newDays[dayIndex][mealKey].foods.splice(foodIndex, 1);
+        }
+        return { ...base, days: newDays };
+      });
+      setPendingOps((ops) => [
+        ...ops,
+        { action: "delete", dayCode, mealType: mealKey, foodIndex },
+      ]);
+      setEditingKey(null);
+    },
+    [planDays]
+  );
+
+  const addFoodToPlan = useCallback(
+    (food) => {
+      const dayIndex = activeDayIndex;
+      const mealKey = addFoodMealKey;
+      if (!mealKey) return;
+      const dayCode = planDays[dayIndex]?.day_code || `d${dayIndex + 1}`;
+      setEditedPlan((prev) => {
+        const base = prev || { days: JSON.parse(JSON.stringify(planDays)) };
+        const newDays = JSON.parse(JSON.stringify(base.days));
+        if (!newDays[dayIndex]) return base;
+        if (!newDays[dayIndex][mealKey]) newDays[dayIndex][mealKey] = { foods: [] };
+        if (!newDays[dayIndex][mealKey].foods) newDays[dayIndex][mealKey].foods = [];
+        newDays[dayIndex][mealKey].foods.push(food);
+        return { ...base, days: newDays };
+      });
+      setPendingOps((ops) => [
+        ...ops,
+        { action: "add", dayCode, mealType: mealKey, food },
+      ]);
+      setAddFoodMealKey(null);
+    },
+    [activeDayIndex, addFoodMealKey, planDays]
+  );
+
+  // Discard button click — confirm via popup if there are edits, else clear.
+  const discardEdits = () => {
+    if (hasEdits) {
+      setShowDiscardPopup(true);
+      return;
+    }
+    performDiscard();
+  };
+
+  const performDiscard = () => {
+    setShowDiscardPopup(false);
+    setEditedPlan(null);
+    setPendingOps([]);
+    setEditingKey(null);
+    if (originalDaysRef.current) {
+      dispatch(updateEditedDays(originalDaysRef.current));
+    }
+  };
+
+  const saveAllChanges = async () => {
+    if (pendingOps.length === 0) return;
+    const raw = dietAnalysisData?.data || {};
+    const cookieDieticianId = cookieManager.getJSON("dietician")?.dietician_id;
+
+    // Build a normalised selectedWeek — fall back to cookie / URL where the
+    // response object doesn't carry the field. Backend column is dietitian_id.
+    const selectedWeek = {
+      id: raw.id,
+      dietitian_id: raw.dietitian_id || raw.dietician_id || cookieDieticianId,
+      profile_id: raw.profile_id || profileId,
+      week_start_date: raw.week_start_date,
+      week_end_date: raw.week_end_date,
+    };
+
+    if (!selectedWeek.id || !selectedWeek.profile_id || !selectedWeek.dietitian_id) {
+      toast.error(
+        `Missing identifier — id:${selectedWeek.id} dietitian:${selectedWeek.dietitian_id} profile:${selectedWeek.profile_id}`,
+        { duration: 10000 }
+      );
+      return;
+    }
+
+    setIsSaving(true);
+    const succeeded = [];
+    let lastWeeklyData = null;
+    try {
+      for (const op of pendingOps) {
+        let payload;
+        if (op.action === "update") {
+          payload = buildUpdatePayload({ selectedWeek, dayCode: op.dayCode, mealType: op.mealType, foodIndex: op.foodIndex, food: op.food });
+        } else if (op.action === "add") {
+          payload = buildAddPayload({ selectedWeek, dayCode: op.dayCode, mealType: op.mealType, food: op.food });
+        } else if (op.action === "delete") {
+          payload = buildDeletePayload({ selectedWeek, dayCode: op.dayCode, mealType: op.mealType, foodIndex: op.foodIndex });
+        } else {
+          continue;
+        }
+        const res = await updateDietPlanFoodService(payload);
+        if (!(res?.status === "success" || res?.success || res?.ok)) {
+          throw new Error(res?.message || res?.error || `Save failed at op ${succeeded.length + 1}/${pendingOps.length}`);
+        }
+        if (res?.weekly_json_data) lastWeeklyData = res.weekly_json_data;
+        succeeded.push(op);
+      }
+
+      toast.success(`Saved ${succeeded.length} change${succeeded.length === 1 ? "" : "s"}`);
+
+      // Server is source of truth for weekly totals — overwrite optimistic math
+      if (lastWeeklyData) {
+        dispatch(setWeeklyJsonData(lastWeeklyData));
+      }
+
+      // Fire-and-forget edit log for preference learning
+      if (originalDaysRef.current && editedPlan?.days) {
+        const dieticianId = cookieManager.getJSON("dietician")?.dietician_id;
+        fetch("/api/diet-plan/log-edit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: profileId,
+            recommended: originalDaysRef.current,
+            final: editedPlan.days,
+            source: "trainer",
+            meta: { plan_id: selectedWeek.id, dietician_id: dieticianId, ops_count: succeeded.length },
+          }),
+        }).catch(() => {});
+        originalDaysRef.current = JSON.parse(JSON.stringify(editedPlan.days));
+      }
+
+      setPendingOps([]);
+      setEditedPlan(null);
+      setEditingKey(null);
+    } catch (err) {
+      console.error("Save failed:", err);
+      toast.error(err.message || "Failed to save changes", { duration: 8000 });
+      // Drop already-succeeded ops so retry only sends what failed
+      if (succeeded.length > 0) {
+        setPendingOps((ops) => ops.slice(succeeded.length));
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleApproveConfirm = async () => {
     try {
       setIsApproving(true);
 
-      const token = cookieManager.get("access_token");
-      const decoded = token ? decodeJwt(token) : null;
-      const dieticianId = decoded?.dietician_id;
+      const dieticianCookie = cookieManager.getJSON("dietician");
+      const dieticianId = dieticianCookie?.dietician_id;
 
       const planId = dietAnalysisData?.data?.id;
 
@@ -124,6 +389,9 @@ export default function DietPlanLargeSize() {
     }
   };
 
+  const addFoodMealLabel =
+    MEAL_TYPES.find((m) => m.key === addFoodMealKey)?.label || "meal";
+
   return (
     <div className="w-full min-w-0 flex-1">
       <div className="w-full min-w-0 pt-[15px] px-3 pb-[15px] rounded-[15px] border border-[#E1E6ED] bg-white overflow-hidden">
@@ -146,26 +414,29 @@ export default function DietPlanLargeSize() {
           <EmptyState text="Loading diet plan..." />
         ) : dietAnalysisError ? (
           <EmptyState text={dietAnalysisError} error />
-        ) : days.length === 0 ? (
+        ) : workingDays.length === 0 ? (
           <EmptyState text="No food data available" />
         ) : (
           <>
             {/* Day Header - Clickable day selector */}
             <div className="px-2.5 pb-4">
               <div className="grid grid-cols-7 rounded-[10px] border border-[#E1E6ED] overflow-hidden">
-                {days.map((day, index) => {
+                {workingDays.map((day, index) => {
                   const isActiveDay = activeDayIndex === index;
 
                   return (
                     <button
                       key={day.day_code || index}
                       type="button"
-                      onClick={() => setActiveDayIndex(index)}
+                      onClick={() => {
+                        setActiveDayIndex(index);
+                        setEditingKey(null);
+                      }}
                       className={[
                         "min-w-0 px-2 py-2.5 text-center",
                         "text-[12px] font-semibold leading-normal",
                         "transition-all duration-200 cursor-pointer",
-                        index !== days.length - 1
+                        index !== workingDays.length - 1
                           ? "border-r border-[#E1E6ED]"
                           : "",
                         isActiveDay
@@ -220,25 +491,74 @@ export default function DietPlanLargeSize() {
                               key={mealType.key}
                               className={[
                                 "min-w-0 px-3 py-4 min-h-[220px]",
-                                "divide-y divide-[#E1E6ED]",
                                 index !== MEAL_TYPES.length - 1
                                   ? "border-r border-[#E1E6ED]"
                                   : "",
                               ].join(" ")}
                             >
-                              {foods.length === 0 ? (
-                                <p className="text-[11px] text-slate-400 italic">
-                                  No items
-                                </p>
-                              ) : (
-                                foods.map((food, foodIndex) => (
-                                  <div
-                                    key={`${food.food_name || "food"}-${foodIndex}`}
-                                    className="py-3 first:pt-0 last:pb-0 min-w-0"
-                                  >
-                                    <FoodCard food={food} />
-                                  </div>
-                                ))
+                              <div className="divide-y divide-[#E1E6ED]">
+                                {foods.length === 0 ? (
+                                  <p className="text-[11px] text-slate-400 italic">
+                                    No items
+                                  </p>
+                                ) : (
+                                  foods.map((food, foodIndex) => {
+                                    const isEditing =
+                                      editingKey === `${mealType.key}:${foodIndex}`;
+                                    return (
+                                      <div
+                                        key={`${food.food_name || "food"}-${foodIndex}`}
+                                        className="py-3 first:pt-0 last:pb-0 min-w-0"
+                                      >
+                                        {canEdit && isEditing ? (
+                                          <FoodEditPanel
+                                            food={food}
+                                            onChange={(updatedFood) =>
+                                              updateFoodLive(activeDayIndex, mealType.key, foodIndex, updatedFood)
+                                            }
+                                            onSave={(updatedFood) =>
+                                              updateFoodInPlan(activeDayIndex, mealType.key, foodIndex, updatedFood)
+                                            }
+                                            onRemove={() =>
+                                              removeFoodFromPlan(activeDayIndex, mealType.key, foodIndex)
+                                            }
+                                            onCancel={() =>
+                                              cancelEditFood(activeDayIndex, mealType.key, foodIndex)
+                                            }
+                                          />
+                                        ) : (
+                                          <FoodCard
+                                            food={food}
+                                            canEdit={canEdit}
+                                            onEdit={() =>
+                                              startEditFood(mealType.key, foodIndex, food)
+                                            }
+                                            onRemove={() =>
+                                              removeFoodFromPlan(activeDayIndex, mealType.key, foodIndex)
+                                            }
+                                          />
+                                        )}
+                                      </div>
+                                    );
+                                  })
+                                )}
+                              </div>
+
+                              {/* Add food button — always visible when editable */}
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={() => setAddFoodMealKey(mealType.key)}
+                                  className="mt-3 flex items-center justify-center gap-1.5 w-full px-2 py-2 rounded-[8px] border border-dashed border-[#308BF9] text-[#308BF9] hover:bg-[#EEF4FE] cursor-pointer transition-colors"
+                                >
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                  </svg>
+                                  <span className="text-[10px] xl:text-[11px] font-semibold">
+                                    Add food
+                                  </span>
+                                </button>
                               )}
                             </div>
                           );
@@ -246,6 +566,31 @@ export default function DietPlanLargeSize() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Save / Discard bar — visible when there are pending edits */}
+                  {hasEdits && (
+                    <div className="flex items-center gap-2 mt-3 px-3 py-2.5 rounded-[10px] border border-[#308BF9] bg-[#EEF4FE]">
+                      <p className="text-[12px] xl:text-[13px] font-medium text-[#252525] flex-1">
+                        {pendingOps.length} unsaved change{pendingOps.length === 1 ? "" : "s"}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={discardEdits}
+                        disabled={isSaving}
+                        className="px-4 py-2 rounded-[8px] border border-[#E1E6ED] bg-white text-[#535359] text-[12px] xl:text-[13px] font-semibold cursor-pointer hover:bg-[#F5F7FA] disabled:opacity-50"
+                      >
+                        Discard
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveAllChanges}
+                        disabled={isSaving}
+                        className="px-5 py-2 rounded-[8px] bg-[#308BF9] text-white text-[12px] xl:text-[13px] font-semibold cursor-pointer hover:bg-[#2678D9] disabled:opacity-50"
+                      >
+                        {isSaving ? "Saving..." : "Save Changes"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -291,7 +636,7 @@ export default function DietPlanLargeSize() {
                   isApproved ? "text-[#738298]" : "text-white",
                 ].join(" ")}
               >
-                {isApproved ? "Approved" : "Approve"}
+                {isApproved ? "Approved" : isApproving ? "Approving..." : "Approve"}
               </span>
             </div>
           </div>
@@ -307,6 +652,22 @@ export default function DietPlanLargeSize() {
           }}
           onConfirm={handleApproveConfirm}
           isLoading={isApproving}
+        />
+      )}
+
+      {addFoodMealKey && canEdit && (
+        <FoodSearchModal
+          mealSlot={addFoodMealLabel}
+          onAdd={addFoodToPlan}
+          onClose={() => setAddFoodMealKey(null)}
+        />
+      )}
+
+      {showDiscardPopup && (
+        <DiscardConfirmationPopup
+          count={pendingOps.length}
+          onClose={() => setShowDiscardPopup(false)}
+          onConfirm={performDiscard}
         />
       )}
     </div>
@@ -328,7 +689,7 @@ function EmptyState({ text, error = false }) {
   );
 }
 
-function FoodCard({ food }) {
+function FoodCard({ food, canEdit = false, onEdit, onRemove }) {
   const formatValue = (value, suffix = "") => {
     if (value === null || value === undefined || value === "") {
       return `0${suffix}`;
@@ -364,9 +725,47 @@ function FoodCard({ food }) {
 
   return (
     <div className="w-full min-w-0 overflow-hidden">
-      <h3 className="text-[#252525] text-[11px] xl:text-[12px] font-semibold leading-[126%] tracking-[-0.22px] break-words">
-        {food.food_name || "Unnamed food"}
-      </h3>
+      <div className="flex items-start justify-between gap-1">
+        <h3
+          className={[
+            "flex-1 text-[#252525] text-[11px] xl:text-[12px] font-semibold leading-[126%] tracking-[-0.22px] break-words",
+            canEdit
+              ? "cursor-pointer rounded-[4px] px-1 py-0.5 -mx-1 -my-0.5 hover:bg-[#F5F7FA] transition-colors"
+              : "",
+          ].join(" ")}
+          onClick={canEdit ? onEdit : undefined}
+        >
+          {food.food_name || "Unnamed food"}
+        </h3>
+
+        {/* Edit / Remove — always visible when editable */}
+        {canEdit && (
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={onEdit}
+              className="p-1 rounded-[5px] hover:bg-[#EEF4FE] cursor-pointer transition-colors"
+              title="Edit food"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#308BF9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={onRemove}
+              className="p-1 rounded-[5px] hover:bg-[#E76F511A] cursor-pointer transition-colors"
+              title="Remove food"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#E76F51" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
 
       {(food.portion_with_metric || food.calories !== undefined) && (
         <p className="text-[#252525] text-[10px] mt-1 leading-normal tracking-[-0.2px] break-words">

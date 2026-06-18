@@ -91,6 +91,9 @@ export default function ClientDetails() {
 
   const profileId = searchParams.get("profile_id");
   const dietitianData = cookieManager.getJSON("dietician");
+  // dietitian_id is the logged-in dietitian from the session (same value the
+  // access_token carries as dietician_id). The backend binds identity to the JWT
+  // and requires the requested dietitian_id to equal the token's dietician_id.
   const dietitianId = dietitianData?.dietician_id || null;
 
   const formatGoal = (goal) => {
