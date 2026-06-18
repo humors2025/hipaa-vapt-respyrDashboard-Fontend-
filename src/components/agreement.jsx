@@ -2,102 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { jsPDF } from 'jspdf'
-import html2canvas from 'html2canvas'
 import { toast } from 'sonner'
-
-// html2canvas (1.4.x) can't parse modern CSS color functions that Tailwind v4 /
-// shadcn themes emit — `oklch()`, `oklab()`, `lab()`, `lch()`, and especially
-// `color-mix()` (which Tailwind v4 uses for any color with an opacity modifier,
-// e.g. `border-[#e48326]/20`). Before capturing, walk the cloned DOM and rewrite
-// these to an RGB equivalent (a canvas 2D context normalizes any valid CSS color
-// the browser understands into rgb/hex form).
-const COLOR_PROPS = [
-  'color',
-  'backgroundColor',
-  'backgroundImage',
-  'borderTopColor',
-  'borderRightColor',
-  'borderBottomColor',
-  'borderLeftColor',
-  'outlineColor',
-  'textDecorationColor',
-  'columnRuleColor',
-  'boxShadow',
-  'fill',
-  'stroke',
-]
-
-// Color functions html2canvas 1.4.x cannot parse.
-const MODERN_COLOR_RE = /(?:color-mix|oklch|oklab|lab|lch|hwb|color)\(/i
-const MODERN_COLOR_FN = /(?:color-mix|oklch|oklab|lab|lch|hwb|color)\(/gi
-
-function makeColorConverter() {
-  const ctx = document.createElement('canvas').getContext('2d')
-  return (value) => {
-    try {
-      ctx.fillStyle = '#000000'
-      ctx.fillStyle = value
-      return ctx.fillStyle
-    } catch {
-      return null
-    }
-  }
-}
-
-// Replace every modern color-function call embedded in a value (handles plain
-// color values as well as gradients / shadows that embed them) with its RGB
-// equivalent, matching balanced parentheses so nested functions are captured.
-function convertEmbeddedColors(value, convert) {
-  let out = ''
-  let last = 0
-  let m
-  MODERN_COLOR_FN.lastIndex = 0
-  while ((m = MODERN_COLOR_FN.exec(value))) {
-    const start = m.index
-    let depth = 0
-    let end = -1
-    for (let k = start + m[0].length - 1; k < value.length; k++) {
-      const c = value[k]
-      if (c === '(') depth++
-      else if (c === ')') {
-        depth--
-        if (depth === 0) {
-          end = k
-          break
-        }
-      }
-    }
-    if (end === -1) break
-    const fnStr = value.slice(start, end + 1)
-    const rgb = convert(fnStr)
-    out += value.slice(last, start) + (rgb || fnStr)
-    last = end + 1
-    MODERN_COLOR_FN.lastIndex = last
-  }
-  out += value.slice(last)
-  return out
-}
-
-function scrubOklch(doc) {
-  try {
-    const win = doc.defaultView || window
-    const convert = makeColorConverter()
-    const els = [doc.documentElement, doc.body, ...doc.querySelectorAll('*')]
-    for (const el of els) {
-      if (!el || el.nodeType !== 1) continue
-      const cs = win.getComputedStyle(el)
-      for (const prop of COLOR_PROPS) {
-        const v = cs[prop]
-        if (v && MODERN_COLOR_RE.test(v)) {
-          const converted = convertEmbeddedColors(v, convert)
-          if (converted && converted !== v) el.style[prop] = converted
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('color scrub failed', err)
-  }
-}
 
 const RespyrIcon = () => (
   <div className="w-[38px] h-[38px] bg-[#308bf9] rounded-[15px] flex items-center justify-center flex-shrink-0">
@@ -152,42 +57,50 @@ export default function Agreement({ onAccept, onDecline }) {
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 40) setScrolledToBottom(true)
   }
 
-  // Render the terms section to a multi-page A4 PDF and return it as a File.
-  async function buildAgreementPdf(el) {
-    const canvas = await html2canvas(el, {
-      scale: 2,
-      backgroundColor: '#ffffff',
-      useCORS: true,
-      // The terms live inside a fixed-height scroll box; expand it (and hide the
-      // "scroll to read" hint) in the clone so the whole document is captured.
-      onclone: (doc) => {
-        scrubOklch(doc)
-        doc.querySelectorAll('.tc-scroll').forEach((n) => {
-          n.style.maxHeight = 'none'
-          n.style.overflow = 'visible'
-        })
-        doc.querySelectorAll('[data-pdf-hide]').forEach((n) => {
-          n.style.display = 'none'
-        })
-      },
-    })
+  // Build a multi-page A4 PDF of the agreement directly from the rendered text.
+  // We deliberately avoid html2canvas here: it can't parse the modern CSS color
+  // functions (oklch/oklab/color-mix) that Tailwind v4 emits and was failing to
+  // produce a PDF at all. Reading the text and laying it out with jsPDF's native
+  // text API is dependency-free and reliable.
+  function buildAgreementPdf(el) {
+    const scrollEl = el.querySelector('.tc-scroll')
+    const body = ((scrollEl || el).innerText || (scrollEl || el).textContent || '').trim()
 
-    const imgData = canvas.toDataURL('image/png')
     const pdf = new jsPDF('p', 'mm', 'a4')
     const pageWidth = pdf.internal.pageSize.getWidth()
     const pageHeight = pdf.internal.pageSize.getHeight()
-    const imgWidth = pageWidth
-    const imgHeight = (canvas.height * imgWidth) / canvas.width
+    const margin = 15
+    const maxWidth = pageWidth - margin * 2
+    const lineHeight = 5
+    let y = margin
 
-    let heightLeft = imgHeight
-    let position = 0
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-    heightLeft -= pageHeight
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight
-      pdf.addPage()
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-      heightLeft -= pageHeight
+    const writeLines = (lines) => {
+      for (const line of lines) {
+        if (y + lineHeight > pageHeight - margin) {
+          pdf.addPage()
+          y = margin
+        }
+        pdf.text(line, margin, y)
+        y += lineHeight
+      }
+    }
+
+    // Title
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(12)
+    writeLines(pdf.splitTextToSize('DEVICE EVALUATION PROGRAM TERMS AND CONDITIONS', maxWidth))
+    y += lineHeight
+
+    // Body
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(10)
+    for (const para of body.split('\n')) {
+      const text = para.trim()
+      if (!text) {
+        y += lineHeight / 2
+        continue
+      }
+      writeLines(pdf.splitTextToSize(text, maxWidth))
     }
 
     const blob = pdf.output('blob')
