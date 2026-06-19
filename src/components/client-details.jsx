@@ -1,6 +1,6 @@
 "use client";
 import { toast } from "sonner";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { IoChevronBackOutline, IoChevronForwardOutline } from "react-icons/io5";
 import { useDispatch, useSelector } from "react-redux";
@@ -33,7 +33,6 @@ import {
 } from "../services/authService";
 
 import { cookieManager } from "../lib/cookies";
-import { zoneLabel } from "@/lib/utils";
 
 function decodeJwt(token) {
   try {
@@ -79,6 +78,26 @@ export default function ClientDetails() {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [roleChecked, setRoleChecked] = useState(false);
 
+  const cardRef = useRef(null);
+
+  // Forward wheel scrolling from the non-scrollable areas (header, tabs,
+  // date selector) down to whichever content panel is currently visible,
+  // so the user can scroll TestAnalysis (or any active tab) from anywhere
+  // on the card.
+  const handleCardWheel = (e) => {
+    const card = cardRef.current;
+    if (!card) return;
+
+    const scrollTarget = card.querySelector(".scroll-target:not(.hidden)");
+    if (!scrollTarget) return;
+
+    // If the cursor is already over the scrollable panel, let the browser
+    // scroll it natively to avoid double-scrolling.
+    if (scrollTarget.contains(e.target)) return;
+
+    scrollTarget.scrollTop += e.deltaY;
+  };
+
   useEffect(() => {
     const token = cookieManager.get("access_token");
     const decoded = token ? decodeJwt(token) : null;
@@ -91,9 +110,6 @@ export default function ClientDetails() {
 
   const profileId = searchParams.get("profile_id");
   const dietitianData = cookieManager.getJSON("dietician");
-  // dietitian_id is the logged-in dietitian from the session (same value the
-  // access_token carries as dietician_id). The backend binds identity to the JWT
-  // and requires the requested dietitian_id to equal the token's dietician_id.
   const dietitianId = dietitianData?.dietician_id || null;
 
   const formatGoal = (goal) => {
@@ -113,11 +129,7 @@ const transformDatesToDisplay = () => {
     score: dateObj.fat_loss_metabolism_score
       ? `${dateObj.fat_loss_metabolism_score}%`
       : "NA",
-    status:
-      dateObj.zone_label ||
-      dateObj.status_label ||
-      zoneLabel(dateObj.zone) ||
-      "NA",
+    status: dateObj.zone || "NA",
     kcal: dateObj.final_macro_summary?.calories
       ? `${dateObj.final_macro_summary.calories} Kcal`
       : "NA",
@@ -188,7 +200,6 @@ const transformDatesToDisplay = () => {
 
       try {
         const response = await fetchClientProfileDatesList(profileId, dietitianId);
-
         if (response.status && response.data) {
           const dates = response.data.dates || [];
           setProfileDates(dates);
@@ -398,7 +409,7 @@ const transformDatesToDisplay = () => {
         );
       }
     }
-  }, [activeTab, profileDates, activeIndex, profileId, dietitianId, dispatch]);
+  }, [activeTab, profileDates, activeIndex, profileId, dispatch]);
 
 
   const handleWeekSelect = (actualIndex) => {
@@ -417,7 +428,7 @@ const transformDatesToDisplay = () => {
   };
 
   const visibleItems = currentData.slice(startIndex, startIndex + ITEMS_TO_SHOW);
-
+console.log("visibleItems410:", visibleItems);
 
   if (isLoadingWeeklyData) {
     return (
@@ -506,6 +517,8 @@ const transformDatesToDisplay = () => {
         )}
 
         <div
+          ref={cardRef}
+          onWheel={handleCardWheel}
           className={`w-full h-full bg-white px-[15px] pt-[23px] pb-5 rounded-[15px] flex flex-col overflow-hidden transition-all duration-300 relative ${isSidebarOpen ? "opacity-90" : "opacity-100"
             }`}
         >
@@ -887,28 +900,28 @@ const transformDatesToDisplay = () => {
           )}
 
           <div
-            className={`${activeTab === "test" ? "flex-1 overflow-y-auto scroll-hide" : "hidden"
+            className={`scroll-target ${activeTab === "test" ? "flex-1 overflow-y-auto scroll-hide" : "hidden"
               }`}
           >
             <TestAnalysis />
           </div>
 
           <div
-            className={`${activeTab === "macros" ? "flex-1 overflow-y-auto scroll-hide" : "hidden"
+            className={`scroll-target ${activeTab === "macros" ? "flex-1 overflow-y-auto scroll-hide" : "hidden"
               }`}
           >
             <MacrosAnalysis activeTab={activeTab} />
           </div>
 
           <div
-            className={`${activeTab === "diet" ? "flex-1 overflow-y-auto scroll-hide" : "hidden"
+            className={`scroll-target ${activeTab === "diet" ? "flex-1 overflow-y-auto scroll-hide" : "hidden"
               }`}
           >
             <DietAnalysis />
           </div>
 
           <div
-            className={`${activeTab === "habits" ? "flex-1 overflow-y-auto scroll-hide" : "hidden"
+            className={`scroll-target ${activeTab === "habits" ? "flex-1 overflow-y-auto scroll-hide" : "hidden"
               }`}
           >
 

@@ -158,6 +158,28 @@ export default function FatUsePatternTrend() {
 
   const statusColor = statusColorMap[status] || "#3FAF58";
 
+  // Scroll the TestAnalysis panel down to the bottom row (Progress / Trainer Note).
+  // We scroll ONLY the inner scroll container (.scroll-target) instead of using
+  // scrollIntoView, which would also nudge outer/ancestor scroll positions and
+  // leave the panel unable to scroll all the way back to the top.
+  const handleScrollToTrends = () => {
+    const target = document.getElementById("test-analysis-bottom-row");
+    if (!target) return;
+
+    const container = target.closest(".scroll-target");
+    if (!container) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
+    const top =
+      container.scrollTop +
+      (target.getBoundingClientRect().top -
+        container.getBoundingClientRect().top);
+
+    container.scrollTo({ top, behavior: "smooth" });
+  };
+
   return (
     <>
     <div className="w-full flex flex-col gap-[28px] border border-[#E1E6ED] px-5 pt-[18px] pb-5 rounded-[15px] bg-white">
@@ -177,13 +199,23 @@ export default function FatUsePatternTrend() {
           />
         </div>
 
-        <div
-          className="flex-shrink-0 px-[25px] py-1.5 rounded-[24px]"
-          style={{ backgroundColor: statusColor }}
-        >
-          <p className="text-white text-[12px] font-semibold leading-normal tracking-[-0.24px]">
-            {zoneLabel(status)}
-          </p>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <button
+            type="button"
+            onClick={handleScrollToTrends}
+            className="px-[18px] py-1.5 rounded-[24px] bg-[#308BF9] text-white text-[12px] font-semibold leading-normal tracking-[-0.24px] cursor-pointer transition-colors hover:bg-[#2678e0]"
+          >
+            Trends
+          </button>
+
+          <div
+            className="px-[25px] py-1.5 rounded-[24px]"
+            style={{ backgroundColor: statusColor }}
+          >
+            <p className="text-white text-[12px] font-semibold leading-normal tracking-[-0.24px]">
+              {zoneLabel(status)}
+            </p>
+          </div>
         </div>
       </div>
 

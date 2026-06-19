@@ -17,7 +17,7 @@ export default function TestAnalysis() {
                 </div>
             </div>
 
-            <div className="flex gap-5 flex-1 min-h-[400px]">
+            <div id="test-analysis-bottom-row" className="flex gap-5 flex-1 min-h-[400px] scroll-mt-2">
                 <div className="flex-1 flex">
                     <Progress />
                 </div>

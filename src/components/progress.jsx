@@ -306,7 +306,8 @@ export default function Progress({ title = "Progress", showDetails = true, showC
  {showDetails && (
       <div className="flex flex-col gap-[5px] mt-3">
         <p className="text-[#252525] text-[25px] font-semibold leading-normal tracking-[-0.5px]">
-          {overallFatLossData?.title || "Overall Fat Loss Score"}
+          {/* {overallFatLossData?.title || "Overall Fat Loss Score"} */}
+            Score Chart
         </p>
 
         <div className="flex gap-5 items-center px-[15px] py-[5px] rounded-[5px] bg-[#E0E0E0] whitespace-nowrap w-fit">
