@@ -378,7 +378,8 @@ export default function ClientLists() {
                 <div className="flex gap-1.5 items-center">
                   <div>
                     <Image
-                      src={resolveProfileImage(client.p_image)}
+                      // src={resolveProfileImage(client.p_image)} 
+                      src="/icons/hugeicons_user-circle-02.svg"
                       width={40}
                       height={40}
                       alt="profile"

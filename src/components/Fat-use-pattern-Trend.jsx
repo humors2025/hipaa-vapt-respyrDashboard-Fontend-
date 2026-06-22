@@ -197,16 +197,10 @@ export default function FatUsePatternTrend() {
             onClick={() => setShowPopup(true)}
             className="cursor-pointer flex-shrink-0"
           />
-        </div>
 
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <button
-            type="button"
-            onClick={handleScrollToTrends}
-            className="px-[18px] py-1.5 rounded-[24px] bg-[#308BF9] text-white text-[12px] font-semibold leading-normal tracking-[-0.24px] cursor-pointer transition-colors hover:bg-[#2678e0]"
-          >
-            Trends
-          </button>
+
+    <div className="flex items-center gap-3 flex-shrink-0">
+         
 
           <div
             className="px-[25px] py-1.5 rounded-[24px]"
@@ -217,6 +211,18 @@ export default function FatUsePatternTrend() {
             </p>
           </div>
         </div>
+
+        </div>
+
+    
+        
+           <button
+            type="button"
+            onClick={handleScrollToTrends}
+            className="px-[18px] py-1.5 rounded-[24px] bg-[#308BF9] text-white text-[12px] font-semibold leading-normal tracking-[-0.24px] cursor-pointer transition-colors hover:bg-[#2678e0]"
+          >
+            Trends
+          </button>
       </div>
 
       <div className="flex flex-col gap-[25px]">

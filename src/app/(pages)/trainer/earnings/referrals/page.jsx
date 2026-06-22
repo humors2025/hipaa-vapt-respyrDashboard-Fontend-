@@ -10,6 +10,7 @@ import {
   fetchReferralClientListService,
   revokeClientSubscriptionInviteService,
   resendClientSubscriptionInviteService,
+  extendClientFreeTrialService,
 } from "@/services/authService";
 import Cookies from "js-cookie";
 import * as CountryFlags from "country-flag-icons/react/3x2";
@@ -45,15 +46,16 @@ const isValidMobile = (m) => /^\+?[0-9\s\-()]{7,}$/.test(m);
 // Trial window length (days) for an accepted referral client.
 const TRIAL_DAYS = 7;
 
-// Computes the remaining days in the 7-day trial window starting from sent_on_date.
+// Computes the remaining days in the 7-day trial window starting from the given
+// start date (the client's accepted_at for accepted referrals).
 // Returns null when there's no usable date, otherwise { days, expired }.
-function getTrialCountdown(sentOnDate) {
-  if (!sentOnDate) return null;
+function getTrialCountdown(startDate) {
+  if (!startDate) return null;
   // "2026-06-03 23:53:13" -> parse reliably across browsers
-  const sent = new Date(String(sentOnDate).replace(" ", "T"));
-  if (Number.isNaN(sent.getTime())) return null;
+  const start = new Date(String(startDate).replace(" ", "T"));
+  if (Number.isNaN(start.getTime())) return null;
 
-  const expiry = new Date(sent.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+  const expiry = new Date(start.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
   const msLeft = expiry.getTime() - Date.now();
 
   if (msLeft <= 0) return { days: 0, expired: true };
@@ -506,6 +508,7 @@ function PendingInvites({
   isLoading,
   onPageChange,
   pagination,
+  currentPage,
   summary,
   onSubscriptionRevoke,
   onSubscriptionResend,
@@ -600,7 +603,12 @@ function PendingInvites({
     }
   };
 
-  if (isLoading) {
+  // Only show the full-block loader on the very first load (no data yet). For
+  // subsequent fetches (search / pagination) we keep the table mounted and just
+  // dim it, so the page doesn't flash/refresh and scroll position is preserved.
+  const isInitialLoading = isLoading && (!invites || invites.length === 0);
+
+  if (isInitialLoading) {
     return (
       <div className="rounded-[10px] border border-dashed border-[#E1E6ED] p-6 text-[#A1A1A1] text-[12px] text-center">
         Loading clients...
@@ -608,7 +616,7 @@ function PendingInvites({
     );
   }
 
-  if (!invites || invites.length === 0) {
+  if (!isLoading && (!invites || invites.length === 0)) {
     return (
       <div className="rounded-[10px] border border-dashed border-[#E1E6ED] p-6 text-[#A1A1A1] text-[12px] text-center">
         No clients found. Use the form above to invite your first client.
@@ -636,8 +644,20 @@ function PendingInvites({
   return (
     <>
       <div>
-        <div className="overflow-x-auto rounded-[10px] border border-[#E1E6ED]">
-          <table className="w-full text-[12px]">
+        <div className="relative overflow-x-auto rounded-[10px] border border-[#E1E6ED]">
+          {/* Background-fetch overlay: keeps the table in place, just dims it. */}
+          {isLoading && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 backdrop-blur-[1px]">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold text-[#535359] shadow-sm border border-[#E1E6ED]">
+                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="9" stroke="#E1E6ED" strokeWidth="3" />
+                  <path d="M21 12a9 9 0 0 0-9-9" stroke="#308BF9" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+                Updating...
+              </span>
+            </div>
+          )}
+          <table className={`w-full text-[12px] transition-opacity ${isLoading ? "opacity-50" : "opacity-100"}`}>
             <thead>
               <tr className="bg-[#F5F7FA] text-[#535359] text-left">
                 <th className="py-2.5 px-4 font-semibold">Name</th>
@@ -647,6 +667,7 @@ function PendingInvites({
                 <th className="py-2.5 px-4 font-semibold">Referral Code</th>
                 <th className="py-2.5 px-4 font-semibold">Plan</th>
                 <th className="py-2.5 px-4 font-semibold">Status</th>
+                <th className="py-2.5 px-4 font-semibold">Trial</th>
                 <th className="py-2.5 px-4 font-semibold">Sent</th>
                 <th className="py-2.5 px-4 font-semibold">Actions</th>
               </tr>
@@ -680,7 +701,44 @@ function PendingInvites({
                       )}
                     </td>
                     <td className="py-2.5 px-4">
-                      {getStatusBadge(inv.status)}
+                      <div className="flex flex-col gap-1">
+                        {/* {getStatusBadge(inv.status)} */}
+                        {inv.status_label && (
+                          <span className="text-[12px] text-boldtext-[#A1A1A1]">
+                            {inv.status_label}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-4">
+                      {(() => {
+                        const trial = inv.free_trial_subscription;
+                        if (!trial?.exists || trial.added_days == null) {
+                          return <span className="text-[#A1A1A1]">-</span>;
+                        }
+
+                        const addedDays = trial.added_days;
+
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex rounded-full text-[11px] font-semibold px-2.5 py-0.5 bg-[#FFF4E0] text-[#A66B00]">
+                              {addedDays} days added
+                            </span>
+                            {/* TODO: temporarily always shown for API integration.
+                                Restore `addedDays === 1` gate once the extend API is wired. */}
+                            {addedDays >= 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleExtendClick(inv, index)}
+                                disabled={actionInProgress[`extend-${uniqueKey}`]}
+                                className="rounded-full bg-[#EEF4FE] text-[#308BF9] text-[11px] font-semibold px-2.5 py-0.5 hover:bg-[#d9e8fd] disabled:opacity-60 cursor-pointer"
+                              >
+                                {actionInProgress[`extend-${uniqueKey}`] ? "Extending..." : "+7 days"}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="py-2.5 px-4 text-[#A1A1A1]">
                       {inv.sent_on_date ? new Date(inv.sent_on_date).toLocaleString("en-US", {
@@ -719,31 +777,39 @@ function PendingInvites({
         </div>
 
         {/* Pagination Controls */}
-        {pagination && (
-          <div className="flex items-center justify-between mt-4 px-2">
-            <div className="text-[#A1A1A1] text-[12px]">
-              Page {pagination.page} of {Math.ceil((summary?.total_count || 0) / pagination.limit)}
+        {pagination && (() => {
+          const totalPages = Math.max(
+            1,
+            Math.ceil((summary?.total_count || 0) / (pagination.limit || 10))
+          );
+          const page = currentPage || pagination.page || 1;
+
+          return (
+            <div className="flex items-center justify-between mt-4 px-2">
+              <div className="text-[#A1A1A1] text-[12px]">
+                Page {page} of {totalPages}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onPageChange(page - 1)}
+                  disabled={page <= 1 || isLoading}
+                  className="rounded-[8px] border border-[#E1E6ED] px-3 py-1.5 text-[12px] font-semibold text-[#535359] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#F5F7FA] transition-colors cursor-pointer"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onPageChange(page + 1)}
+                  disabled={!pagination.has_more || page >= totalPages || isLoading}
+                  className="rounded-[8px] border border-[#E1E6ED] px-3 py-1.5 text-[12px] font-semibold text-[#535359] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#F5F7FA] transition-colors cursor-pointer"
+                >
+                  Next
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onPageChange(pagination.page - 1)}
-                disabled={pagination.page <= 1}
-                className="rounded-[8px] border border-[#E1E6ED] px-3 py-1.5 text-[12px] font-semibold text-[#535359] disabled:opacity-40 hover:bg-[#F5F7FA] transition-colors cursor-pointer"
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                onClick={() => onPageChange(pagination.page + 1)}
-                disabled={!pagination.has_more}
-                className="rounded-[8px] border border-[#E1E6ED] px-3 py-1.5 text-[12px] font-semibold text-[#535359] disabled:opacity-40 hover:bg-[#F5F7FA] transition-colors cursor-pointer"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Revoke Modal */}
@@ -765,46 +831,102 @@ export default function ReferralsPage() {
   const [pagination, setPagination] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const limit = 10;
+
+  // Backend enforces a minimum search length (search_min_length: 3).
+  const SEARCH_MIN_LENGTH = 3;
+
+  // Caches already-fetched pages (keyed by page number) so navigating back to a
+  // page you've already visited — e.g. clicking "Previous" — serves from memory
+  // instead of hitting the API again. Cleared whenever the search/partner filter
+  // changes or after a mutation that could change the data.
+  const pageCacheRef = useRef({});
 
   useEffect(() => {
     setDietician(cookieManager.getJSON("dietician"));
   }, []);
 
-  const fetchReferralList = useCallback(async (page = 1) => {
-    setIsLoading(true);
-    try {
-      const response = await fetchReferralClientListService(page, limit);
-      
-      if (response?.status || response?.ok) {
-        setInvites(response.data || []);
-        setSummary(response.summary || null);
-        setPagination(response.pagination || null);
-      } else {
-        toast.error(response?.message || "Failed to fetch clients");
-      }
-    } catch (error) {
-      const msg = error?.data?.message || error?.message || "Failed to fetch referral list";
-      toast.error(msg);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchReferralList(currentPage);
-  }, [currentPage, fetchReferralList]);
-
   const partnerCode = resolvePartnerCode(dietician);
   const name = dietician?.name || "";
 
+  // Any change to the filters invalidates the cached pages.
+  useEffect(() => {
+    pageCacheRef.current = {};
+  }, [debouncedSearch, partnerCode]);
+
+  // Debounce the search input and reset to the first page whenever it changes.
+  // Only 0 chars (cleared -> full list) or >= SEARCH_MIN_LENGTH chars trigger a
+  // fetch; typing 1-2 letters is a no-op so the API is never hit for them.
+  useEffect(() => {
+    const trimmed = searchTerm.trim();
+    if (trimmed.length > 0 && trimmed.length < SEARCH_MIN_LENGTH) return;
+
+    const t = setTimeout(() => {
+      setDebouncedSearch(trimmed);
+      setCurrentPage(1);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+
+  const fetchReferralList = useCallback(
+    async (page = 1, search = "", { force = false } = {}) => {
+      // A mutation just changed the data — drop every cached page.
+      if (force) pageCacheRef.current = {};
+
+      // Serve already-fetched pages from cache (e.g. "Previous") without an API call.
+      const cached = pageCacheRef.current[page];
+      if (cached) {
+        setInvites(cached.data || []);
+        setSummary(cached.summary || null);
+        setPagination(cached.pagination || null);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const response = await fetchReferralClientListService(page, limit, {
+          partnerCode,
+          // Only send the search term once it meets the backend's minimum length.
+          search: search.length >= SEARCH_MIN_LENGTH ? search : "",
+        });
+
+        if (response?.status || response?.ok) {
+          pageCacheRef.current[page] = response;
+          setInvites(response.data || []);
+          setSummary(response.summary || null);
+          setPagination(response.pagination || null);
+        } else {
+          toast.error(response?.message || "Failed to fetch clients");
+        }
+      } catch (error) {
+        const msg = error?.data?.message || error?.message || "Failed to fetch referral list";
+        toast.error(msg);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [partnerCode]
+  );
+
+  useEffect(() => {
+    fetchReferralList(currentPage, debouncedSearch, { force: true });
+  }, [currentPage, debouncedSearch, fetchReferralList]);
+
   const handlePageChange = (newPage) => {
+    const totalPages = Math.max(1, Math.ceil((summary?.total_count || 0) / limit));
+    // Ignore clicks that would go out of range, land on the same page, or fire
+    // while a request is already in flight — each of those would be a wasted API call.
+    if (newPage < 1 || newPage > totalPages) return;
+    if (newPage === currentPage) return;
+    if (isLoading) return;
     setCurrentPage(newPage);
   };
 
   const handleInviteSent = () => {
     setCurrentPage(1);
-    fetchReferralList(1);
+    fetchReferralList(1, "", { force: true });
   };
 
   const handleResend = async (inv) => {
@@ -821,12 +943,12 @@ export default function ReferralsPage() {
         plan: inv.plan?.plan_code,
       });
       toast.success(`Invite resent to ${inv.name}`);
-      fetchReferralList(currentPage);
+      fetchReferralList(currentPage, debouncedSearch, { force: true });
     } catch (err) {
       const msg = err?.data?.message || err?.message || "";
       if (msg.toLowerCase().includes("already has a pending invitation")) {
         toast.success(`Invite resent to ${inv.name}`);
-        fetchReferralList(currentPage);
+        fetchReferralList(currentPage, debouncedSearch, { force: true });
       } else {
         toast.error(msg || "Could not resend invite.");
       }
@@ -839,7 +961,7 @@ export default function ReferralsPage() {
         subscriptionId: inv.subscription_id,
       });
       toast.success(`Subscription invitation for ${inv.name} resent successfully.`);
-      fetchReferralList(currentPage);
+      fetchReferralList(currentPage, debouncedSearch, { force: true });
     } catch (err) {
       toast.error(err?.data?.message || err?.message || "Could not resend subscription invite.");
       throw err; // Re-throw to handle in the UI
@@ -852,16 +974,29 @@ export default function ReferralsPage() {
         inviteId: inv.invite_id || inv.subscription_id 
       });
       toast.success(`Invite to ${inv.name} revoked.`);
-      fetchReferralList(currentPage);
+      fetchReferralList(currentPage, debouncedSearch, { force: true });
     } catch (err) {
       toast.error(err?.data?.message || err?.message || "Could not revoke invite.");
     }
   };
 
   const handleExtendTrial = async (inv) => {
-    // TODO: wire to the extend-trial API once the backend endpoint is ready.
-    // Expected: POST { actor_user_id, subscription_id } -> adds 7 days to the trial window.
-    toast.success(`Trial for ${inv.name} will be extended by 7 days (pending backend).`);
+    const profileId = inv.accepted_profile_id || inv.accepted_client?.profile_id;
+    if (!profileId) {
+      return toast.error("Client profile not found — cannot extend trial.");
+    }
+
+    try {
+      await extendClientFreeTrialService({
+        profileId,
+        reason: "Extending free trial to 7 days",
+      });
+      toast.success(`Trial for ${inv.name} extended by 7 days.`);
+      fetchReferralList(currentPage, debouncedSearch, { force: true });
+    } catch (err) {
+      toast.error(err?.data?.message || err?.message || "Could not extend trial.");
+      throw err;
+    }
   };
 
   const handleSubscriptionRevoke = async (inv, reason) => {
@@ -871,7 +1006,7 @@ export default function ReferralsPage() {
         reason: reason,
       });
       toast.success(`Subscription invitation for ${inv.name} revoked successfully.`);
-      fetchReferralList(currentPage);
+      fetchReferralList(currentPage, debouncedSearch, { force: true });
     } catch (err) {
       toast.error(err?.data?.message || err?.message || "Could not revoke subscription invite.");
       throw err; // Re-throw to handle in the modal
@@ -893,9 +1028,35 @@ export default function ReferralsPage() {
       <InviteForm partnerCode={partnerCode} onInviteSent={handleInviteSent} />
 
       <div>
-        <h3 className="text-[#252525] text-[14px] font-bold mb-3">
-          All Clients ({summary?.total_count || 0})
-        </h3>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h3 className="text-[#252525] text-[14px] font-bold">
+            All Clients ({summary?.total_count || 0})
+          </h3>
+          <div className="relative w-full sm:w-64">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 20 20"
+              fill="none"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1A1]"
+            >
+              <circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="2" />
+              <path d="M14 14L17 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search"
+              className="w-full rounded-[10px] border border-[#E1E6ED] bg-white pl-9 pr-3 py-2 text-[13px] text-[#252525] focus:outline-none focus:border-[#308BF9] transition-colors"
+            />
+          </div>
+        </div>
+        {searchTerm.trim().length > 0 &&
+          searchTerm.trim().length < SEARCH_MIN_LENGTH && (
+            <p className="text-[#A1A1A1] text-[11px] mb-2">
+              Type at least {SEARCH_MIN_LENGTH} characters to search.
+            </p>
+          )}
         <PendingInvites
           invites={invites}
           onResend={handleResend}
@@ -903,6 +1064,7 @@ export default function ReferralsPage() {
           isLoading={isLoading}
           onPageChange={handlePageChange}
           pagination={pagination}
+          currentPage={currentPage}
           summary={summary}
           onSubscriptionRevoke={handleSubscriptionRevoke}
           onSubscriptionResend={handleSubscriptionResend}

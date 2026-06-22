@@ -428,7 +428,6 @@ const transformDatesToDisplay = () => {
   };
 
   const visibleItems = currentData.slice(startIndex, startIndex + ITEMS_TO_SHOW);
-console.log("visibleItems410:", visibleItems);
 
   if (isLoadingWeeklyData) {
     return (
@@ -529,7 +528,8 @@ console.log("visibleItems410:", visibleItems);
                   {profileDetails?.profile_image &&
                     profileDetails?.profile_image !== "NA" ? (
                     <Image
-                      src={profileDetails.profile_image}
+                      // src={profileDetails.profile_image}
+                         src="/icons/hugeicons_user-circle-02.svg"
                       alt={profileDetails?.profile_name || "user"}
                       width={48}
                       height={48}

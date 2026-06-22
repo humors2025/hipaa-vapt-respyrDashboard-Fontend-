@@ -35,9 +35,12 @@ const MENU = [
   { name: "Trainers",       icon: "/icons/hugeicons_award-01.svg",        path: "/super-admin/trainers" },
   { name: "Invites Trainers",        icon: "/icons/hugeicons_award-01.svg",        path: "/trainer-admin/invites" },
   { name: "Client Directory", icon: "/icons/hugeicons_user.svg",          path: "/super-admin/client-directory" },
-  { name: "Payouts",        icon: "/icons/hugeicons_file-export.svg",     path: "/super-admin/payouts" },
-  { name: "Audit log",      icon: "/icons/hugeicons_note-01.svg",         path: "/super-admin/audit-logs" },
-  { name: "Settings",       icon: "/icons/hugeicons_settings-03.svg",     path: "/super-admin/settings" },
+];
+
+const DROPDOWN_MENU = [
+  { name: "Payouts",   icon: "/icons/hugeicons_file-export.svg",  path: "/super-admin/payouts" },
+  { name: "Audit log", icon: "/icons/hugeicons_note-01.svg",      path: "/super-admin/audit-logs" },
+  { name: "Settings",  icon: "/icons/hugeicons_settings-03.svg",  path: "/super-admin/settings" },
 ];
 
 export default function SuperAdminHeader() {
@@ -122,6 +125,27 @@ export default function SuperAdminHeader() {
 
             {isDropdownOpen && (
               <div className="absolute right-0 top-full w-48 bg-white rounded-[15px] shadow-lg p-1.5 z-50">
+                {DROPDOWN_MENU.map((m) => {
+                  const isActive =
+                    pathname === m.path ||
+                    pathname?.startsWith(m.path + "/") ||
+                    active === m.path;
+                  const color = isActive ? "#308BF9" : "#A1A1A1";
+
+                  return (
+                    <Link href={m.path} key={m.name} onClick={() => setActive(m.path)}>
+                      <button className="flex items-center gap-3 cursor-pointer w-full px-4 py-3 text-sm hover:bg-gray-100 rounded-[10px] transition-colors">
+                        <MonoIcon src={m.icon} color={color} alt={m.name} />
+                        <span className="font-semibold text-[12px]" style={{ color }}>
+                          {m.name}
+                        </span>
+                      </button>
+                    </Link>
+                  );
+                })}
+
+                <div className="my-1 border-t border-gray-100" />
+
                 <button
                   onClick={handleLogout}
                   className="flex items-center cursor-pointer w-full px-4 py-3 text-sm text-[#A1A1A1] hover:bg-gray-100 transition-colors"

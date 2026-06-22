@@ -402,9 +402,11 @@ const formatLastLoggedDate = (dateString) => {
                         <div className="flex gap-[15px]">
                           <div className="relative h-8 w-8 rounded-full overflow-hidden bg-[#F0F0F0]">
                             <Image
-                              src={
-                                client.image || "/icons/hugeicons_user-circle-02.svg"
-                              }
+                              // src={
+                              //   client.image || "/icons/hugeicons_user-circle-02.svg"
+                              // }
+                               src="/icons/hugeicons_user-circle-02.svg"
+                           
                               alt={client.name || "profile"}
                               fill
                               unoptimized

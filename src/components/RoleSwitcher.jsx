@@ -243,7 +243,7 @@ export default function RoleSwitcher({ currentRole }) {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full w-[280px] bg-white rounded-[12px] shadow-2xl border border-[#E1E6ED] p-2 z-50 max-h-[400px] overflow-y-auto">
+        <div className="absolute right-0 top-full w-[220px] bg-white rounded-[12px] shadow-2xl border border-[#E1E6ED] p-2 z-50 max-h-[400px] overflow-y-auto">
           <div className="text-[#A1A1A1] text-[10px] uppercase tracking-wide font-semibold px-2 pt-1 pb-2">
             Switch view
           </div>

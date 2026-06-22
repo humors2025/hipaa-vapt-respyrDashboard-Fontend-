@@ -1570,6 +1570,27 @@ export const resendClientSubscriptionInviteService = async ({ subscriptionId }) 
 };
 
 
+export const extendClientFreeTrialService = async ({ profileId, reason }) => {
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.EXTENDCLIENTFREETRIAL14DAYS, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      profile_id: profileId,
+      reason: reason || "Extending free trial to 7 days",
+    }),
+  });
+};
+
+
 
 // // services/authService.js
 
