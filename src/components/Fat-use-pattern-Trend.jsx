@@ -216,13 +216,14 @@ export default function FatUsePatternTrend() {
 
     
         
-           <button
-            type="button"
-            onClick={handleScrollToTrends}
-            className="px-[18px] py-1.5 rounded-[24px] bg-[#308BF9] text-white text-[12px] font-semibold leading-normal tracking-[-0.24px] cursor-pointer transition-colors hover:bg-[#2678e0]"
-          >
-            Trends
-          </button>
+         <div
+                                  onClick={handleScrollToTrends}
+                                  className="flex gap-[15px] items-center px-[11px] py-1 border border-[#E1E6ED] rounded-[4px] cursor-pointer">
+                                  <p className="text-[#308BF9] text-[12px] font-semibold leading-normal tracking-[-0.24px]">
+                                      Trends
+                                  </p>
+                             
+                              </div>
       </div>
 
       <div className="flex flex-col gap-[25px]">

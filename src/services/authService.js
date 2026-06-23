@@ -1527,6 +1527,59 @@ export const fetchReferralClientListService = async (page = 1, limit = 10) => {
 };
 
 
+// Fetches the trainer's paid-subscriber sales analytics (summary + paginated rows).
+// `purchaseFilter` is one of: this_month | last_month | last_3_months | yearly | custom.
+// `userState` is one of: all | active | expired | attention_for_renewal | upcoming.
+// For purchaseFilter "custom", pass dateFrom/dateTo (YYYY-MM-DD).
+// For userState "attention_for_renewal", pass renewalDays (e.g. 7 or 15).
+export const fetchTrainerSalesAnalyticsService = async (
+  page = 1,
+  limit = 10,
+  {
+    partnerCode = "",
+    purchaseFilter = "this_month",
+    userState = "all",
+    renewalDays,
+    dateFrom = "",
+    dateTo = "",
+    search = "",
+  } = {}
+) => {
+  const actorId = getActorUserIdFromAccessToken();
+
+  if (!actorId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  const payload = {
+    actor_id: actorId,
+    purchase_filter: purchaseFilter,
+    user_state: userState,
+    page: page,
+    limit: limit,
+  };
+
+  // Only include optional filters when provided so the backend can apply its defaults.
+  if (partnerCode) payload.partner_code = partnerCode;
+  if (search) payload.search = search;
+  if (purchaseFilter === "custom") {
+    if (dateFrom) payload.date_from = dateFrom;
+    if (dateTo) payload.date_to = dateTo;
+  }
+  if (userState === "attention_for_renewal" && renewalDays) {
+    payload.renewal_days = renewalDays;
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.TRAINERSALESANALYTICS, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+};
+
+
 export const revokeClientSubscriptionInviteService = async ({ subscriptionId, reason }) => {
   const actorUserId = getActorUserIdFromAccessToken();
 

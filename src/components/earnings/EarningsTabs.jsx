@@ -7,8 +7,10 @@ const TABS = [
   { id: "overview", label: "Overview", href: "/trainer/earnings/overview" },
   { id: "referrals", label: "Referrals", href: "/trainer/earnings/referrals" },
   { id: "calculator", label: "Calculator", href: "/trainer/earnings/calculator" },
+    { id: "paid-subscribers", label: "Paid Subscribers", href: "/trainer/earnings/paid-subscribers" },
   { id: "payout-setup", label: "Payout Setup", href: "/trainer/earnings/payout-setup" },
   { id: "how-to-use", label: "How to Use", href: "/trainer/earnings/how-to-use" },
+
 ];
 
 export default function EarningsTabs() {
