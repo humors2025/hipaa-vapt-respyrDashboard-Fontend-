@@ -18,6 +18,7 @@ export default function Overview({ profileId, dietitianId }) {
     }, [dispatch, profileId, dietitianId]);
 
 const habitData = response?.data;
+const summary = habitData?.summary;
 
     return (
         <>
@@ -36,7 +37,7 @@ const habitData = response?.data;
 
                                 <p className="text-[#252525]">
                                     <span className="text-[40px] font-normal leading-normal tracking-[-0.8px]">
-                                        {habitData?.days_tracked || "N/A"}
+                                        {summary?.total_days_tracked ?? "N/A"}
                                     </span>
                                     <span className="text-[10px] font-normal leading-[110%] tracking-[-0.2px] ml-1">
                                         Days
@@ -51,7 +52,7 @@ const habitData = response?.data;
 
                                 <p className="text-[#252525]">
                                     <span className="text-[40px] font-normal leading-normal tracking-[-0.8px]">
-                                       {habitData?.tracking_rate || "N/A"}
+                                       {summary?.tracking_rate ?? "N/A"}
                                     </span>
                                     <span className="text-[10px] font-normal leading-[110%] tracking-[-0.2px] ml-1">
                                         %
@@ -66,7 +67,7 @@ const habitData = response?.data;
 
                                 <p className="text-[#252525]">
                                     <span className="text-[40px] font-normal leading-normal tracking-[-0.8px]">
-                                        {habitData?.completion_rate || "N/A"}
+                                        {summary?.completion_rate ?? "N/A"}
                                     </span>
                                     <span className="text-[10px] font-normal leading-[110%] tracking-[-0.2px] ml-1">
                                         %
@@ -81,7 +82,7 @@ const habitData = response?.data;
 
                                 <p className="text-[#252525]">
                                     <span className="text-[40px] font-normal leading-normal tracking-[-0.8px]">
-                                        {habitData?.total_perfect_days || "N/A"}
+                                        {summary?.total_perfect_days ?? "N/A"}
                                     </span>
                                     <span className="text-[10px] font-normal leading-[110%] tracking-[-0.2px] ml-1">
                                         Days

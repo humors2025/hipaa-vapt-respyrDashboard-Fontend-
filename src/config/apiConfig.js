@@ -81,8 +81,7 @@ export const API_ENDPOINTS = {
     GETMACROSUMMARY: `/${API_VERSION}/dietitian/api/web/get_macro_summary_by_date`
   },
   HABITMONITORING: {
-    GETHABITSDATA: `/${API_VERSION}/dietitian/api/web/habits-tracking-users-choice1`,
-    GETHABITDETAIL: `/${API_VERSION}/dietitian/api/web/get-client-selected-habit-detail`
+    GETHABITSDATA: `/${API_VERSION}/dietitian/api/web/habits-dashboard`
   },
   LEVELUPDATE: {
     LEVEL: `/${API_VERSION}/dietitian/api/web/level-type-update-change`

@@ -818,21 +818,6 @@ export const fetchHabitsMonitoringData = async (profileId, dietitianId) => {
 };
 
 
-export const fetchHabitDetail = async (profileId, dietitianId, selectedHabitId) => {
-  return apiFetcher(API_ENDPOINTS.HABITMONITORING.GETHABITDETAIL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(withSuperAdminPartnerCode({
-      dietitian_id: dietitianId,
-      profile_id: profileId,
-      selected_habit_id: selectedHabitId,
-    })),
-  });
-};
-
-
 export const updatePerformanceLevel = async (dietitianId, profileId, levelType) => {
   return apiFetcher(API_ENDPOINTS.LEVELUPDATE.LEVEL, {
     method: "POST",

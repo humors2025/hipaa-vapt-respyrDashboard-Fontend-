@@ -5,7 +5,6 @@ import RightHandSidebar from "./right-hand-sidebar";
 import { useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { getHabitMonitoringData } from "../store/habitMonitoringSlice";
-import { getHabitDetail, clearHabitDetail } from "../store/habitDetailSlice";
 import { cookieManager } from "../lib/cookies";
 
 
@@ -50,7 +49,6 @@ const { loading, response, data, habitList, error } = useSelector(
     const handleCloseSidebar = () => {
         setIsSidebarOpen(false);
         setSelectedHabit(null); // Reset selected habit when closing
-        dispatch(clearHabitDetail());
     };
 
     // Helper function to determine color based on category
@@ -92,24 +90,28 @@ const { loading, response, data, habitList, error } = useSelector(
         return colorSchemes[category] || fallbackColors[index % fallbackColors.length];
     };
 
-    // Render week tracking dots
-    const renderWeekTracking = (weekTracking, color, today) => {
-        return weekTracking.map((day, index) => {
-            const isMissedPastDay =
-                !day.is_completed &&
-                day.completed_count === 0 &&
-                today &&
-                day.date < today;
+    // One dot per weekday (Sun → Sat). A day is filled when the habit was
+    // completed that day, outlined when it was tracked-but-missed, and left
+    // empty (grey outline) when there is no data for that weekday.
+    const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-            const dotStyle = day.is_completed
+    const renderTrackingDots = (days, color) => {
+        const byDay = {};
+        (days || []).forEach((d) => {
+            if (d?.day) byDay[d.day] = d;
+        });
+
+        return WEEK_DAYS.map((dayName) => {
+            const entry = byDay[dayName];
+            const dotStyle = entry?.is_completed
                 ? { backgroundColor: color }
-                : day.completed_count > 0 || isMissedPastDay
+                : entry
                     ? { border: `1px solid ${color}`, backgroundColor: 'white' }
-                    : { backgroundColor: 'white' };
+                    : { border: '1px solid #E1E6ED', backgroundColor: 'white' };
 
             return (
                 <div
-                    key={index}
+                    key={dayName}
                     className="w-[14px] h-[14px] rounded-full"
                     style={dotStyle}
                 />
@@ -120,15 +122,6 @@ const { loading, response, data, habitList, error } = useSelector(
     const handleHabitClick = (habit) => {
         setSelectedHabit(habit);
         setIsSidebarOpen(true);
-        if (profileId && dietitianId && habit?.selected_habit_id) {
-            dispatch(
-                getHabitDetail({
-                    profileId,
-                    dietitianId,
-                    selectedHabitId: habit.selected_habit_id,
-                })
-            );
-        }
     };
 
     // Get habits from API response or use empty array
@@ -173,19 +166,19 @@ const { loading, response, data, habitList, error } = useSelector(
                                                         {habit.frequency_type}
                                                     </p>
                                                 </div>
-                                                <div className="flex gap-[5px]">
-                                                    {renderWeekTracking(habit.week_tracking, colorScheme.color, data?.today)}
+                                                <div className="flex gap-[5px] flex-wrap">
+                                                    {renderTrackingDots(habit.days, colorScheme.color)}
                                                 </div>
                                             </div>
                                             <div className="flex gap-[109px]">
                                                 <div className="flex flex-col gap-5">
                                                     <p className="text-[#535359] text-[10px] font-semibold leading-[110%] tracking-[-0.2px] uppercase whitespace-nowrap">
-                                                        Weekly Completion Rate
+                                                        Completion Rate
                                                     </p>
                                                     <div>
                                                         <p className="text-[#252525]">
                                                             <span className="text-[40px] font-normal leading-normal tracking-[-0.8px]">
-                                                                {habit.weekly_completion_rate}
+                                                                {habit.completion_percent}
                                                             </span>
                                                             <span className="text-center text-[10px] font-normal leading-[110%] tracking-[-0.2px] capitalize">%</span>
                                                         </p>
@@ -231,19 +224,19 @@ const { loading, response, data, habitList, error } = useSelector(
                                                                 {habit.frequency_type}
                                                             </p>
                                                         </div>
-                                                        <div className="flex gap-[5px]">
-                                                            {renderWeekTracking(habit.week_tracking, colorScheme.color, data?.today)}
+                                                        <div className="flex gap-[5px] flex-wrap">
+                                                            {renderTrackingDots(habit.days, colorScheme.color)}
                                                         </div>
                                                     </div>
                                                     <div className="flex">
                                                         <div className="flex flex-col gap-5">
                                                             <p className="text-[#535359] text-[10px] font-semibold leading-[110%] tracking-[-0.2px] uppercase whitespace-nowrap">
-                                                                Weekly Completion Rate
+                                                                Completion Rate
                                                             </p>
                                                             <div>
                                                                 <p className="text-[#252525]">
                                                                     <span className="text-[40px] font-normal leading-normal tracking-[-0.8px]">
-                                                                        {habit.weekly_completion_rate}
+                                                                        {habit.completion_percent}
                                                                     </span>
                                                                     <span className="text-center text-[10px] font-normal leading-[110%] tracking-[-0.2px] capitalize">%</span>
                                                                 </p>

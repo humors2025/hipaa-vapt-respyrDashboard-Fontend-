@@ -1,13 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { useSearchParams } from "next/navigation";
+import { useSelector } from "react-redux";
 import { IoChevronBackOutline } from "react-icons/io5";
 import { IoIosArrowForward } from "react-icons/io";
 import { IoIosArrowRoundBack } from "react-icons/io";
-import { getHabitDetail, clearHabitDetail } from "../store/habitDetailSlice";
-import { cookieManager } from "../lib/cookies";
 
 const HABIT_COLOR_SCHEMES = {
   "Nutrition Habits": { color: "#91850E", bgColor: "#FCF8CF" },
@@ -38,40 +35,11 @@ const parseLocalDate = (raw) => {
 };
 
 export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSelectedHabit }) {
-  const dispatch = useDispatch();
-  const searchParams = useSearchParams();
-
-  const { habitList, loading: listLoading } = useSelector(
+  const { habitList, data: dashboardData, loading: listLoading } = useSelector(
     (state) => state.habitMonitoring
   );
-  const {
-    habit: detailHabit,
-    data: detailData,
-    loading: detailLoading,
-    error: detailError,
-  } = useSelector((state) => state.habitDetail);
 
   const habits = habitList || [];
-
-  const profileId = searchParams.get("profile_id");
-  const dieticianCookie = cookieManager.getJSON("dietician");
-  const dietitianId =
-    dieticianCookie?.dietitian_id ||
-    dieticianCookie?.dietician_id ||
-    dieticianCookie?.id ||
-    "";
-
-  const fetchHabit = (habit) => {
-    if (profileId && dietitianId && habit?.selected_habit_id) {
-      dispatch(
-        getHabitDetail({
-          profileId,
-          dietitianId,
-          selectedHabitId: habit.selected_habit_id,
-        })
-      );
-    }
-  };
 
   const handleClose = () => {
     onClose();
@@ -81,26 +49,24 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
     if (setSelectedHabit) {
       setSelectedHabit(null);
     }
-    dispatch(clearHabitDetail());
   };
 
   /* ---------------- DETAIL VIEW DATA ---------------- */
-  // Prefer fresh API data; fall back to the habit object from the list
-  // (so we render something immediately while the detail call is in flight).
-  const activeHabit = detailHabit || selectedHabit;
+  // Everything is sourced from the habits-dashboard habit object.
+  const activeHabit = selectedHabit;
   const activeScheme = activeHabit
     ? getHabitColorScheme(activeHabit.category)
     : null;
   const activeColor = activeScheme?.color || "#1D57A0";
   const activeBgColor = activeScheme?.bgColor || "#E4F0FF";
 
-  const weekTracking = activeHabit?.week_tracking || [];
+  const weekTracking = activeHabit?.days || [];
 
-  /* ---------------- CALENDAR LOCKED TO WEEK_TRACKING MONTH ---------------- */
+  /* ---------------- CALENDAR LOCKED TO HABIT DAYS MONTH ---------------- */
   const calendarAnchor = useMemo(() => {
-    const firstDateStr = weekTracking[0]?.date || detailData?.today;
+    const firstDateStr = weekTracking[0]?.date || dashboardData?.today;
     return parseLocalDate(firstDateStr) || new Date();
-  }, [weekTracking, detailData?.today]);
+  }, [weekTracking, dashboardData?.today]);
 
   const currentMonth = calendarAnchor.getMonth();
   const currentYear = calendarAnchor.getFullYear();
@@ -127,11 +93,11 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
   }
 
   const todayDate = useMemo(
-    () => parseLocalDate(detailData?.today),
-    [detailData?.today]
+    () => parseLocalDate(dashboardData?.today),
+    [dashboardData?.today]
   );
 
-  // Split week_tracking entries (within the displayed month) into completed
+  // Split the habit's days (within the displayed month) into completed
   // vs. missed. "Missed" = past day with is_completed=false.
   const { completedDays, missedDays } = (() => {
     const completed = [];
@@ -224,7 +190,6 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
                             if (setSelectedHabit) {
                               setSelectedHabit(habit);
                             }
-                            fetchHabit(habit);
                           }}
                           className="flex justify-between bg-[#F5F7FA] rounded-[12px] pl-5 pr-[22px] pt-[18px] pb-[23px] border-l-[12px] cursor-pointer"
                           style={{ borderLeftColor: scheme.color }}
@@ -244,7 +209,7 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
 
                           <div className="flex flex-col gap-1.5 items-end">
                             <p className="text-[#252525] text-[15px] font-semibold leading-[126%] tracking-[-0.3px]">
-                              {habit.weekly_completion_rate ?? 0}%
+                              {habit.completion_percent ?? habit.weekly_completion_rate ?? 0}%
                             </p>
 
                             <p className="text-[#535359] text-[10px] font-normal leading-normal tracking-[-0.2px]">
@@ -260,15 +225,7 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
             </div>
           ) : (
             <div className="flex flex-col gap-[17px] px-[15px]">
-              {detailLoading && !detailHabit ? (
-                <div className="flex justify-center items-center py-10">
-                  <p className="text-[#535359] text-[13px]">Loading habit details...</p>
-                </div>
-              ) : detailError && !detailHabit ? (
-                <div className="flex justify-center items-center py-10">
-                  <p className="text-[#DA5747] text-[13px]">{detailError}</p>
-                </div>
-              ) : activeHabit ? (
+              {activeHabit ? (
                 <>
                   <div
                     className="flex flex-col gap-5 rounded-[12px] pl-5 pr-[22px] pt-[18px] pb-[23px]"
@@ -293,7 +250,7 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
                     <div className="flex justify-between">
                       <div className="flex flex-col gap-1.5">
                         <p className="text-[#252525] text-[15px] font-semibold leading-[126%] tracking-[-0.3px]">
-                          {activeHabit.weekly_completion_rate ?? 0}%
+                          {activeHabit.completion_percent ?? 0}%
                         </p>
 
                         <p className="text-[#535359] text-[10px] font-normal leading-normal tracking-[-0.2px]">
@@ -313,7 +270,7 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
 
                       <div className="flex flex-col gap-1.5">
                         <p className="text-[#252525] text-[15px] font-semibold leading-[126%] tracking-[-0.3px]">
-                          {activeHabit.total_days ?? 0}
+                          {activeHabit.total_days ?? activeHabit.expected_days ?? 0}
                         </p>
 
                         <p className="text-[#535359] text-[10px] font-normal leading-normal tracking-[-0.2px]">
@@ -367,7 +324,10 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
                               let cellBgClass = "";
 
                               if (state === "completed") {
-                                cellStyle = { backgroundColor: activeBgColor };
+                                cellStyle = {
+                                  border: `1px solid ${activeColor}`,
+                                  backgroundColor: activeBgColor,
+                                };
                               } else if (state === "missed") {
                                 cellStyle = {
                                   border: `1px solid ${activeColor}`,
