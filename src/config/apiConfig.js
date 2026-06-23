@@ -113,9 +113,9 @@ export const API_ENDPOINTS = {
     REFERRALCLIENTLIST: `/${API_VERSION}/dietitian/api/web/referral-client-list`,
     REVOKECLIENTSUBSCRIPTIONINVITE: `/${API_VERSION}/dietitian/api/web/revoke-client-subscription-invite`,
     RESENDCLIENTSUBSCRIPTIONINVITE: `/${API_VERSION}/dietitian/api/web/resend-client-subscription-invite`,
-    EXTENDCLIENTFREETRIAL14DAYS: "/dietitian/api/web/extend-client-free-trial-14days",
-        TRAINERSALESANALYTICS: "/dietitian/api/web/trainer-sales-analytics",
-        
+    EXTENDCLIENTFREETRIAL14DAYS: `/${API_VERSION}/dietitian/api/web/extend-client-free-trial-14days`,
+        TRAINERSALESANALYTICS: `/${API_VERSION}/dietitian/api/web/trainer-sales-analytics`,
+
 
     VALIDATEINVITETOKEN: `/${API_VERSION}/dietitian/api/web/validate-invite-token`,
     ACCEPTINVITE: `/${API_VERSION}/dietitian/api/web/accept-invite`,
