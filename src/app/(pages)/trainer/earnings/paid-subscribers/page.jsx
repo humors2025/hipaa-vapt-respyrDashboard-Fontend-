@@ -54,31 +54,23 @@ const USER_STATES = [
 const RENEWAL_DAY_OPTIONS = [7, 15];
 
 // Reads the first present key from a row, returning fallback when none match.
+// Treats "NA" (used by the API for missing phone/email) as absent.
 function pick(row, keys, fallback = null) {
   for (const k of keys) {
-    if (row?.[k] !== undefined && row?.[k] !== null && row?.[k] !== "") {
-      return row[k];
+    const v = row?.[k];
+    if (v !== undefined && v !== null && v !== "" && v !== "NA") {
+      return v;
     }
   }
   return fallback;
 }
 
-// Formats a major-unit amount with its currency (falls back to a plain number).
+// Shows the exact amount returned by the API, prefixed with its currency code.
+// No locale/Intl formatting — the value is rendered as-is.
 function formatMoney(amount, currency) {
-  const value = Number(amount || 0);
+  if (amount === undefined || amount === null || amount === "") return "-";
   const code = (currency || "").toUpperCase();
-  try {
-    if (code) {
-      return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: code,
-        maximumFractionDigits: 2,
-      }).format(value);
-    }
-  } catch {
-    // Unknown currency code — fall through to plain formatting.
-  }
-  return `${code ? `${code} ` : ""}${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  return `${code ? `${code} ` : ""}${amount}`;
 }
 
 function formatDate(raw, withTime = false) {
@@ -136,10 +128,11 @@ function StatusBadge({ state }) {
 
 // Derives a user-state for a row from explicit fields if the backend provides
 // them; otherwise infers from subscription_end_date relative to now.
-function deriveRowState(row) {
-  const explicit = pick(row, ["user_state", "state", "status_state"]);
+// `subscription` is the row's nested subscription object (passed by the table).
+function deriveRowState(subscription) {
+  const explicit = pick(subscription, ["derived_user_state", "user_state", "state", "status_state"]);
   if (explicit) return explicit;
-  const end = pick(row, ["subscription_end_date", "end_date", "expiry_date"]);
+  const end = pick(subscription, ["subscription_end_date", "end_date", "expiry_date"]);
   if (!end) return null;
   const endDate = new Date(String(end).replace(" ", "T"));
   if (Number.isNaN(endDate.getTime())) return null;
@@ -195,18 +188,27 @@ function SubscribersTable({ rows, isLoading }) {
         </thead>
         <tbody>
           {rows.map((row, index) => {
-            const name = pick(row, ["client_name", "name", "full_name"], "-");
-            const email = pick(row, ["client_email", "email"]);
-            const phone = pick(row, ["client_phone", "phone", "mobile"]);
-            const planName = pick(row, ["plan_name", "plan_code", "plan"], "-");
-            const currency = pick(row, ["currency"], "");
-            const net = pick(row, ["net_sales", "net_amount", "amount_net", "amount"]);
-            const gross = pick(row, ["gross_sales", "gross_amount", "amount_gross", "amount"]);
-            const coupon = pick(row, ["coupon_code", "coupon"]);
-            const start = pick(row, ["subscription_start_date", "start_date", "purchased_at", "created_at"]);
-            const end = pick(row, ["subscription_end_date", "end_date", "expiry_date"]);
+            // API rows are nested under client / subscription / payment;
+            // fall back to flat fields so older response shapes still bind.
+            const client = row.client || row;
+            const subscription = row.subscription || row;
+            const payment = row.payment || row;
+
+            const name = pick(client, ["name", "client_name", "full_name"], "-");
+            const email = pick(client, ["email", "client_email"]);
+            const phone = pick(client, ["phone", "client_phone", "mobile"]);
+            const planName = pick(subscription, ["plan_name", "plan_code", "plan"], "-");
+            // Money figures come from the payment object; use its currency.
+            const currency = pick(payment, ["currency"], "") || pick(subscription, ["currency"], "");
+            const net = pick(payment, ["net_sales", "net_amount", "amount_net", "amount"]);
+            const gross = pick(payment, ["gross_sales", "gross_amount", "amount_gross", "amount"]);
+            const coupon = pick(payment, ["latest_coupon_code", "coupon_code", "coupon"]);
+            const start = pick(subscription, ["subscription_start_date", "start_date", "purchased_at", "created_at"]);
+            const end = pick(subscription, ["subscription_end_date", "end_date", "expiry_date"]);
             const key =
-              pick(row, ["profile_id", "client_id", "stripe_subscription_id", "session_id"]) ??
+              pick(row, ["profile_id", "client_subscription_id"]) ??
+              pick(client, ["client_id"]) ??
+              pick(payment, ["latest_session_id", "latest_payment_id"]) ??
               `row-${index}`;
 
             return (
@@ -237,7 +239,7 @@ function SubscribersTable({ rows, isLoading }) {
                 <td className="py-2.5 px-4 text-[#535359]">{formatDate(start)}</td>
                 <td className="py-2.5 px-4 text-[#535359]">{formatDate(end)}</td>
                 <td className="py-2.5 px-4">
-                  <StatusBadge state={deriveRowState(row)} />
+                  <StatusBadge state={deriveRowState(subscription)} />
                 </td>
               </tr>
             );

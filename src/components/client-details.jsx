@@ -33,6 +33,7 @@ import {
 } from "../services/authService";
 
 import { cookieManager } from "../lib/cookies";
+import { zoneLabel } from "../lib/utils";
 
 function decodeJwt(token) {
   try {
@@ -61,6 +62,7 @@ export default function ClientDetails() {
   const dietAnalysisData = useSelector(selectDietAnalysisData);
 
   const [profileDates, setProfileDates] = useState([]);
+  console.log("profileDates64", profileDates);
   const [datesLoading, setDatesLoading] = useState(false);
   const [datesError, setDatesError] = useState(null);
 
@@ -129,7 +131,7 @@ const transformDatesToDisplay = () => {
     score: dateObj.fat_loss_metabolism_score
       ? `${dateObj.fat_loss_metabolism_score}%`
       : "NA",
-    status: dateObj.zone || "NA",
+    status: zoneLabel(dateObj.zone) || "NA",
     kcal: dateObj.final_macro_summary?.calories
       ? `${dateObj.final_macro_summary.calories} Kcal`
       : "NA",
