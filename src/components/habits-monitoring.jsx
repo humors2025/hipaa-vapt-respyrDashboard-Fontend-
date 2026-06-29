@@ -90,19 +90,47 @@ const { loading, response, data, habitList, error } = useSelector(
         return colorSchemes[category] || fallbackColors[index % fallbackColors.length];
     };
 
-    // One dot per weekday (Sun → Sat). A day is filled when the habit was
-    // completed that day, outlined when it was tracked-but-missed, and left
-    // empty (grey outline) when there is no data for that weekday.
+    // One dot per weekday (Sun → Sat) for the CURRENT week. A day is filled when
+    // the habit was completed that day, outlined when it was tracked-but-missed,
+    // and left empty (grey outline) when there is no data for that date.
+    // We key off the real `date` (not the weekday name) so the dots stay pinned
+    // to a single week and line up with the week-range label.
     const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-    const renderTrackingDots = (days, color) => {
-        const byDay = {};
-        (days || []).forEach((d) => {
-            if (d?.day) byDay[d.day] = d;
+    const renderTrackingDots = (habit, color) => {
+        const byDate = {};
+        (habit?.days || []).forEach((d) => {
+            if (d?.date) byDate[d.date] = d;
         });
 
-        return WEEK_DAYS.map((dayName) => {
-            const entry = byDay[dayName];
+        // Weekly habits (e.g. "Cardio 3×/week") are tracked as N sessions per
+        // week, not per weekday — show one dot per target session and fill the
+        // ones completed this week.
+        if (habit?.frequency_type === "weekly") {
+            const target = habit?.target_count || 0;
+            const completedThisWeek = currentWeekDates.reduce(
+                (sum, { key }) => sum + (byDate[key]?.completed_count || 0),
+                0
+            );
+            const filled = Math.min(completedThisWeek, target);
+
+            return Array.from({ length: target }, (_, i) => {
+                const dotStyle = i < filled
+                    ? { backgroundColor: color }
+                    : { border: `1px solid ${color}`, backgroundColor: 'white' };
+                return (
+                    <div
+                        key={`session-${i}`}
+                        className="w-[14px] h-[14px] rounded-full"
+                        style={dotStyle}
+                    />
+                );
+            });
+        }
+
+        // Daily habits: one dot per weekday of the current week.
+        return currentWeekDates.map(({ key, dayName }) => {
+            const entry = byDate[key];
             const dotStyle = entry?.is_completed
                 ? { backgroundColor: color }
                 : entry
@@ -111,7 +139,8 @@ const { loading, response, data, habitList, error } = useSelector(
 
             return (
                 <div
-                    key={dayName}
+                    key={key}
+                    title={`${dayName} ${key}`}
                     className="w-[14px] h-[14px] rounded-full"
                     style={dotStyle}
                 />
@@ -122,6 +151,73 @@ const { loading, response, data, habitList, error } = useSelector(
     const handleHabitClick = (habit) => {
         setSelectedHabit(habit);
         setIsSidebarOpen(true);
+    };
+
+    // Format a Date to a YYYY-MM-DD key using local time (toISOString() would
+    // shift across the UTC boundary and mismatch the API's local dates).
+    const toDateKey = (d) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${day}`;
+    };
+
+    // The current week's seven days (Sunday -> Saturday) as { key, dayName }.
+    const getCurrentWeekDates = () => {
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay()); // back to Sunday
+
+        return WEEK_DAYS.map((dayName, i) => {
+            const d = new Date(startOfWeek);
+            d.setDate(startOfWeek.getDate() + i);
+            return { key: toDateKey(d), dayName };
+        });
+    };
+
+    // Build the current week's range label (Sunday -> Saturday) based on today.
+    // e.g. "Weekly (28 Jun - 4 Jul)"
+    const getCurrentWeekRange = () => {
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay()); // back to Sunday
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6); // forward to Saturday
+
+        const fmt = (d) =>
+            `${d.getDate()} ${d.toLocaleString("en-US", { month: "short" })}`;
+
+        return `Weekly (${fmt(startOfWeek)} - ${fmt(endOfWeek)})`;
+    };
+
+    const currentWeekDates = getCurrentWeekDates();
+    const weekRangeLabel = getCurrentWeekRange();
+
+    // Completion rate for the CURRENT week (not the lifetime completion_percent).
+    //  - weekly habits  -> sessions done this week / target_count
+    //  - daily habits   -> days completed this week / days elapsed (tracked) this week
+    const getWeeklyCompletionPercent = (habit) => {
+        const byDate = {};
+        (habit?.days || []).forEach((d) => {
+            if (d?.date) byDate[d.date] = d;
+        });
+
+        if (habit?.frequency_type === "weekly") {
+            const target = habit?.target_count || 0;
+            if (!target) return 0;
+            const completedThisWeek = currentWeekDates.reduce(
+                (sum, { key }) => sum + (byDate[key]?.completed_count || 0),
+                0
+            );
+            return Math.min(100, Math.round((completedThisWeek / target) * 100));
+        }
+
+        // Daily: completed days this week out of all 7 days of the week.
+        let completed = 0;
+        currentWeekDates.forEach(({ key }) => {
+            if (byDate[key]?.is_completed) completed += 1;
+        });
+        return Math.round((completed / currentWeekDates.length) * 100);
     };
 
     // Get habits from API response or use empty array
@@ -136,6 +232,21 @@ const { loading, response, data, habitList, error } = useSelector(
                         <p className="text-[#252525] text-[15px] font-semibold leading-normal tracking-[-0.3px]">
                             Habit Monitoring ({totalHabits})
                         </p>
+
+                            <div className="flex items-center gap-[15px] px-[11px] py-1 cursor-pointer border border-[#E1E6ED] rounded-[4px] "
+                              onClick={handleOpenSidebar}
+                            >
+                            <p className="text-[12px] text-[#535359] font-normal leading-[110%] tracking-[-0.24px]">
+                                {weekRangeLabel}
+                            </p>
+
+                            <Image
+                            src="/icons/right button0356.svg"
+                            alt="right arrow"
+                            width={20}
+                            height={20}
+                            />
+                        </div>
                     </div>
 
                     {loading ? (
@@ -152,6 +263,7 @@ const { loading, response, data, habitList, error } = useSelector(
                             <div className="flex gap-[15px]">
                                 {apiHabits.slice(0, 2).map((habit, index) => {
                                     const colorScheme = getHabitColorScheme(habit.category, index);
+                                    const weeklyCompletion = getWeeklyCompletionPercent(habit);
                                     return (
                                         <div 
                                             key={habit.selected_habit_id}
@@ -167,7 +279,7 @@ const { loading, response, data, habitList, error } = useSelector(
                                                     </p>
                                                 </div>
                                                 <div className="flex gap-[5px] flex-wrap">
-                                                    {renderTrackingDots(habit.days, colorScheme.color)}
+                                                    {renderTrackingDots(habit, colorScheme.color)}
                                                 </div>
                                             </div>
                                             <div className="flex gap-[109px]">
@@ -178,7 +290,7 @@ const { loading, response, data, habitList, error } = useSelector(
                                                     <div>
                                                         <p className="text-[#252525]">
                                                             <span className="text-[40px] font-normal leading-normal tracking-[-0.8px]">
-                                                                {habit.completion_percent}
+                                                                {weeklyCompletion}
                                                             </span>
                                                             <span className="text-center text-[10px] font-normal leading-[110%] tracking-[-0.2px] capitalize">%</span>
                                                         </p>
@@ -210,6 +322,7 @@ const { loading, response, data, habitList, error } = useSelector(
                                     <div className="flex gap-[15px] flex-wrap">
                                         {apiHabits.slice(2).map((habit, index) => {
                                             const colorScheme = getHabitColorScheme(habit.category, index + 2);
+                                            const weeklyCompletion = getWeeklyCompletionPercent(habit);
                                             return (
                                                 <div 
                                                     key={habit.selected_habit_id}
@@ -225,7 +338,7 @@ const { loading, response, data, habitList, error } = useSelector(
                                                             </p>
                                                         </div>
                                                         <div className="flex gap-[5px] flex-wrap">
-                                                            {renderTrackingDots(habit.days, colorScheme.color)}
+                                                            {renderTrackingDots(habit, colorScheme.color)}
                                                         </div>
                                                     </div>
                                                     <div className="flex">
@@ -236,7 +349,7 @@ const { loading, response, data, habitList, error } = useSelector(
                                                             <div>
                                                                 <p className="text-[#252525]">
                                                                     <span className="text-[40px] font-normal leading-normal tracking-[-0.8px]">
-                                                                        {habit.completion_percent}
+                                                                        {weeklyCompletion}
                                                                     </span>
                                                                     <span className="text-center text-[10px] font-normal leading-[110%] tracking-[-0.2px] capitalize">%</span>
                                                                 </p>

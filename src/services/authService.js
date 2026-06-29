@@ -811,6 +811,7 @@ export const fetchHabitsMonitoringData = async (profileId, dietitianId) => {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(withSuperAdminPartnerCode({
+      action: "dashboard",
       profile_id: profileId,
       dietitian_id: dietitianId,
     })),
