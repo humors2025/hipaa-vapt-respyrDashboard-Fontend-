@@ -269,12 +269,14 @@ export default function ClientLists() {
           </p>
         </div>
 
-        <UserProfile
-          showOnlySearch={true}
-          searchQuery={search}
-          onSearchChange={setSearch}
-          onSearchResults={handleSearchResults}
-        />
+        {!isMaskingRoute && (
+          <UserProfile
+            showOnlySearch={true}
+            searchQuery={search}
+            onSearchChange={setSearch}
+            onSearchResults={handleSearchResults}
+          />
+        )}
 
         <div className="flex gap-2.5 ml-[15px] my-[15px]">
           <div

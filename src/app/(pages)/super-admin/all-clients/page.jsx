@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -89,6 +90,18 @@ function ZoneBadge({ zone }) {
 
 export default function SuperAdminAllClientsPage() {
   const dispatch = useDispatch();
+  const router = useRouter();
+
+  const goToClientProfile = useCallback(
+    (c) => {
+      if (!c?.profile_id) return;
+      const params = new URLSearchParams({ profile_id: c.profile_id });
+      const partnerCode = c.partner_code || c.dietitian_id;
+      if (partnerCode) params.set("partner_code", partnerCode);
+      router.push(`/superadmin-trainer/clients-profile?${params.toString()}`);
+    },
+    [router]
+  );
 
   const actor = useSelector(selectAllClientsActor);
   const filters = useSelector(selectAllClientsFilters);
@@ -316,8 +329,11 @@ export default function SuperAdminAllClientsPage() {
                     key={c.profile_id}
                     className="border-t border-[#F5F7FA] hover:bg-[#F5F7FA]"
                   >
-                    <td className="py-2.5 px-4">
-                      <div className="text-[#252525] font-semibold">
+                    <td
+                      className="py-2.5 px-4 cursor-pointer"
+                      onClick={() => goToClientProfile(c)}
+                    >
+                      <div className="text-[#252525] font-semibold hover:text-[#308BF9]">
                         {c.name || "-"}
                       </div>
                       <div className="text-[#A1A1A1] text-[11px]">
