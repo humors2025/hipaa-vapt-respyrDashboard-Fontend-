@@ -34,7 +34,15 @@ const MENU = [
   { name: "Trainer Admins", icon: "/icons/hugeicons_user-group.png",      path: "/super-admin/trainer-admins" },
   { name: "Trainers",       icon: "/icons/hugeicons_award-01.svg",        path: "/super-admin/trainers" },
   { name: "Invites Trainers",        icon: "/icons/hugeicons_award-01.svg",        path: "/trainer-admin/invites" },
-  { name: "Client Directory", icon: "/icons/hugeicons_user.svg",          path: "/super-admin/client-directory" },
+  {
+    name: "Client Directory",
+    icon: "/icons/hugeicons_user.svg",
+    path: "/super-admin/client-directory",
+    submenu: [
+      { name: "All Clients", path: "/super-admin/all-clients" },
+    ],
+  },
+  { name: "TA Analytics",    icon: "/icons/hugeicons_note-01.svg",        path: "/super-admin/analytics" },
 ];
 
 const DROPDOWN_MENU = [
@@ -47,6 +55,7 @@ export default function SuperAdminHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [openSubmenu, setOpenSubmenu] = useState(null);
   const [active, setActive] = useState(pathname);
 
   useEffect(() => {
@@ -80,13 +89,87 @@ export default function SuperAdminHeader() {
         </div>
 
         <div className="flex gap-2 items-center">
-          <div className="flex gap-2 overflow-x-auto items-center">
+          <div className="flex gap-2 items-center">
             {MENU.map((m) => {
               const isActive =
                 pathname === m.path ||
                 pathname?.startsWith(m.path + "/") ||
                 active === m.path;
               const color = isActive ? "#308BF9" : "#A1A1A1";
+
+              if (m.submenu) {
+                const isOpen = openSubmenu === m.name;
+                return (
+                  <div
+                    key={m.name}
+                    className="relative"
+                    onMouseEnter={() => setOpenSubmenu(m.name)}
+                    onMouseLeave={() => setOpenSubmenu(null)}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActive(m.path);
+                        router.push(m.path);
+                      }}
+                      className="inline-flex items-center gap-1.5 cursor-pointer rounded-[15px] px-[16px] py-[12px] bg-white whitespace-nowrap"
+                    >
+                      <MonoIcon src={m.icon} color={color} alt={m.name} />
+                      <span className="font-semibold text-[12px]" style={{ color }}>
+                        {m.name}
+                      </span>
+                      <svg
+                        className={`w-4 h-4 ms-1 -me-0.5 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                        aria-hidden="true"
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="24"
+                        height="24"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        style={{ color }}
+                      >
+                        <path
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="m19 9-7 7-7-7"
+                        />
+                      </svg>
+                    </button>
+
+                    {isOpen && (
+                      <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-100 rounded-[15px] shadow-lg w-48">
+                        <ul className="p-2 text-sm font-medium">
+                          {m.submenu.map((sub) => {
+                            const subActive =
+                              pathname === sub.path ||
+                              pathname?.startsWith(sub.path + "/") ||
+                              active === sub.path;
+
+                            return (
+                              <li key={sub.name}>
+                                <Link
+                                  href={sub.path}
+                                  onClick={() => {
+                                    setActive(sub.path);
+                                    setOpenSubmenu(null);
+                                  }}
+                                  className={`inline-flex items-center w-full p-2 rounded hover:bg-gray-100 font-semibold text-[12px] ${
+                                    subActive ? "text-[#308BF9]" : "text-[#A1A1A1] hover:text-[#252525]"
+                                  }`}
+                                >
+                                  {sub.name}
+                                </Link>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
 
               return (
                 <Link href={m.path} key={m.name}>
