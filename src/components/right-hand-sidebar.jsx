@@ -33,7 +33,7 @@ const parseLocalDate = (raw) => {
   const [, y, m, d] = match;
   return new Date(Number(y), Number(m) - 1, Number(d));
 };
-
+ 
 export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSelectedHabit }) {
   const { habitList, data: dashboardData, loading: listLoading } = useSelector(
     (state) => state.habitMonitoring
@@ -330,7 +330,6 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
                                 };
                               } else if (state === "missed") {
                                 cellStyle = {
-                                  border: `1px solid ${activeColor}`,
                                   backgroundColor: "#FFFFFF",
                                 };
                               } else if (state === "past") {
