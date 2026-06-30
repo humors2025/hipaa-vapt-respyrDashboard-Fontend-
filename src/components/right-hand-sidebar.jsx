@@ -91,8 +91,11 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
     if (habit?.frequency_type === "weekly") {
       const target = habit?.target_count || 0;
       if (!target) return 0;
+      // Count days completed this week (is_completed), not completed_count —
+      // completed_count is the sessions logged that day, which would overstate
+      // progress (e.g. a single day of 4 reads as 100%).
       const completedThisWeek = currentWeekDates.reduce(
-        (sum, { key }) => sum + (byDate[key]?.completed_count || 0),
+        (sum, { key }) => sum + (byDate[key]?.is_completed ? 1 : 0),
         0
       );
       return Math.min(100, Math.round((completedThisWeek / target) * 100));
@@ -135,8 +138,7 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
   const firstDay = new Date(currentYear, currentMonth, 1);
   const lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
 
-  let startDay = firstDay.getDay(); // Sun=0
-  startDay = startDay === 0 ? 6 : startDay - 1; // Mon=0
+  const startDay = firstDay.getDay(); // Sun=0, week starts on Sunday
 
   const calendarDays = [];
   for (let i = 0; i < startDay; i++) calendarDays.push(null);
@@ -351,14 +353,14 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
 
                     <div className="flex flex-col gap-[9px] mx-5">
                       <div className="grid grid-cols-7 gap-2.5 border-b border-[#E1E6ED] pb-1">
-                        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(
+                        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
                           (day, index) => (
                             <div
                               key={day}
                               className="flex justify-center px-3.5 py-1.5"
                             >
                               <span
-                                className={`text-[10px] font-normal leading-normal tracking-[-0.2px] ${index === 6
+                                className={`text-[10px] font-normal leading-normal tracking-[-0.2px] ${index === 0
                                     ? "text-[#DA5747]"
                                     : "text-[#252525]"
                                   }`}

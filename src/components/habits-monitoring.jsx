@@ -7,7 +7,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { getHabitMonitoringData } from "../store/habitMonitoringSlice";
 import { cookieManager } from "../lib/cookies";
 
-
+ 
 export default function HabitsMonitoring() {
  const dispatch = useDispatch();
   const searchParams = useSearchParams();
@@ -103,13 +103,13 @@ const { loading, response, data, habitList, error } = useSelector(
             if (d?.date) byDate[d.date] = d;
         });
 
-        // Weekly habits (e.g. "Cardio 3×/week") are tracked as N sessions per
-        // week, not per weekday — show one dot per target session and fill the
-        // ones completed this week.
+        // Weekly habits (e.g. "Lift weights 4×/week") are tracked as N sessions
+        // per week, not per weekday — show one dot per target session and fill
+        // the ones completed this week.
         if (habit?.frequency_type === "weekly") {
             const target = habit?.target_count || 0;
             const completedThisWeek = currentWeekDates.reduce(
-                (sum, { key }) => sum + (byDate[key]?.completed_count || 0),
+                (sum, { key }) => sum + (byDate[key]?.is_completed ? 1 : 0),
                 0
             );
             const filled = Math.min(completedThisWeek, target);
@@ -128,7 +128,8 @@ const { loading, response, data, habitList, error } = useSelector(
             });
         }
 
-        // Daily habits: one dot per weekday of the current week.
+        // Daily habits: one dot per weekday of the current week (28 Jun → 4 Jul),
+        // bound to each date's `is_completed`.
         return currentWeekDates.map(({ key, dayName }) => {
             const entry = byDate[key];
             const dotStyle = entry?.is_completed
@@ -194,7 +195,7 @@ const { loading, response, data, habitList, error } = useSelector(
     const weekRangeLabel = getCurrentWeekRange();
 
     // Completion rate for the CURRENT week (not the lifetime completion_percent).
-    //  - weekly habits  -> sessions done this week / target_count
+    //  - weekly habits  -> completed days this week / target_count
     //  - daily habits   -> days completed this week / days elapsed (tracked) this week
     const getWeeklyCompletionPercent = (habit) => {
         const byDate = {};
@@ -205,8 +206,11 @@ const { loading, response, data, habitList, error } = useSelector(
         if (habit?.frequency_type === "weekly") {
             const target = habit?.target_count || 0;
             if (!target) return 0;
+            // Count days completed this week (is_completed), not completed_count —
+            // completed_count is the sessions logged that day, which would
+            // overstate progress (e.g. a single day of 4 reads as 100%).
             const completedThisWeek = currentWeekDates.reduce(
-                (sum, { key }) => sum + (byDate[key]?.completed_count || 0),
+                (sum, { key }) => sum + (byDate[key]?.is_completed ? 1 : 0),
                 0
             );
             return Math.min(100, Math.round((completedThisWeek / target) * 100));
