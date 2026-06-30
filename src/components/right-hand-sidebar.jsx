@@ -62,6 +62,62 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
 
   const weekTracking = activeHabit?.days || [];
 
+  // ---- Completion Rate: same calculation as HabitsMonitoring ----
+  // The current week's seven days (Sunday -> Saturday) as date keys.
+  const currentWeekDates = useMemo(() => {
+    const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const toDateKey = (d) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay()); // back to Sunday
+    return WEEK_DAYS.map((dayName, i) => {
+      const d = new Date(startOfWeek);
+      d.setDate(startOfWeek.getDate() + i);
+      return { key: toDateKey(d), dayName };
+    });
+  }, []);
+
+  const getWeeklyCompletionPercent = (habit) => {
+    const byDate = {};
+    (habit?.days || []).forEach((d) => {
+      if (d?.date) byDate[d.date] = d;
+    });
+
+    if (habit?.frequency_type === "weekly") {
+      const target = habit?.target_count || 0;
+      if (!target) return 0;
+      const completedThisWeek = currentWeekDates.reduce(
+        (sum, { key }) => sum + (byDate[key]?.completed_count || 0),
+        0
+      );
+      return Math.min(100, Math.round((completedThisWeek / target) * 100));
+    }
+
+    // Daily: completed days this week out of all 7 days of the week.
+    let completed = 0;
+    currentWeekDates.forEach(({ key }) => {
+      if (byDate[key]?.is_completed) completed += 1;
+    });
+    return Math.round((completed / currentWeekDates.length) * 100);
+  };
+
+  // Total Days: number of days from the habit's start_date through today
+  // (inclusive). Falls back to the API-provided totals if dates are missing.
+  const getTotalDays = (habit) => {
+    const start = parseLocalDate(habit?.start_date);
+    const end = todayDate || parseLocalDate(dashboardData?.today);
+    if (!start || !end) {
+      return habit?.total_days ?? habit?.expected_days ?? 0;
+    }
+    const dayMs = 24 * 60 * 60 * 1000;
+    return Math.floor((end.getTime() - start.getTime()) / dayMs) + 1;
+  };
+
   /* ---------------- CALENDAR LOCKED TO HABIT DAYS MONTH ---------------- */
   const calendarAnchor = useMemo(() => {
     const firstDateStr = weekTracking[0]?.date || dashboardData?.today;
@@ -209,7 +265,7 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
 
                           <div className="flex flex-col gap-1.5 items-end">
                             <p className="text-[#252525] text-[15px] font-semibold leading-[126%] tracking-[-0.3px]">
-                              {habit.completion_percent ?? habit.weekly_completion_rate ?? 0}%
+                              {getWeeklyCompletionPercent(habit)}%
                             </p>
 
                             <p className="text-[#535359] text-[10px] font-normal leading-normal tracking-[-0.2px]">
@@ -250,7 +306,7 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
                     <div className="flex justify-between">
                       <div className="flex flex-col gap-1.5">
                         <p className="text-[#252525] text-[15px] font-semibold leading-[126%] tracking-[-0.3px]">
-                          {activeHabit.completion_percent ?? 0}%
+                          {getWeeklyCompletionPercent(activeHabit)}%
                         </p>
 
                         <p className="text-[#535359] text-[10px] font-normal leading-normal tracking-[-0.2px]">
@@ -270,7 +326,7 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
 
                       <div className="flex flex-col gap-1.5">
                         <p className="text-[#252525] text-[15px] font-semibold leading-[126%] tracking-[-0.3px]">
-                          {activeHabit.total_days ?? activeHabit.expected_days ?? 0}
+                          {getTotalDays(activeHabit)}
                         </p>
 
                         <p className="text-[#535359] text-[10px] font-normal leading-normal tracking-[-0.2px]">
