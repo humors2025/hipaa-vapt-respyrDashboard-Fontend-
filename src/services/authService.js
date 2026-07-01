@@ -1094,9 +1094,14 @@ export const fetchDownstreamUsersService = async (actorUserId) => {
     throw new Error("Actor user ID missing.");
   }
 
+  const accessToken = Cookies.get("access_token");
+
   const res = await fetch(API_ENDPOINTS.ADMINPANEL.LISTUSERSINTERNAL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
     body: JSON.stringify({ actor_user_id: actorUserId }),
   });
 
