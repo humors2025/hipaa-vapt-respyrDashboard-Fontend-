@@ -18,7 +18,10 @@ export default function Overview({ profileId, dietitianId }) {
     }, [dispatch, profileId, dietitianId]);
 
 const habitData = response?.data;
-const summary = habitData?.summary;
+// The API returns the overview stats (total_days_tracked, tracking_rate,
+// completion_rate, total_perfect_days) at the top level of `data`.
+// Fall back to a nested `summary` object for backwards compatibility.
+const summary = habitData?.summary ?? habitData;
 
     return (
         <>
@@ -67,7 +70,9 @@ const summary = habitData?.summary;
 
                                 <p className="text-[#252525]">
                                     <span className="text-[40px] font-normal leading-normal tracking-[-0.8px]">
-                                        {summary?.completion_rate ?? "N/A"}
+                                        {habitData?.week_summary?.completion_rate != null
+                                            ? Math.round(habitData.week_summary.completion_rate)
+                                            : "N/A"}
                                     </span>
                                     <span className="text-[10px] font-normal leading-[110%] tracking-[-0.2px] ml-1">
                                         %

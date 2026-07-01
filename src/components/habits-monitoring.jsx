@@ -90,26 +90,28 @@ const { loading, response, data, habitList, error } = useSelector(
         return colorSchemes[category] || fallbackColors[index % fallbackColors.length];
     };
 
-    // One dot per weekday (Sun → Sat) for the CURRENT week. A day is filled when
-    // the habit was completed that day, outlined when it was tracked-but-missed,
-    // and left empty (grey outline) when there is no data for that date.
-    // We key off the real `date` (not the weekday name) so the dots stay pinned
-    // to a single week and line up with the week-range label.
+    // One dot per weekday (Sun → Sat) for the CURRENT week, driven by the API's
+    // `tracking` array. Each entry carries a `status`
+    //   1  = completed, 0 = pending (past/today, not done),
+    //   2  = future,     -1 = untracked
+    // and a `completed_count`. A day is treated as completed whenever
+    // completed_count > 0 (count 1, 2, 3 … of completed days), filled when
+    // completed, outlined when pending/missed, and left grey for future/untracked.
     const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+    // A day counts as completed once at least one target unit is logged.
+    const isDayCompleted = (entry) => (entry?.completed_count || 0) > 0;
+
     const renderTrackingDots = (habit, color) => {
-        const byDate = {};
-        (habit?.days || []).forEach((d) => {
-            if (d?.date) byDate[d.date] = d;
-        });
+        const tracking = habit?.tracking || [];
 
         // Weekly habits (e.g. "Lift weights 4×/week") are tracked as N sessions
         // per week, not per weekday — show one dot per target session and fill
-        // the ones completed this week.
+        // one for each day completed this week (completed_count > 0 → count 1,2,3…).
         if (habit?.frequency_type === "weekly") {
             const target = habit?.target_count || 0;
-            const completedThisWeek = currentWeekDates.reduce(
-                (sum, { key }) => sum + (byDate[key]?.is_completed ? 1 : 0),
+            const completedThisWeek = tracking.reduce(
+                (sum, d) => sum + (isDayCompleted(d) ? 1 : 0),
                 0
             );
             const filled = Math.min(completedThisWeek, target);
@@ -128,20 +130,18 @@ const { loading, response, data, habitList, error } = useSelector(
             });
         }
 
-        // Daily habits: one dot per weekday of the current week (28 Jun → 4 Jul),
-        // bound to each date's `is_completed`.
-        return currentWeekDates.map(({ key, dayName }) => {
-            const entry = byDate[key];
-            const dotStyle = entry?.is_completed
-                ? { backgroundColor: color }
-                : entry
-                    ? { border: `1px solid ${color}`, backgroundColor: 'white' }
-                    : { border: '1px solid #E1E6ED', backgroundColor: 'white' };
+        // Daily habits: one dot per day in the week's `tracking` (Sun → Sat).
+        return tracking.map((entry) => {
+            const dotStyle = isDayCompleted(entry)
+                ? { backgroundColor: color }                                     // completed
+                : entry?.status === 0
+                    ? { border: `1px solid ${color}`, backgroundColor: 'white' } // pending / missed
+                    : { border: '1px solid #E1E6ED', backgroundColor: 'white' }; // future / untracked
 
             return (
                 <div
-                    key={key}
-                    title={`${dayName} ${key}`}
+                    key={entry.date}
+                    title={`${entry.day} ${entry.date}`}
                     className="w-[14px] h-[14px] rounded-full"
                     style={dotStyle}
                 />
@@ -192,36 +192,45 @@ const { loading, response, data, habitList, error } = useSelector(
     };
 
     const currentWeekDates = getCurrentWeekDates();
-    const weekRangeLabel = getCurrentWeekRange();
 
-    // Completion rate for the CURRENT week (not the lifetime completion_percent).
+    // Prefer the API's week window (week_start → week_end); fall back to the
+    // locally-computed Sunday→Saturday range.
+    const formatRangeLabel = (startStr, endStr) => {
+        const parse = (s) => {
+            const m = String(s || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+            return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+        };
+        const start = parse(startStr);
+        const end = parse(endStr);
+        if (!start || !end) return getCurrentWeekRange();
+        const fmt = (d) => `${d.getDate()} ${d.toLocaleString("en-US", { month: "short" })}`;
+        return `Weekly (${fmt(start)} - ${fmt(end)})`;
+    };
+
+    const weekRangeLabel = formatRangeLabel(data?.week_start, data?.week_end);
+
+    // Completion rate for the CURRENT week. The API returns it per habit in
+    // `week_summary.completion_rate`; fall back to computing it from `tracking`.
     //  - weekly habits  -> completed days this week / target_count
-    //  - daily habits   -> days completed this week / days elapsed (tracked) this week
+    //  - daily habits   -> days completed this week / 7
     const getWeeklyCompletionPercent = (habit) => {
-        const byDate = {};
-        (habit?.days || []).forEach((d) => {
-            if (d?.date) byDate[d.date] = d;
-        });
+        const rate = habit?.week_summary?.completion_rate;
+        if (rate != null) return Math.round(rate);
+
+        const tracking = habit?.tracking || [];
+        const completedThisWeek = tracking.reduce(
+            (sum, d) => sum + (isDayCompleted(d) ? 1 : 0),
+            0
+        );
 
         if (habit?.frequency_type === "weekly") {
             const target = habit?.target_count || 0;
             if (!target) return 0;
-            // Count days completed this week (is_completed), not completed_count —
-            // completed_count is the sessions logged that day, which would
-            // overstate progress (e.g. a single day of 4 reads as 100%).
-            const completedThisWeek = currentWeekDates.reduce(
-                (sum, { key }) => sum + (byDate[key]?.is_completed ? 1 : 0),
-                0
-            );
             return Math.min(100, Math.round((completedThisWeek / target) * 100));
         }
 
-        // Daily: completed days this week out of all 7 days of the week.
-        let completed = 0;
-        currentWeekDates.forEach(({ key }) => {
-            if (byDate[key]?.is_completed) completed += 1;
-        });
-        return Math.round((completed / currentWeekDates.length) * 100);
+        const totalDays = tracking.length || 7;
+        return Math.round((completedThisWeek / totalDays) * 100);
     };
 
     // Get habits from API response or use empty array

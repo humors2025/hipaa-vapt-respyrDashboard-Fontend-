@@ -60,7 +60,12 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
   const activeColor = activeScheme?.color || "#1D57A0";
   const activeBgColor = activeScheme?.bgColor || "#E4F0FF";
 
-  const weekTracking = activeHabit?.days || [];
+  // Current week's tracking (Sun → Sat) and the full history for the calendar.
+  const weekTracking = activeHabit?.tracking || [];
+  const historyTracking = activeHabit?.all_time_tracking || [];
+
+  // A day counts as completed once at least one target unit is logged.
+  const isDayCompleted = (entry) => (entry?.completed_count || 0) > 0;
 
   // ---- Completion Rate: same calculation as HabitsMonitoring ----
   // The current week's seven days (Sunday -> Saturday) as date keys.
@@ -83,30 +88,25 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
   }, []);
 
   const getWeeklyCompletionPercent = (habit) => {
-    const byDate = {};
-    (habit?.days || []).forEach((d) => {
-      if (d?.date) byDate[d.date] = d;
-    });
+    // The API returns the weekly rate per habit; fall back to computing from
+    // `tracking` (a day is completed once completed_count > 0 → count 1, 2, 3 …).
+    const rate = habit?.week_summary?.completion_rate;
+    if (rate != null) return Math.round(rate);
+
+    const tracking = habit?.tracking || [];
+    const completedThisWeek = tracking.reduce(
+      (sum, d) => sum + (isDayCompleted(d) ? 1 : 0),
+      0
+    );
 
     if (habit?.frequency_type === "weekly") {
       const target = habit?.target_count || 0;
       if (!target) return 0;
-      // Count days completed this week (is_completed), not completed_count —
-      // completed_count is the sessions logged that day, which would overstate
-      // progress (e.g. a single day of 4 reads as 100%).
-      const completedThisWeek = currentWeekDates.reduce(
-        (sum, { key }) => sum + (byDate[key]?.is_completed ? 1 : 0),
-        0
-      );
       return Math.min(100, Math.round((completedThisWeek / target) * 100));
     }
 
-    // Daily: completed days this week out of all 7 days of the week.
-    let completed = 0;
-    currentWeekDates.forEach(({ key }) => {
-      if (byDate[key]?.is_completed) completed += 1;
-    });
-    return Math.round((completed / currentWeekDates.length) * 100);
+    const totalDays = tracking.length || 7;
+    return Math.round((completedThisWeek / totalDays) * 100);
   };
 
   // Total Days: number of days from the habit's start_date through today
@@ -115,7 +115,7 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
     const start = parseLocalDate(habit?.start_date);
     const end = todayDate || parseLocalDate(dashboardData?.today);
     if (!start || !end) {
-      return habit?.total_days ?? habit?.expected_days ?? 0;
+      return habit?.all_time_summary?.total_days ?? habit?.total_days ?? 0;
     }
     const dayMs = 24 * 60 * 60 * 1000;
     return Math.floor((end.getTime() - start.getTime()) / dayMs) + 1;
@@ -155,18 +155,19 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
     [dashboardData?.today]
   );
 
-  // Split the habit's days (within the displayed month) into completed
-  // vs. missed. "Missed" = past day with is_completed=false.
+  // Split the habit's history (within the displayed month) into completed
+  // vs. missed. A day is completed when completed_count > 0 (status 1);
+  // "missed" = a past day that was pending/untracked (status 0 or -1).
   const { completedDays, missedDays } = (() => {
     const completed = [];
     const missed = [];
-    weekTracking.forEach((entry) => {
+    historyTracking.forEach((entry) => {
       const d = parseLocalDate(entry?.date);
       if (!d) return;
       if (d.getFullYear() !== currentYear || d.getMonth() !== currentMonth) return;
 
       const dayNum = d.getDate();
-      if (entry.is_completed) {
+      if (isDayCompleted(entry)) {
         completed.push(dayNum);
       } else if (todayDate && d.getTime() < todayDate.getTime()) {
         missed.push(dayNum);
@@ -318,7 +319,9 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
 
                       <div className="flex flex-col gap-1.5">
                         <p className="text-[#252525] text-[15px] font-semibold leading-[126%] tracking-[-0.3px]">
-                          {activeHabit.completed_days ?? 0}
+                          {activeHabit.all_time_summary?.tracked_days ??
+                            activeHabit.completed_days ??
+                            0}
                         </p>
 
                         <p className="text-[#535359] text-[10px] font-normal leading-normal tracking-[-0.2px]">
@@ -328,7 +331,8 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
 
                       <div className="flex flex-col gap-1.5">
                         <p className="text-[#252525] text-[15px] font-semibold leading-[126%] tracking-[-0.3px]">
-                          {getTotalDays(activeHabit)}
+                          {activeHabit.all_time_summary?.total_days ??
+                            getTotalDays(activeHabit)}
                         </p>
 
                         <p className="text-[#535359] text-[10px] font-normal leading-normal tracking-[-0.2px]">

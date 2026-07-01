@@ -805,15 +805,20 @@ export const fetchMacroSummaryByDate = async (profileId, date, dietitianId) => {
 
 
 export const fetchHabitsMonitoringData = async (profileId, dietitianId) => {
+  // Current date as YYYY-MM-DD (local time).
+  const now = new Date();
+  const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
   return apiFetcher(API_ENDPOINTS.HABITMONITORING.GETHABITSDATA, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(withSuperAdminPartnerCode({
-      action: "dashboard",
+      action: "weekly_tracking",
       profile_id: profileId,
       dietitian_id: dietitianId,
+      date,
     })),
   });
 };
