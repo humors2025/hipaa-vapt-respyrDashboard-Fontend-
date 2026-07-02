@@ -35,10 +35,11 @@ const MENU = [
   { name: "Trainers",       icon: "/icons/hugeicons_award-01.svg",        path: "/super-admin/trainers" },
   { name: "Invites Trainers",        icon: "/icons/hugeicons_award-01.svg",        path: "/trainer-admin/invites" },
   {
-    name: "Client Directory",
+    name: "Client",
     icon: "/icons/hugeicons_user.svg",
-    path: "/super-admin/client-directory",
+    // path: "/super-admin/client-directory",
     submenu: [
+      { name: "Client Directory", path: "/super-admin/client-directory" },
       { name: "All Clients", path: "/super-admin/all-clients" },
     ],
   },
@@ -109,8 +110,10 @@ export default function SuperAdminHeader() {
                     <button
                       type="button"
                       onClick={() => {
-                        setActive(m.path);
-                        router.push(m.path);
+                        if (m.path) {
+                          setActive(m.path);
+                          router.push(m.path);
+                        }
                       }}
                       className="inline-flex items-center gap-1.5 cursor-pointer rounded-[15px] px-[16px] py-[12px] bg-white whitespace-nowrap"
                     >
@@ -119,7 +122,7 @@ export default function SuperAdminHeader() {
                         {m.name}
                       </span>
                       <svg
-                        className={`w-4 h-4 ms-1 -me-0.5 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                        className={`w-3 h-3 ms-1 -me-0.5 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
                         aria-hidden="true"
                         xmlns="http://www.w3.org/2000/svg"
                         width="24"
@@ -139,7 +142,7 @@ export default function SuperAdminHeader() {
                     </button>
 
                     {isOpen && (
-                      <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-100 rounded-[15px] shadow-lg w-48">
+                      <div className="absolute left-0 top-full z-50 bg-white border border-gray-100 rounded-[15px] shadow-lg w-48">
                         <ul className="p-2 text-sm font-medium">
                           {m.submenu.map((sub) => {
                             const subActive =
