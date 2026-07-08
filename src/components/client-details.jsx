@@ -588,7 +588,7 @@ const transformDatesToDisplay = () => {
 
 
                   <p className="text-[#535359] text-[12px] font-normal tracking-[-0.24px] leading-normal">
-                    {individualProfileData?.data?.total_test_taken ?? "—"} completed, including re-tests
+                    {individualProfileData?.data?.total_test_taken ?? "—"} test completed, including re-tests
                   </p>
                 </div>
 
