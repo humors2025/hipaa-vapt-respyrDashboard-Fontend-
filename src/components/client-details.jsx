@@ -62,7 +62,6 @@ export default function ClientDetails() {
   const dietAnalysisData = useSelector(selectDietAnalysisData);
 
   const [profileDates, setProfileDates] = useState([]);
-  console.log("profileDates64", profileDates);
   const [datesLoading, setDatesLoading] = useState(false);
   const [datesError, setDatesError] = useState(null);
 
@@ -589,7 +588,7 @@ const transformDatesToDisplay = () => {
 
 
                   <p className="text-[#535359] text-[12px] font-normal tracking-[-0.24px] leading-normal">
-                    {individualProfileData?.data?.total_test_taken ?? "—"} tests taken
+                    {individualProfileData?.data?.total_test_taken ?? "—"} completed, including re-tests
                   </p>
                 </div>
 

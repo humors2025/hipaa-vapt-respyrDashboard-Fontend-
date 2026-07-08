@@ -454,7 +454,7 @@ export default function ClientLists() {
 
 
                   <p className="text-[#535359] text-[10px]">
-                    {client.test_taken_count ?? 0} tests taken
+                    {client.test_taken_count ?? 0} tests taken in the last 3 months
                   </p>
                 </div>
               </div>
