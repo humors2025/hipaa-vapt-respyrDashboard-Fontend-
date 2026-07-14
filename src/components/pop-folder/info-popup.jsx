@@ -119,7 +119,7 @@ export default function InfoPopUp({ onClose }) {
   );
 
   const rawJson = clientIndividualProfile?.data?.raw_json || {};
-  console.log("Raw JSON Info popup:", rawJson);
+
 
   // Title follows whichever composite trend the response carries.
   const trendLabel = rawJson?.Muscle_Gain_Trend

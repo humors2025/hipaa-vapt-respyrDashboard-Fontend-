@@ -82,7 +82,7 @@ export default function MealLogged() {
   };
 
   const dataArr = Array.isArray(weeklyAnalysisData) ? weeklyAnalysisData : [];
-  console.log("dataArr85:-", dataArr);
+
   const totalFoods = dataArr.length;
 
   const avgScore = totalFoods

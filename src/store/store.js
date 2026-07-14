@@ -16,6 +16,8 @@ import habitMonitoringReducer from "./habitMonitoringSlice";
 import trainerDirectionReducer from "./trainerDirectionSlice";
 import superAdminOverviewReducer from "./superAdminOverviewSlice";
 import superAdminAllClientsReducer from "./superAdminAllClientsSlice";
+import adminGroupsReducer from "./adminGroupsSlice";
+import groupDetailsReducer from "./groupDetailsSlice";
 
 
 export const store = configureStore({
@@ -36,6 +38,8 @@ export const store = configureStore({
       trainerDirection: trainerDirectionReducer,
       superAdminOverview: superAdminOverviewReducer,
       superAdminAllClients: superAdminAllClientsReducer,
+      adminGroups: adminGroupsReducer,
+      groupDetails: groupDetailsReducer,
   },
 
   middleware: (getDefaultMiddleware) =>

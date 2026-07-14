@@ -134,7 +134,6 @@ function SignupForm() {
     (async () => {
       try {
         const res = await previewInviteService(token);
-        console.log("resInvite-preview131", res);
         if (cancelled) return;
         const data = res?.data || res;
         setInvite(data);

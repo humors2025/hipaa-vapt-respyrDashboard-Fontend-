@@ -1066,6 +1066,80 @@ export const fetchTrainerClientsOverviewForSuperAdminService = async ({
 };
 
 
+// Lists the admin groups the logged-in user can manage (manage_admin_groups.php).
+// actor_user_id is the user_id decoded from the access_token cookie; action is
+// always "list_groups". Called right after a successful login.
+export const fetchAdminGroupsService = async () => {
+  const accessToken = Cookies.get("access_token");
+
+  if (!accessToken) {
+    throw new Error("Access token missing. Please login again.");
+  }
+
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.MANAGEADMINGROUPS, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      action: "list_groups",
+    }),
+  });
+};
+
+
+
+// Paginated details for a single admin group (get_group_details.php).
+// actor_user_id is the user_id decoded from the access_token cookie; group_name
+// identifies which group to expand (sourced from the MANAGEADMINGROUPS response).
+export const fetchGroupDetailsService = async ({
+  groupName,
+  page = 1,
+  limit = 10,
+  search = "",
+} = {}) => {
+  const accessToken = Cookies.get("access_token");
+
+  if (!accessToken) {
+    throw new Error("Access token missing. Please login again.");
+  }
+
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  if (!groupName) {
+    throw new Error("Group name is required.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.GETGROUPDETAILS, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      group_name: groupName,
+      page,
+      limit,
+      search,
+    }),
+  });
+};
+
+
+
 export const fetchSuperAdminOverviewService = async () => {
   const accessToken = Cookies.get("access_token");
 

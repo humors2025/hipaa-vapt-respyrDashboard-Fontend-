@@ -114,6 +114,8 @@ export const API_ENDPOINTS = {
     RESENDCLIENTSUBSCRIPTIONINVITE: `/${API_VERSION}/dietitian/api/web/resend-client-subscription-invite`,
     EXTENDCLIENTFREETRIAL14DAYS: `/${API_VERSION}/dietitian/api/web/extend-client-free-trial-14days`,
         TRAINERSALESANALYTICS: `/${API_VERSION}/dietitian/api/web/trainer-sales-analytics`,
+         MANAGEADMINGROUPS: `/${API_VERSION}/dietitian/api/web/manage_admin_groups`,
+          GETGROUPDETAILS: `/${API_VERSION}/dietitian/api/web/get_group_details`,
 
 
     VALIDATEINVITETOKEN: `/${API_VERSION}/dietitian/api/web/validate-invite-token`,
@@ -122,7 +124,7 @@ export const API_ENDPOINTS = {
     INVITEPREVIEW: `/${API_VERSION}/dietitian/api/web/invite-preview`,
 
     // Internal Next.js API routes (relative — not prefixed with API_BASE_URL)
-    LISTUSERSINTERNAL: "/api/admin/list-users"
+    LISTUSERSINTERNAL: `/${API_VERSION}/dietitian/api/web/list-users`
   },
 
    FOOD: {
