@@ -89,6 +89,11 @@ export const API_ENDPOINTS = {
   TRAINER: {
     TRAINERDIRECTION: `/${API_VERSION}/dietitian/api/web/get_trainer_direction`
   },
+
+  WEIGHTTRACKING: {
+    GETWEIGHTLOGS: `/${API_VERSION}/dietitian/api/web/weight-tracking`
+  },
+
   ADMINPANEL: {
     INVITETRAINERADMIN: `/${API_VERSION}/dietitian/api/web/super-admin-invite-admin`,
     SUPERADMINOVERVIEW: `/${API_VERSION}/dietitian/api/web/super-admin-overview`,

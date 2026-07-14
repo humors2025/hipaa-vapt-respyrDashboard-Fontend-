@@ -824,6 +824,32 @@ export const fetchHabitsMonitoringData = async (profileId, dietitianId) => {
 };
 
 
+// Weight logs for the Weight Tracking tab.
+//   profile_id      – the client being viewed (from the ?profile_id= URL param)
+//   dietician_id    – the JWT-bound dietician identity (access_token claim)
+//   actor_user_id   – the acting user's id (access_token `user_id` claim)
+// Note the API spells the claim `dietician_id` (with a "c"); we match that here.
+// Returns the raw API response — the component reads `res.data` as an array of
+// weight_log rows (weight_kg, log_date, log_time, created_at).
+export const fetchWeightTracking = async (profileId, dieticianId) => {
+  const resolvedProfileId = profileId ?? getProfileIdFromUrl();
+  const resolvedDieticianId = dieticianId ?? getDietitianIdFromAccessToken();
+  const resolvedActorUserId = getActorUserIdFromAccessToken() ?? "";
+
+  return apiFetcher(API_ENDPOINTS.WEIGHTTRACKING.GETWEIGHTLOGS, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      profile_id: resolvedProfileId,
+      dietician_id: resolvedDieticianId,
+      actor_user_id: resolvedActorUserId,
+    }),
+  });
+};
+
+
 export const updatePerformanceLevel = async (dietitianId, profileId, levelType) => {
   return apiFetcher(API_ENDPOINTS.LEVELUPDATE.LEVEL, {
     method: "POST",

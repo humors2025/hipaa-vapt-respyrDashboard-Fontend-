@@ -741,7 +741,7 @@ const transformDatesToDisplay = () => {
                 /> */}
               </div>
 
-              {/* <div
+              <div
                 onClick={() => handleTabChange("weight")}
                 className={`flex items-center gap-2.5 rounded-[6px] py-[11px] px-[31px] transition-all duration-200 ${activeTab === "weight"
                   ? "bg-[#252525] cursor-pointer hover:bg-[#3a3a3a]"
@@ -754,7 +754,7 @@ const transformDatesToDisplay = () => {
                 >
                   Weight Tracking
                 </p>
-              </div> */}
+              </div>
 
              {/* <div
   onClick={() => handleTabChange("trainer")}
