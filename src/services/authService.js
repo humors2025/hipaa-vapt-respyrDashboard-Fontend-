@@ -1089,6 +1089,31 @@ export const fetchSuperAdminOverviewService = async () => {
   });
 };
 
+
+
+// Internal Next.js route (/api/food/search). Like fetchDownstreamUsersService,
+// this uses a raw fetch instead of apiFetcher: the route lives on the app's own
+// origin (it must NOT be prefixed with API_BASE_URL), and it needs to forward the
+// caller's AbortController signal for debounced/cancelable searches.
+export const searchFoodService = async (query, { limit = 6, dietType = "", country = "", signal } = {}) => {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  if (dietType) params.set("diet_type", dietType);
+  if (country) params.set("country", country);
+
+  const res = await fetch(`${API_ENDPOINTS.FOOD.FOODSEARCH}?${params.toString()}`, {
+    method: "GET",
+    signal,
+  });
+
+  if (!res.ok) {
+    throw new Error("Food search failed");
+  }
+
+  return res.json();
+};
+
+
+
 export const fetchDownstreamUsersService = async (actorUserId) => {
   if (!actorUserId) {
     throw new Error("Actor user ID missing.");
@@ -1112,7 +1137,7 @@ export const fetchDownstreamUsersService = async (actorUserId) => {
   return res.json();
 };
 
-export const fetchTrainerAdminOverviewService = async (actorUserId) => {
+export const fetchTrainerAdminOverviewService = async (actorUserId, email) => {
   if (!actorUserId) {
     throw new Error("Actor user ID missing.");
   }
@@ -1125,7 +1150,10 @@ export const fetchTrainerAdminOverviewService = async (actorUserId) => {
       "Content-Type": "application/json",
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
-    body: JSON.stringify({ actor_user_id: actorUserId }),
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      ...(email ? { email } : {}),
+    }),
   });
 };
 

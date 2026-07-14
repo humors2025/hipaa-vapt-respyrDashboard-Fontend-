@@ -204,11 +204,13 @@ export async function GET(request) {
 
   const limit = parseInt(searchParams.get("limit") || "8", 10);
   const diet_type = searchParams.get("diet_type") || "";
+  const country = searchParams.get("country") || "";
 
   // Step 1: Try Chandan's curated food pool at respyr.in
   try {
     const params = new URLSearchParams({ q, limit: String(limit) });
     if (diet_type) params.set("diet_type", diet_type);
+    if (country) params.set("country", country);
     const url = `${FOODS_API_BASE}/food_search?${params.toString()}`;
     const res = await fetch(url, { cache: "no-store" });
     if (res.ok) {

@@ -3,7 +3,29 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import Cookies from "js-cookie";
 import { fetchTrainerAdminOverviewService } from "@/services/authService";
+
+function getLoggedInActorUserId() {
+  const token = Cookies.get("access_token");
+  if (token && token.split(".").length === 3) {
+    try {
+      const payload = token.split(".")[1];
+      const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+      const json = decodeURIComponent(
+        atob(base64)
+          .split("")
+          .map((c) => `%${`00${c.charCodeAt(0).toString(16)}`.slice(-2)}`)
+          .join("")
+      );
+      const decoded = JSON.parse(json);
+      return decoded?.user_id ?? decoded?.email ?? null;
+    } catch {
+      /* fall through */
+    }
+  }
+  return null;
+}
 
 export default function TrainersList({ trainerAdmin, onBack }) {
   const [trainers, setTrainers] = useState([]);
@@ -11,13 +33,14 @@ export default function TrainersList({ trainerAdmin, onBack }) {
   const [actor, setActor] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const actorUserId = trainerAdmin?.email || trainerAdmin?.user_id;
+  const selectedEmail = trainerAdmin?.email || trainerAdmin?.user_id;
 
   const loadTrainers = useCallback(async () => {
-    if (!actorUserId) return;
+    const actorUserId = getLoggedInActorUserId();
+    if (!actorUserId || !selectedEmail) return;
     setIsLoading(true);
     try {
-      const res = await fetchTrainerAdminOverviewService(actorUserId);
+      const res = await fetchTrainerAdminOverviewService(actorUserId, selectedEmail);
       setTrainers(res?.network?.trainers || []);
       setOverview(res?.overview || null);
       setActor(res?.actor || null);
@@ -29,7 +52,7 @@ export default function TrainersList({ trainerAdmin, onBack }) {
     } finally {
       setIsLoading(false);
     }
-  }, [actorUserId]);
+  }, [selectedEmail]);
 
   useEffect(() => {
     loadTrainers();

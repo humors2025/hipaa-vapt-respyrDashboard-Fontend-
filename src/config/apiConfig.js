@@ -123,6 +123,11 @@ export const API_ENDPOINTS = {
 
     // Internal Next.js API routes (relative — not prefixed with API_BASE_URL)
     LISTUSERSINTERNAL: "/api/admin/list-users"
+  },
+
+   FOOD: {
+    // Internal Next.js API routes (relative — not prefixed with API_BASE_URL)
+    FOODSEARCH: "/api/food/search"
   }
 
 

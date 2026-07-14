@@ -20,6 +20,7 @@ import {
 import {
   approveDietPlanService,
   updateDietPlanFoodService,
+  getClientProfileDetails,
 } from "../services/authService";
 import { buildAddPayload, buildDeletePayload, buildUpdatePayload } from "../lib/food-update";
 import { cookieManager } from "../lib/cookies";
@@ -59,6 +60,9 @@ export default function DietPlan() {
   const [isSaving, setIsSaving] = useState(false);
   const [pendingOps, setPendingOps] = useState([]);
   const [showDiscardPopup, setShowDiscardPopup] = useState(false);
+  // Client's dietary preferences, used to filter the food search by
+  // diet_type (veg/nonveg) and country (primary_cuisine).
+  const [clientDiet, setClientDiet] = useState({ dietType: "", country: "" });
 
   // status_value (approval) only controls mobile app visibility — trainer
   // dashboard editing must work for both status=0 (draft) and status=1 (approved).
@@ -74,6 +78,33 @@ export default function DietPlan() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const profileId = searchParams.get("profile_id");
+
+  // Load the client's diet_type + primary_cuisine so "Add food" search results
+  // are scoped to their diet and cuisine. Non-fatal: search still works unfiltered.
+  useEffect(() => {
+    if (!profileId) return;
+    const token = cookieManager.get("access_token");
+    const dietitianId = token ? decodeJwt(token)?.dietician_id : null;
+    if (!dietitianId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getClientProfileDetails(profileId, dietitianId);
+        const d = res?.data || {};
+        if (!cancelled) {
+          setClientDiet({
+            dietType: d.diet_type || d.dietary_preferences?.diet_type || "",
+            country: d.primary_cuisine || d.dietary_preferences?.primary_cuisine || "",
+          });
+        }
+      } catch {
+        // ignore — food search falls back to unfiltered results
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId]);
 
   const dispatch = useDispatch();
   const dietAnalysisData = useSelector(selectDietAnalysisData);
@@ -859,6 +890,8 @@ export default function DietPlan() {
           mealSlot={activeMeal}
           onAdd={addFoodToPlan}
           onClose={() => setShowAddFoodModal(false)}
+          dietType={clientDiet.dietType}
+          country={clientDiet.country}
         />
       )}
 
