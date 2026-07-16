@@ -806,7 +806,7 @@ export default function AnalyticsDashboard() {
         </div>
 
         {/* ── Right: Controls ── */}
-        <div className="flex items-center gap-3 hidden">
+        <div className="flex items-center gap-3">
           {/* Refresh */}
           <button onClick={handleRefresh} className="flex items-center justify-center cursor-pointer transition-all duration-200"
             style={{ width: 36, height: 36, borderRadius: "10px", backgroundColor: "#ffffff", border: "1px solid #EEF2F6", color: R.tm }}
