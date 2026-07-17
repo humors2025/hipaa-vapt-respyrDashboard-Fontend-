@@ -1122,7 +1122,6 @@ export const fetchAdminGroupsService = async () => {
 };
 
 
-
 // Paginated details for a single admin group (get_group_details.php).
 // actor_user_id is the user_id decoded from the access_token cookie; group_name
 // identifies which group to expand (sourced from the MANAGEADMINGROUPS response).
@@ -1131,6 +1130,8 @@ export const fetchGroupDetailsService = async ({
   page = 1,
   limit = 10,
   search = "",
+  overviewDate = "",
+  overviewMember = "",
 } = {}) => {
   const accessToken = Cookies.get("access_token");
 
@@ -1148,22 +1149,40 @@ export const fetchGroupDetailsService = async ({
     throw new Error("Group name is required.");
   }
 
+  const body = {
+    actor_user_id: actorUserId,
+    group_name: groupName,
+    page,
+    limit,
+    search,
+  };
+  // Scopes period_overview to a single day (YYYY-MM-DD); omitted → backend default (today).
+  if (overviewDate) body.overview_date = overviewDate;
+  // Scopes period_overview to one admin's sub-network (their partner_code); omitted → whole group.
+  if (overviewMember) body.overview_member = overviewMember;
+
   return apiFetcher(API_ENDPOINTS.ADMINPANEL.GETGROUPDETAILS, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({
-      actor_user_id: actorUserId,
-      group_name: groupName,
-      page,
-      limit,
-      search,
-    }),
+    body: JSON.stringify(body),
   });
 };
 
+// Lightweight GETGROUPDETAILS call used only to read a single day's period_overview.
+// The backend scopes period_overview to overview_date (one day), so multi-day (W/M)
+// totals are built by summing one of these per day. overviewMember scopes it to a
+// single admin's sub-network (omit → whole group). limit:1 keeps the payload small
+// — we ignore the clients list and just return the period_overview block.
+
+
+export const fetchGroupPeriodOverviewService = async ({ groupName, overviewDate, overviewMember } = {}) => {
+  if (!groupName) throw new Error("Group name is required.");
+  const res = await fetchGroupDetailsService({ groupName, page: 1, limit: 1, search: "", overviewDate, overviewMember });
+  return res?.period_overview || null;
+};
 
 
 export const fetchSuperAdminOverviewService = async () => {

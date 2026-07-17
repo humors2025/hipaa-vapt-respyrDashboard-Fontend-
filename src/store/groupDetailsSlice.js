@@ -7,9 +7,9 @@ import { fetchGroupDetailsService } from "../services/authService";
 
 export const getGroupDetails = createAsyncThunk(
   "groupDetails/get",
-  async ({ groupName, page = 1, limit = 10, search = "", fetchAll = false } = {}, { rejectWithValue }) => {
+  async ({ groupName, page = 1, limit = 10, search = "", overviewDate = "", fetchAll = false } = {}, { rejectWithValue }) => {
     try {
-      const first = await fetchGroupDetailsService({ groupName, page, limit, search });
+      const first = await fetchGroupDetailsService({ groupName, page, limit, search, overviewDate });
 
       if (!fetchAll) {
         return { response: first, groupName, page, limit, search };
@@ -28,7 +28,7 @@ export const getGroupDetails = createAsyncThunk(
       while (hasMore && guard < 100) {
         guard++;
         curPage++;
-        const next = await fetchGroupDetailsService({ groupName, page: curPage, limit: pageLimit, search });
+        const next = await fetchGroupDetailsService({ groupName, page: curPage, limit: pageLimit, search, overviewDate });
         if (Array.isArray(next?.clients)) allClients = allClients.concat(next.clients);
         hasMore = !!next?.clients_pagination?.has_more;
       }
@@ -48,6 +48,7 @@ export const getGroupDetails = createAsyncThunk(
 const initialState = {
   data: null,        // full get_group_details response (all client pages merged)
   counts: null,      // { members, trainers, clients } — authoritative group totals
+  periodOverview: null, // { date_from, date_to, total_readings, trainer_readings, client_readings }
   groupName: null,   // group these details belong to
   page: 1,
   limit: 10,
@@ -72,6 +73,7 @@ const groupDetailsSlice = createSlice({
         state.loading = false;
         state.data = action.payload.response || null;
         state.counts = action.payload.response?.counts || null;
+        state.periodOverview = action.payload.response?.period_overview || null;
         state.groupName = action.payload.groupName;
         state.page = action.payload.page;
         state.limit = action.payload.limit;
@@ -88,6 +90,7 @@ export const { clearGroupDetails } = groupDetailsSlice.actions;
 
 export const selectGroupDetails = (state) => state.groupDetails.data;
 export const selectGroupCounts = (state) => state.groupDetails.counts;
+export const selectPeriodOverview = (state) => state.groupDetails.periodOverview;
 export const selectGroupDetailsMeta = (state) => ({
   groupName: state.groupDetails.groupName,
   page: state.groupDetails.page,
