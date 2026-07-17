@@ -54,7 +54,7 @@ function decodeAccessTokenFromCookie() {
 // must equal the token's dietician_id — so this is the only correct value to send.
 // Note the token spells the claim `dietician_id` (with a "c"); we also fall back
 // to the nested `dietician` object if the top-level claim is absent.
-function getDietitianIdFromAccessToken() {
+export function getDietitianIdFromAccessToken() {
   const decoded = decodeAccessTokenFromCookie();
   return decoded?.dietician_id ?? decoded?.dietician?.dietician_id ?? null;
 }
@@ -865,16 +865,37 @@ export const updatePerformanceLevel = async (dietitianId, profileId, levelType) 
 };
 
 
-export const getClientProfileDetails = async (profileId, dietitianId) => {
-  return apiFetcher(API_ENDPOINTS.CLIENTPROFILE.GETCLIENTPROFILEDETAILS, {
+// On the masked route the API redacts client identity: name/email arrive
+// partially starred, and dob/age/region/location come back as the literal
+// string "hidden". Callers must render those defensively.
+export const getClientProfileDetails = async (
+  profileId,
+  dietitianId,
+  { masking = false } = {}
+) => {
+  const endpoint = masking
+    ? API_ENDPOINTS.CLIENTPROFILE.GETCLIENTPROFILEDETAILSMASKED
+    : API_ENDPOINTS.CLIENTPROFILE.GETCLIENTPROFILEDETAILS;
+
+  const basePayload = {
+    profile_id: profileId ?? getProfileIdFromUrl(),
+    dietitian_id: dietitianId ?? getDietitianIdFromAccessToken(),
+  };
+
+  if (masking) {
+    const decoded = decodeAccessTokenFromCookie();
+    const actorUserId = decoded?.user_id;
+    if (actorUserId) {
+      basePayload.actor_user_id = actorUserId;
+    }
+  }
+
+  return apiFetcher(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(withSuperAdminPartnerCode({
-      profile_id: profileId,
-      dietitian_id: dietitianId,
-    })),
+    body: JSON.stringify(withSuperAdminPartnerCode(basePayload)),
   });
 };
 

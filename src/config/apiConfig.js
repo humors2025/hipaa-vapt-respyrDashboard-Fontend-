@@ -49,7 +49,8 @@ export const API_ENDPOINTS = {
     CLIENTINDIVIDUALPROFILEMASKING: `/${API_VERSION}/dietitian/api/web/get-data-points-score-all-ranges-coach-masking`,
     CLIENTPROFILEDATESLIST: `/${API_VERSION}/dietitian/api/web/get-profile-details-dates-taken`,
     CLIENTWEEKLYDATES: `/${API_VERSION}/dietitian/api/web/get-weekly-tab-list`,
-    GETCLIENTPROFILEDETAILS: `/${API_VERSION}/dietitian/api/web/get_client_profile_details`
+    GETCLIENTPROFILEDETAILS: `/${API_VERSION}/dietitian/api/web/get_client_profile_details`,
+    GETCLIENTPROFILEDETAILSMASKED: `/${API_VERSION}/dietitian/api/web/get_client_profile_details_masked`
 
   },
   MEALANALYSIS: {

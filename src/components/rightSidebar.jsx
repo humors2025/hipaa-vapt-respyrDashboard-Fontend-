@@ -3,10 +3,21 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import EditRightSideBar from "./edit-rightsidebar";
-import { getClientProfileDetails } from "../services/authService"; // Import the new service function
-import { cookieManager } from "../lib/cookies"; // Import cookie manager
-import { usePathname } from "next/navigation"; // For getting profile_id from URL
+import {
+  getClientProfileDetails,
+  getDietitianIdFromAccessToken,
+} from "../services/authService";
+import { usePathname, useSearchParams } from "next/navigation";
 import { resolveProfileImage } from "../lib/profileImage";
+
+// The masked API redacts identity fields to the literal string "hidden";
+// missing values arrive as "NA". Neither is safe to print.
+const isRedacted = (value) =>
+  value === null ||
+  value === undefined ||
+  value === "" ||
+  value === "NA" ||
+  String(value).toLowerCase() === "hidden";
 
 export default function RightSidebar({ isOpen, onClose, profileId, dietitianId }) {
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -14,6 +25,11 @@ export default function RightSidebar({ isOpen, onClose, profileId, dietitianId }
   const [clientData, setClientData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Derived from the route rather than passed in, so a new call site can't
+  // forget the flag and leak unmasked PII on the super-admin route.
+  const isMaskingRoute = pathname?.startsWith("/superadmin-trainer");
 
   // Level styles mapping
   const levelStyles = {
@@ -34,53 +50,24 @@ export default function RightSidebar({ isOpen, onClose, profileId, dietitianId }
   // Get current level styles (with fallback to level 1)
   const currentLevelStyles = levelStyles[currentLevel] || levelStyles[1];
 
-  // Get dietitian_id from cookies
-  const getDietitianId = () => {
-    const dieticianCookie = cookieManager.get("dietician");
-    if (dieticianCookie) {
-      try {
-        const parsedData = JSON.parse(decodeURIComponent(dieticianCookie));
-        return parsedData.dietician_id;
-      } catch (error) {
-        console.error("Error parsing dietician cookie:", error);
-        return null;
-      }
-    }
-    return null;
-  };
-
-  // Get profile_id from URL
-  const getProfileIdFromUrl = () => {
-    const pathSegments = pathname.split("/");
-    const profileIndex = pathSegments.findIndex(segment => segment === "profile");
-    if (profileIndex !== -1 && pathSegments[profileIndex + 1]) {
-      return pathSegments[profileIndex + 1];
-    }
-    return null;
-  };
+  // Identity comes from the access_token, never from an identity cookie.
+  const finalDietitianId = dietitianId || getDietitianIdFromAccessToken();
+  const finalProfileId = profileId || searchParams.get("profile_id");
 
   // Fetch client data when sidebar opens
   useEffect(() => {
-    if (isOpen) {
-      const dietitianIdFromCookie = getDietitianId();
-      const profileIdFromUrl = getProfileIdFromUrl();
-      
-      // Use provided IDs or fall back to cookie/URL
-      const finalDietitianId = dietitianId || dietitianIdFromCookie;
-      const finalProfileId = profileId || profileIdFromUrl;
-      
-      if (finalDietitianId && finalProfileId) {
-        fetchClientData(finalProfileId, finalDietitianId);
-      }
+    if (isOpen && finalDietitianId && finalProfileId) {
+      fetchClientData(finalProfileId, finalDietitianId);
     }
-  }, [isOpen, dietitianId, profileId, pathname]);
+  }, [isOpen, finalDietitianId, finalProfileId, isMaskingRoute]);
 
   const fetchClientData = async (profileId, dietitianId) => {
     setIsLoading(true);
     try {
-   
-      const response = await getClientProfileDetails(profileId, dietitianId);
-   
+      const response = await getClientProfileDetails(profileId, dietitianId, {
+        masking: isMaskingRoute,
+      });
+
       if (response.status && response.data) {
         setClientData(response.data);
         setCurrentLevel(parseInt(response.data.level_type) || 1);
@@ -101,6 +88,27 @@ export default function RightSidebar({ isOpen, onClose, profileId, dietitianId }
     setIsEditOpen(false); // Close edit sidebar first
     onClose(); // Then close main sidebar
   };
+
+  const personalInfo = [
+    clientData?.gender,
+    !isRedacted(clientData?.age) ? `${clientData.age} years` : null,
+    !isRedacted(clientData?.height) ? `${clientData.height} cm` : null,
+    !isRedacted(clientData?.weight) ? `${clientData.weight} kg` : null,
+  ]
+    .filter((part) => !isRedacted(part))
+    .join(", ");
+
+  const locationText = [
+    ...new Set(
+      [clientData?.region, clientData?.location].filter(
+        (part) => !isRedacted(part)
+      )
+    ),
+  ].join(", ");
+
+  const cuisineText = [clientData?.primary_cuisine, clientData?.secondary_cuisine]
+    .filter((part) => !isRedacted(part))
+    .join(", ");
 
   return (
     <>
@@ -159,7 +167,7 @@ export default function RightSidebar({ isOpen, onClose, profileId, dietitianId }
                       <div>
                         <div className="flex gap-1.5 items-center">
                           <p className="text-[#535359] text-[12px] font-normal leading-normal tracking-[-0.24px]">
-                            {clientData.phone_no !== "NA" ? clientData.phone_no : "Phone not available"}
+                            {!isRedacted(clientData.phone_no) ? clientData.phone_no : "Phone not available"}
                           </p>
                           <Image
                             src="/icons/Ellipse 765.svg"
@@ -168,7 +176,7 @@ export default function RightSidebar({ isOpen, onClose, profileId, dietitianId }
                             height={3}
                           />
                           <p className="text-[#535359] text-[12px] font-normal leading-normal tracking-[-0.24px]">
-                            {clientData.email !== "NA" ? clientData.email : "Email not available"}
+                            {!isRedacted(clientData.email) ? clientData.email : "Email not available"}
                           </p>
                         </div>
                       </div>
@@ -183,7 +191,7 @@ export default function RightSidebar({ isOpen, onClose, profileId, dietitianId }
                           Personal Info
                         </p>
                         <p className="text-[#252525] text-[15px] font-semibold leading-[110%] tracking-[-0.3px]">
-                          {`${clientData.gender}, ${clientData.age} years, ${clientData.height} cm, ${clientData.weight} kg`}
+                          {personalInfo || "Not available"}
                         </p>
                       </div>
                     </div> 
@@ -227,7 +235,7 @@ export default function RightSidebar({ isOpen, onClose, profileId, dietitianId }
                           Fitness Goal
                         </p>
                         <p className="text-[#252525] text-[15px] font-semibold leading-[110%] tracking-[-0.3px]">
-                          {clientData.fitness_goal_display || clientData.fitness_goal}
+                          {clientData.fitness_goal_display || clientData.fitness_goal || "Not specified"}
                         </p>
                       </div>
                     </div>
@@ -240,7 +248,7 @@ export default function RightSidebar({ isOpen, onClose, profileId, dietitianId }
                         </p>
                         <div className="flex flex-col gap-2.5">
                           <p className="text-[#252525] text-[15px] font-semibold leading-[110%] tracking-[-0.3px]">
-                            {clientData?.activity_level}
+                            {!isRedacted(clientData?.activity_level) ? clientData.activity_level : "Not specified"}
                           </p>
                         </div>
                       </div>
@@ -253,7 +261,7 @@ export default function RightSidebar({ isOpen, onClose, profileId, dietitianId }
                           Dietary Preferences
                         </p>
                        <p className="text-[#252525] text-[15px] font-semibold leading-[110%] tracking-[-0.3px]">
-                            {clientData?.diet_type}
+                            {clientData?.diet_type ?? clientData?.dietary_preferences?.diet_type ?? "Not specified"}
                           </p>
                       </div>
                     </div>
@@ -265,7 +273,7 @@ export default function RightSidebar({ isOpen, onClose, profileId, dietitianId }
       Cuisine Preferences
     </p>
     <p className="text-[#252525] text-[15px] font-semibold leading-[110%] tracking-[-0.3px]">
-      {clientData.primary_cuisine}, {clientData.secondary_cuisine}
+      {cuisineText || "Not specified"}
     </p>
   </div>
 </div>
@@ -280,10 +288,7 @@ export default function RightSidebar({ isOpen, onClose, profileId, dietitianId }
                         </p>
                         <div className="flex items-center gap-2.5">
                           <p className="text-[#252525] text-[15px] font-semibold leading-[110%] tracking-[-0.3px]">
-                            {clientData.region && clientData.region !== "NA" ? clientData.region : "Not specified"}
-                            {clientData.location && clientData.location !== "NA" && clientData.location !== clientData.region 
-                              ? `, ${clientData.location}` 
-                              : ""}
+                            {locationText || "Not specified"}
                           </p>
                         </div>
                       </div>
@@ -306,8 +311,8 @@ export default function RightSidebar({ isOpen, onClose, profileId, dietitianId }
             onClose={() => setIsEditOpen(false)}
             currentLevel={currentLevel}  
             onLevelUpdate={handleLevelUpdate}  
-            profileId={profileId || getProfileIdFromUrl()}
-            dietitianId={dietitianId || getDietitianId()}
+            profileId={finalProfileId}
+            dietitianId={finalDietitianId}
             clientData={clientData}
           />
         </div>
