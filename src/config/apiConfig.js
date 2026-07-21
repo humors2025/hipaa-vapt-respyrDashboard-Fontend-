@@ -122,6 +122,7 @@ export const API_ENDPOINTS = {
         TRAINERSALESANALYTICS: `/${API_VERSION}/dietitian/api/web/trainer-sales-analytics`,
          MANAGEADMINGROUPS: `/${API_VERSION}/dietitian/api/web/manage_admin_groups`,
           GETGROUPDETAILS: `/${API_VERSION}/dietitian/api/web/get_group_details`,
+          GETGROUPONBOARDING: `/${API_VERSION}/dietitian/api/web/get_group_onboarding`,
 
 
     VALIDATEINVITETOKEN: `/${API_VERSION}/dietitian/api/web/validate-invite-token`,

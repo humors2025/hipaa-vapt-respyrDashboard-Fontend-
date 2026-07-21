@@ -1199,6 +1199,58 @@ export const fetchGroupDetailsService = async ({
 // — we ignore the clients list and just return the period_overview block.
 
 
+// Trainers/clients onboarded inside a date window for one admin group
+// (get_group_onboarding.php). group_name comes from the MANAGEADMINGROUPS
+// response; actor_user_id is the user_id decoded from the access_token cookie.
+// type: "all" | "trainers" | "clients" — which list the backend paginates.
+// member: a single admin's partner_code to scope to their sub-network ("" = whole group).
+export const fetchGroupOnboardingService = async ({
+  groupName,
+  dateFrom,
+  dateTo,
+  type = "all",
+  member = "",
+  page = 1,
+  limit = 10,
+  search = "",
+} = {}) => {
+  const accessToken = Cookies.get("access_token");
+
+  if (!accessToken) {
+    throw new Error("Access token missing. Please login again.");
+  }
+
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  if (!groupName) {
+    throw new Error("Group name is required.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.GETGROUPONBOARDING, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      group_name: groupName,
+      date_from: dateFrom,
+      date_to: dateTo,
+      type,
+      member,
+      page,
+      limit,
+      search,
+      actor_user_id: actorUserId,
+    }),
+  });
+};
+
+
 export const fetchGroupPeriodOverviewService = async ({ groupName, overviewDate, overviewMember } = {}) => {
   if (!groupName) throw new Error("Group name is required.");
   const res = await fetchGroupDetailsService({ groupName, page: 1, limit: 1, search: "", overviewDate, overviewMember });

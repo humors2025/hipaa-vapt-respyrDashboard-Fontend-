@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Calendar from "react-calendar";
 import "react-calendar/dist/Calendar.css";
 import { toast } from "sonner";
@@ -366,6 +367,7 @@ function AccTable({ rows, cols }) {
 
 export default function AnalyticsDashboard() {
   const dispatch = useDispatch();
+  const router = useRouter();
   // MANAGEADMINGROUPS response — captured at login into Redux (setAdminGroups),
   // re-fetched here if the in-memory store was reset (e.g. hard refresh).
   const adminGroups = useSelector(selectAdminGroups);
@@ -681,6 +683,23 @@ export default function AnalyticsDashboard() {
     : (compare ? getPrevRange(period, now) : null);
   const pm = periodMetrics(tabCl, tabTr, readingDatesMap, range);
   const ppm = prevR ? periodMetrics(tabCl, tabTr, readingDatesMap, prevR) : null;
+
+  // Onboarding drill-down: the two "Onboarded" cards open /trainer-admin/onboarding
+  // (get_group_onboarding) scoped to the SAME window + member the dashboard is on.
+  const onbRange = range || getPeriodRange("today", now);
+  const periodWord = period === "week" ? "this week" : period === "month" ? "this month" : period === "custom" ? "on this day" : "today";
+  const openOnboarding = (type) => {
+    if (!primaryGroupName) { toast.error("No admin group in context."); return; }
+    const qs = new URLSearchParams({
+      group: primaryGroupName,
+      from: toYMD(onbRange.start),
+      to: toYMD(onbRange.end),
+      type,
+      member: overviewMemberCode || "",
+      label: periodWord,
+    });
+    router.push(`/trainer-admin/onboarding?${qs.toString()}`);
+  };
 
   const adoptionRate = tTotal > 0 ? Math.round((tActive / tTotal) * 100) : 0;
   const engagementRate = cTotal > 0 ? Math.round((cActive / cTotal) * 100) : 0;
@@ -1190,10 +1209,21 @@ export default function AnalyticsDashboard() {
             {/* Onboarding metrics — 2 compact cards side by side */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
               {[
-                { val: pm.newTrainers, prev: ppm?.newTrainers, label: "Trainers", sub: "Onboarded", color: R.blue },
-                { val: pm.newClients, prev: ppm?.newClients, label: "Clients", sub: "Onboarded", color: R.green },
+                { val: pm.newTrainers, prev: ppm?.newTrainers, label: "Trainers", sub: "Onboarded", color: R.blue, type: "trainers" },
+                { val: pm.newClients, prev: ppm?.newClients, label: "Clients", sub: "Onboarded", color: R.green, type: "clients" },
               ].map((item) => (
-                <div key={item.label} style={{ padding: "14px", borderRadius: "12px", backgroundColor: "rgba(148,163,184,0.06)", border: "1px solid rgba(148,163,184,0.1)" }}>
+                <div
+                  key={item.label}
+                  role="button"
+                  tabIndex={0}
+                  title={`View ${item.label.toLowerCase()} onboarded ${periodWord}`}
+                  onClick={() => openOnboarding(item.type)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openOnboarding(item.type); } }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(148,163,184,0.12)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "rgba(148,163,184,0.06)"; e.currentTarget.style.transform = "none"; }}
+                  className="cursor-pointer"
+                  style={{ padding: "14px", borderRadius: "12px", backgroundColor: "rgba(148,163,184,0.06)", border: "1px solid rgba(148,163,184,0.1)", transition: "background-color 0.2s ease, transform 0.2s ease", outline: "none" }}
+                >
                   <div className="flex items-center justify-between">
                     <div style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: item.color }} />
                     {item.prev != null && item.val !== item.prev && (
@@ -1203,7 +1233,10 @@ export default function AnalyticsDashboard() {
                     )}
                   </div>
                   <div style={{ fontSize: "26px", fontWeight: 800, letterSpacing: "-1px", marginTop: "8px", lineHeight: 1 }}>{item.val}</div>
-                  <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px" }}>{item.label} {item.sub}</div>
+                  <div className="flex items-center justify-between" style={{ marginTop: "4px" }}>
+                    <span style={{ fontSize: "11px", color: "#64748b" }}>{item.label} {item.sub}</span>
+                    <span style={{ fontSize: "11px", color: "#64748b" }}>›</span>
+                  </div>
                 </div>
               ))}
             </div>
