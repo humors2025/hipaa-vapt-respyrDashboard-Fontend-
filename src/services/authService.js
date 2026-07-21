@@ -789,19 +789,37 @@ export const fetchClientWeeklyDates = async (profileId, dietitianId) => {
 
 
 
-export const fetchMacroSummaryByDate = async (profileId, date, dietitianId) => {
+// export const fetchMacroSummaryByDate = async (profileId, date, dietitianId) => {
+//   return apiFetcher(API_ENDPOINTS.MACROSANALYSIS.GETMACROSUMMARY, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify(withSuperAdminPartnerCode({
+//       profile_id: profileId,
+//       dietitian_id: dietitianId,
+//       date: date,
+//     })),
+//   });
+// };
+
+
+
+
+export const fetchMacroSummaryByDate = async (profileId, date) => {
   return apiFetcher(API_ENDPOINTS.MACROSANALYSIS.GETMACROSUMMARY, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(withSuperAdminPartnerCode({
+    body: JSON.stringify({
       profile_id: profileId,
-      dietitian_id: dietitianId,
-      date: date,
-    })),
+      dietitian_id: getDietitianIdFromAccessToken(),
+      date,
+    }),
   });
 };
+
 
 
 export const fetchHabitsMonitoringData = async (profileId, dietitianId) => {
