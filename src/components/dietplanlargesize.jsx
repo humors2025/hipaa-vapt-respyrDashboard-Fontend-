@@ -259,7 +259,11 @@ export default function DietPlanLargeSize() {
       setEditedPlan((prev) => {
         const base = prev || { days: JSON.parse(JSON.stringify(planDays)) };
         const newDays = JSON.parse(JSON.stringify(base.days));
-        if (!newDays[dayIndex]) return base;
+        // Empty plan (no days yet) — seed skeleton days up to the target index
+        // so the first food can still be added.
+        while (newDays.length <= dayIndex) {
+          newDays.push({ day_code: `d${newDays.length + 1}` });
+        }
         if (!newDays[dayIndex][mealKey]) newDays[dayIndex][mealKey] = { foods: [] };
         if (!newDays[dayIndex][mealKey].foods) newDays[dayIndex][mealKey].foods = [];
         newDays[dayIndex][mealKey].foods.push(food);
@@ -445,7 +449,24 @@ export default function DietPlanLargeSize() {
         ) : dietAnalysisError ? (
           <EmptyState text={dietAnalysisError} error />
         ) : workingDays.length === 0 ? (
-          <EmptyState text="No food data available" />
+          <div className="h-[300px] flex flex-col items-center justify-center gap-3">
+            <p className="text-[#738298] text-[13px] font-medium">
+              No food data available
+            </p>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setAddFoodMealKey(MEAL_TYPES[0].key)}
+                className="flex items-center gap-2 px-3 py-2 rounded-[8px] bg-[#308BF9] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#2678D9]"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Add food
+              </button>
+            )}
+          </div>
         ) : (
           <>
             {/* Day Header - Clickable day selector */}
