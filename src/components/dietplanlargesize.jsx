@@ -77,7 +77,7 @@ export default function DietPlanLargeSize() {
 
   // status_value (approval) only controls mobile app visibility — trainer
   // dashboard editing must work for both status=0 (draft) and status=1 (approved).
-  const canEdit = !isSuperAdmin;
+  const canEdit = true;
   const hasEdits = pendingOps.length > 0;
 
   useEffect(() => {
@@ -93,7 +93,8 @@ export default function DietPlanLargeSize() {
   // are scoped to their diet and cuisine. Non-fatal: search still works unfiltered.
   useEffect(() => {
     if (!profileId) return;
-    const dietitianId = cookieManager.getJSON("dietician")?.dietician_id;
+    const token = cookieManager.get("access_token");
+    const dietitianId = token ? decodeJwt(token)?.dietician_id : null;
     if (!dietitianId) return;
     let cancelled = false;
     (async () => {
@@ -259,7 +260,11 @@ export default function DietPlanLargeSize() {
       setEditedPlan((prev) => {
         const base = prev || { days: JSON.parse(JSON.stringify(planDays)) };
         const newDays = JSON.parse(JSON.stringify(base.days));
-        if (!newDays[dayIndex]) return base;
+        // Empty plan (no days yet) — seed skeleton days up to the target index
+        // so the first food can still be added.
+        while (newDays.length <= dayIndex) {
+          newDays.push({ day_code: `d${newDays.length + 1}` });
+        }
         if (!newDays[dayIndex][mealKey]) newDays[dayIndex][mealKey] = { foods: [] };
         if (!newDays[dayIndex][mealKey].foods) newDays[dayIndex][mealKey].foods = [];
         newDays[dayIndex][mealKey].foods.push(food);
@@ -296,7 +301,9 @@ export default function DietPlanLargeSize() {
   const saveAllChanges = async () => {
     if (pendingOps.length === 0) return;
     const raw = dietAnalysisData?.data || {};
-    const cookieDieticianId = cookieManager.getJSON("dietician")?.dietician_id;
+    const token = cookieManager.get("access_token");
+    const decoded = token ? decodeJwt(token) : null;
+    const cookieDieticianId = decoded?.dietician_id;
 
     // Build a normalised selectedWeek — fall back to cookie / URL where the
     // response object doesn't carry the field. Backend column is dietitian_id.
@@ -348,7 +355,7 @@ export default function DietPlanLargeSize() {
 
       // Fire-and-forget edit log for preference learning
       if (originalDaysRef.current && editedPlan?.days) {
-        const dieticianId = cookieManager.getJSON("dietician")?.dietician_id;
+        const dieticianId = decoded?.dietician_id;
         fetch("/api/diet-plan/log-edit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -382,8 +389,9 @@ export default function DietPlanLargeSize() {
     try {
       setIsApproving(true);
 
-      const dieticianCookie = cookieManager.getJSON("dietician");
-      const dieticianId = dieticianCookie?.dietician_id;
+      const token = cookieManager.get("access_token");
+      const decoded = token ? decodeJwt(token) : null;
+      const dieticianId = decoded?.dietician_id;
 
       const planId = dietAnalysisData?.data?.id;
 
@@ -445,7 +453,24 @@ export default function DietPlanLargeSize() {
         ) : dietAnalysisError ? (
           <EmptyState text={dietAnalysisError} error />
         ) : workingDays.length === 0 ? (
-          <EmptyState text="No food data available" />
+          <div className="h-[300px] flex flex-col items-center justify-center gap-3">
+            <p className="text-[#738298] text-[13px] font-medium">
+              No food data available
+            </p>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setAddFoodMealKey(MEAL_TYPES[0].key)}
+                className="flex items-center gap-2 px-3 py-2 rounded-[8px] bg-[#308BF9] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#2678D9]"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Add food
+              </button>
+            )}
+          </div>
         ) : (
           <>
             {/* Day Header - Clickable day selector */}
@@ -628,7 +653,7 @@ export default function DietPlanLargeSize() {
         )}
       </div>
 
-      {!isSuperAdmin && (
+      {/* {!isSuperAdmin && ( */}
         <div className="flex gap-2.5 justify-end mt-2">
           {!isApproved && (
             <p className="py-[11px] text-[#535359] text-[10px] font-normal leading-normal tracking-[-0.2px]">
@@ -671,7 +696,7 @@ export default function DietPlanLargeSize() {
             </div>
           </div>
         </div>
-      )}
+      {/* )} */}
 
       {showApprovePopup && !isApproved && (
         <ApproveConfirmationPopup
