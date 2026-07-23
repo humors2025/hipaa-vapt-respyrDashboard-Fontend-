@@ -6,8 +6,8 @@ import { fetchMacroSummaryByDate } from "../services/authService";
 // Async thunk to fetch macro summary
 export const getMacroSummary = createAsyncThunk(
   "macroSummary/getMacroSummary",
-  async ({ profileId, date, dietitianId }) => {
-    const response = await fetchMacroSummaryByDate(profileId, date, dietitianId);
+  async ({ profileId, date }) => {
+    const response = await fetchMacroSummaryByDate(profileId, date);
     return response;
   }
 );
