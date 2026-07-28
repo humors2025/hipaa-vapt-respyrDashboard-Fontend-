@@ -734,6 +734,22 @@ export default function AnalyticsDashboard() {
     router.push(`/super-admin/onboarding?${qs.toString()}`);
   };
 
+  // Reading Split drill-down: the Trainers / Clients rows open /trainer-admin/readers
+  // (get_group_period_readers) scoped to the SAME window + member the dashboard is
+  // on. overview_from/overview_to default to today via the period range.
+  const openPeriodReaders = (type) => {
+    if (!primaryGroupName) { toast.error("No admin group in context."); return; }
+    const qs = new URLSearchParams({
+      group: primaryGroupName,
+      from: toYMD(onbRange.start),
+      to: toYMD(onbRange.end),
+      type,
+      member: overviewMemberCode || "",
+      label: periodWord,
+    });
+    router.push(`/trainer-admin/readers?${qs.toString()}`);
+  };
+
   const adoptionRate = tTotal > 0 ? Math.round((tActive / tTotal) * 100) : 0;
   const engagementRate = cTotal > 0 ? Math.round((cActive / cTotal) * 100) : 0;
   const activeTrainers = tabTr.filter(t => t.pct >= ACTIVE_THRESHOLD);
@@ -1335,14 +1351,26 @@ export default function AnalyticsDashboard() {
 
                       <div className="flex flex-col gap-2 w-full">
                         {[
-                          { label: "Trainers", val: periodTrainerReads, color: R.blue },
-                          { label: "Clients", val: periodClientReads, color: `${R.green}80` },
+                          { label: "Trainers", val: periodTrainerReads, color: R.blue, type: "trainers" },
+                          { label: "Clients", val: periodClientReads, color: `${R.green}80`, type: "clients" },
                         ].map(s => (
-                          <div key={s.label} className="flex items-center gap-2" style={{ padding: "6px 10px", borderRadius: "8px", backgroundColor: "rgba(148,163,184,0.05)" }}>
+                          <div
+                            key={s.label}
+                            role="button"
+                            tabIndex={0}
+                            title={`View ${s.label.toLowerCase()} who took readings ${periodWord}`}
+                            onClick={() => openPeriodReaders(s.type)}
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPeriodReaders(s.type); } }}
+                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(148,163,184,0.14)"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "rgba(148,163,184,0.05)"; }}
+                            className="flex items-center gap-2 cursor-pointer"
+                            style={{ padding: "6px 10px", borderRadius: "8px", backgroundColor: "rgba(148,163,184,0.05)", transition: "background-color 0.2s ease", outline: "none" }}
+                          >
                             <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: s.color, flexShrink: 0 }} />
                             <span style={{ fontSize: "11px", color: "#94a3b8", flex: 1 }}>{s.label}</span>
                             <span style={{ fontSize: "14px", fontWeight: 700 }}>{s.val}</span>
                             <span style={{ fontSize: "10px", color: "#475569" }}>({periodTotalReads > 0 ? Math.round((s.val / periodTotalReads) * 100) : 0}%)</span>
+                            <span style={{ fontSize: "11px", color: "#64748b" }}>›</span>
                           </div>
                         ))}
                       </div>

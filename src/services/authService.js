@@ -1269,6 +1269,61 @@ export const fetchGroupOnboardingService = async ({
 };
 
 
+// Who actually took readings inside a date window for one admin group
+// (get_group_period_readers.php) — the drill-down behind the analytics
+// "Reading Split" (Trainers / Clients). group_name comes from the
+// MANAGEADMINGROUPS response; actor_user_id is the user_id decoded from the
+// access_token cookie. overview_from/overview_to bound the window (same day for
+// a single-day period); overview_member scopes it to one admin's sub-network
+// ("" = whole group). type: "all" | "trainers" | "clients" — which reader list
+// the backend paginates.
+export const fetchGroupPeriodReadersService = async ({
+  groupName,
+  overviewFrom,
+  overviewTo,
+  overviewMember = "",
+  type = "all",
+  page = 1,
+  limit = 50,
+  search = "",
+} = {}) => {
+  const accessToken = Cookies.get("access_token");
+
+  if (!accessToken) {
+    throw new Error("Access token missing. Please login again.");
+  }
+
+  const actorUserId = getActorUserIdFromAccessToken();
+
+  if (!actorUserId) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  if (!groupName) {
+    throw new Error("Group name is required.");
+  }
+
+  return apiFetcher(API_ENDPOINTS.ADMINPANEL.GETGROUPPERIODREADERS, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      group_name: groupName,
+      overview_from: overviewFrom,
+      overview_to: overviewTo || overviewFrom,
+      overview_member: overviewMember,
+      type,
+      page,
+      limit,
+      search,
+    }),
+  });
+};
+
+
 export const fetchGroupPeriodOverviewService = async ({ groupName, overviewDate, overviewMember } = {}) => {
   if (!groupName) throw new Error("Group name is required.");
   const res = await fetchGroupDetailsService({ groupName, page: 1, limit: 1, search: "", overviewDate, overviewMember });
