@@ -123,6 +123,7 @@ export const API_ENDPOINTS = {
          MANAGEADMINGROUPS: `/${API_VERSION}/dietitian/api/web/manage_admin_groups`,
           GETGROUPDETAILS: `/${API_VERSION}/dietitian/api/web/get_group_details`,
           GETGROUPONBOARDING: `/${API_VERSION}/dietitian/api/web/get_group_onboarding`,
+          GETGROUPPERIODREADERS: `/${API_VERSION}/dietitian/api/web/get_group_period_readers`,
 
 
     VALIDATEINVITETOKEN: `/${API_VERSION}/dietitian/api/web/validate-invite-token`,
