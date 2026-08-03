@@ -597,7 +597,7 @@ export default function AnalyticsDashboard() {
       const last = sorted.length ? sorted[sorted.length - 1] : null;
       const onb = c.client?.joined_dttm || (sorted.length ? sorted[0] : null);
       const lastT = c.test_history?.last_test_date_time || last;
-      const ds = onb ? daysBetween(onb, now) : 0;
+      const ds = onb ? daysBetween(onb, now) + 1: 0;
       const pct = ds > 0 ? Math.min(100, Math.round((rd / ds) * 100)) : 0;
       const code = (c.dietitian_id || "").toUpperCase();
       const tr = all.find(t => (t.partner_code || t.dietician_id || "").toUpperCase() === code);
@@ -610,10 +610,11 @@ export default function AnalyticsDashboard() {
       const tc = (t.partner_code || t.dietician_id || "").toUpperCase();
       const sc = selfT.find(c => { const ce = (c.email || "").toLowerCase().trim(), cn = (c.name || "").trim(); return ce === te || isMaskedMatch(ce, te) || isMaskedNameMatch(cn, tn); });
       const allDates = sc ? (readingDatesMap[sc.profile_id] || []) : [];
-      const ds = t.created_at ? daysBetween(t.created_at, now) : 0;
+      const ds = t.created_at ? daysBetween(t.created_at, now) + 1 : 0;
       const dates = t.created_at ? allDates.filter(d => !d.date || new Date(d.date) >= new Date(new Date(t.created_at).getFullYear(), new Date(t.created_at).getMonth(), new Date(t.created_at).getDate())) : allDates;
       // Prefer the API's authoritative counts; fall back to derived values (mock).
       const rd = t.total_tests != null ? t.total_tests : dates.length;
+
       // The trainer's OWN tests — prefer the backend's authoritative self_reading count;
       // fall back to their self-test client profile (sc). 0 if neither is available.
       const selfTests = t.self_reading_tests != null
@@ -880,7 +881,7 @@ export default function AnalyticsDashboard() {
         // Admin's Own Rate is their own self-test rate (tests ÷ days since they joined).
         let pct = tr ? tr.pct : null;
         if (isAdmin && adminSelf) {
-          const ds = adminSelf.joined ? daysBetween(adminSelf.joined, now) : 0;
+          const ds = adminSelf.joined ? daysBetween(adminSelf.joined, now) + 1 : 0;
           pct = ds > 0 ? Math.min(100, Math.round((adminSelf.total_tests / ds) * 100)) : 0;
         }
         entry = { ...(tr || {}), name: tr?.name || c.trainerName || "—", partner_code: tr?.partner_code || code || "—", taName: tr?.taName || c.taName, pct, _clientsHere: 0, _self: isAdmin };
