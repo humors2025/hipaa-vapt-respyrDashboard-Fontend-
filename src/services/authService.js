@@ -1164,11 +1164,17 @@ export const fetchAdminGroupsService = async () => {
 // Paginated details for a single admin group (get_group_details.php).
 // actor_user_id is the user_id decoded from the access_token cookie; group_name
 // identifies which group to expand (sourced from the MANAGEADMINGROUPS response).
+// The clients and trainers lists paginate INDEPENDENTLY: page/limit/clients_search
+// drive clients[] + clients_pagination, trainer_page/trainer_limit/trainer_search
+// drive trainers[] + trainers_pagination.
 export const fetchGroupDetailsService = async ({
   groupName,
   page = 1,
   limit = 10,
   search = "",
+  trainerPage = 1,
+  trainerLimit = 100,
+  trainerSearch = "",
   overviewDate = "",
   overviewMember = "",
 } = {}) => {
@@ -1191,9 +1197,16 @@ export const fetchGroupDetailsService = async ({
   const body = {
     actor_user_id: actorUserId,
     group_name: groupName,
+    // Clients list window. `search` is kept alongside `clients_search` so the call
+    // works against both the old (single `search`) and current API contracts.
     page,
     limit,
     search,
+    clients_search: search,
+    // Trainers list window — independent of the clients one.
+    trainer_page: trainerPage,
+    trainer_limit: trainerLimit,
+    trainer_search: trainerSearch,
   };
   // Scopes period_overview to a single day (YYYY-MM-DD); omitted → backend default (today).
   if (overviewDate) body.overview_date = overviewDate;
@@ -1326,7 +1339,8 @@ export const fetchGroupPeriodReadersService = async ({
 
 export const fetchGroupPeriodOverviewService = async ({ groupName, overviewDate, overviewMember } = {}) => {
   if (!groupName) throw new Error("Group name is required.");
-  const res = await fetchGroupDetailsService({ groupName, page: 1, limit: 1, search: "", overviewDate, overviewMember });
+  // limit/trainer_limit of 1 keeps the payload small — only period_overview is read.
+  const res = await fetchGroupDetailsService({ groupName, page: 1, limit: 1, search: "", trainerPage: 1, trainerLimit: 1, trainerSearch: "", overviewDate, overviewMember });
   return res?.period_overview || null;
 };
 
