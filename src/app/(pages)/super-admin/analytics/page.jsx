@@ -42,6 +42,20 @@ function getCohort(pct) { for (const t of COHORTS) if (pct >= t) return `${t}%+`
 function goalColor(g) { if (!g) return R.tm; const l = g.toLowerCase(); if (l.includes("fat")) return R.orange; if (l.includes("loss")) return R.red; if (l.includes("gain") || l.includes("muscle")) return R.green; return R.blue; }
 function goalLabel(g) { if (!g) return "—"; const l = g.toLowerCase(); if (l.includes("fat")) return "Fat Loss"; if (l.includes("weight")) return "Weight Loss"; if (l.includes("muscle") || l.includes("gain")) return "Muscle Gain"; return g; }
 
+// Rows per page for the Trainer Adoption / Client Engagement tables.
+const TRAINER_PAGE_SIZE = 6;
+const CLIENT_PAGE_SIZE = 6;
+// Case-insensitive "contains" across a row's searchable fields. Client names and
+// emails arrive masked from the API (e.g. "Ch******e"), so a search matches
+// whatever characters the mask leaves visible.
+function rowMatches(fields, q) {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return true;
+  return fields.some(f => f != null && String(f).toLowerCase().includes(needle));
+}
+const trainerSearchFields = t => [t.name, t.partner_code, t.dietician_id, t.email, t.taName];
+const clientSearchFields = c => [c.name, c.profile_id, c.email, c.trainerName, goalLabel(c.fitness_goal), c.dietitian_id];
+
 function isMaskedMatch(m, r) {
   if (!m || !r) return false;
   const mp = m.toLowerCase().split("@"), rp = r.toLowerCase().split("@");
@@ -323,8 +337,92 @@ function Donut({ pct, size = 120, thickness = 10, color = R.blue, label, bg, tra
   );
 }
 
-function AccTable({ rows, cols, rowStyle }) {
+/* Compact search input used by the Trainer Adoption / Client Engagement tables.
+   Filtering is client-side over the fully-loaded group data (every clients/trainers
+   page is merged in groupDetailsSlice), so a search never re-queries the API and
+   never narrows the data the dashboard's totals are derived from. */
+function SearchBox({ value, onChange, placeholder }) {
+  const [focus, setFocus] = useState(false);
+  return (
+    <div className="flex items-center gap-2" style={{
+      flex: 1, minWidth: 0, backgroundColor: focus ? "#ffffff" : "#F8FAFC",
+      border: `1px solid ${focus ? R.blue + "55" : "#EEF2F6"}`, borderRadius: "8px",
+      padding: "6px 10px", transition: "all 0.2s ease",
+      boxShadow: focus ? `0 0 0 3px ${R.blue}12` : "none",
+    }}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={focus ? R.blue : R.tm} strokeWidth="2.2" strokeLinecap="round" className="shrink-0">
+        <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
+      </svg>
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onFocus={() => setFocus(true)}
+        onBlur={() => setFocus(false)}
+        placeholder={placeholder}
+        style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", fontSize: "12px", color: R.tp, letterSpacing: "-0.24px", fontFamily: "inherit" }}
+      />
+      {value && (
+        <button type="button" onClick={() => onChange("")} title="Clear search"
+          className="flex items-center justify-center cursor-pointer shrink-0"
+          style={{ width: 16, height: 16, borderRadius: "50%", border: "none", backgroundColor: "#E2E8F0", color: R.ts, fontSize: "11px", lineHeight: 1, padding: 0 }}>
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* Page bar rendered under a paginated AccTable. Pages are numbered with an
+   ellipsis window so long trainer/client lists stay on one line. */
+function Pager({ page, totalPages, total, from, to, onPage }) {
+  if (totalPages <= 1) return (
+    <div className="flex items-center justify-end pt-2" style={{ fontSize: "10px", color: R.tm, letterSpacing: "-0.2px" }}>
+      {total} {total === 1 ? "row" : "rows"}
+    </div>
+  );
+  const nums = [];
+  const push = n => { if (!nums.includes(n)) nums.push(n); };
+  push(1);
+  for (let n = page - 1; n <= page + 1; n++) if (n > 1 && n < totalPages) push(n);
+  push(totalPages);
+  nums.sort((a, b) => a - b);
+
+  const btn = (disabled, active) => ({
+    minWidth: "22px", height: "22px", padding: "0 5px", borderRadius: "6px",
+    border: `1px solid ${active ? R.blue : "#EEF2F6"}`,
+    backgroundColor: active ? R.blue : "#ffffff",
+    color: active ? "#ffffff" : disabled ? R.td : R.ts,
+    fontSize: "10px", fontWeight: active ? 700 : 500, letterSpacing: "-0.2px",
+    cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1,
+    display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s ease",
+  });
+
+  return (
+    <div className="flex items-center justify-between gap-2 pt-2" style={{ flexShrink: 0 }}>
+      <span style={{ fontSize: "10px", color: R.tm, letterSpacing: "-0.2px", whiteSpace: "nowrap" }}>
+        {from}–{to} of {total}
+      </span>
+      <div className="flex items-center gap-1">
+        <button type="button" disabled={page === 1} onClick={() => onPage(page - 1)} style={btn(page === 1, false)} title="Previous page">‹</button>
+        {nums.map((n, i) => (
+          <span key={n} className="flex items-center gap-1">
+            {i > 0 && n - nums[i - 1] > 1 && <span style={{ fontSize: "10px", color: R.td }}>…</span>}
+            <button type="button" onClick={() => onPage(n)} style={btn(false, n === page)}>{n}</button>
+          </span>
+        ))}
+        <button type="button" disabled={page === totalPages} onClick={() => onPage(page + 1)} style={btn(page === totalPages, false)} title="Next page">›</button>
+      </div>
+    </div>
+  );
+}
+
+// pageSize > 0 turns on pagination: rows are sorted in FULL, then sliced, so the
+// sort order is global rather than per-page. resetKey (tab + search term) sends the
+// table back to page 1 whenever the underlying row set changes.
+function AccTable({ rows, cols, rowStyle, pageSize = 0, resetKey }) {
   const [sort, setSort] = useState({ key: null, asc: true });
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [resetKey, pageSize]);
   const sorted = sort.key ? [...rows].sort((a, b) => {
     const av = typeof cols.find(c => c.key === sort.key)?.val === "function" ? cols.find(c => c.key === sort.key).val(a) : a[sort.key];
     const bv = typeof cols.find(c => c.key === sort.key)?.val === "function" ? cols.find(c => c.key === sort.key).val(b) : b[sort.key];
@@ -334,9 +432,15 @@ function AccTable({ rows, cols, rowStyle }) {
     const cmp = typeof av === "string" ? av.localeCompare(bv) : av - bv;
     return sort.asc ? cmp : -cmp;
   }) : rows;
-  const toggle = (key) => setSort(s => s.key === key ? { key, asc: !s.asc } : { key, asc: true });
+  const toggle = (key) => { setSort(s => s.key === key ? { key, asc: !s.asc } : { key, asc: true }); setPage(1); };
   const arrow = (key) => sort.key !== key ? "↕" : sort.asc ? "↑" : "↓";
   const thBase = { fontWeight: 500, padding: "8px 0", fontSize: "10px", color: R.tm, letterSpacing: "-0.2px", borderBottom: `1px solid ${R.border}` };
+
+  const total = sorted.length;
+  const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+  const curPage = Math.min(page, totalPages);
+  const visible = pageSize > 0 ? sorted.slice((curPage - 1) * pageSize, curPage * pageSize) : sorted;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", fontSize: "12px", letterSpacing: "-0.24px", flex: 1, minHeight: 0 }}>
       <div className="uppercase" style={{ display: "flex", backgroundColor: "#ffffff", position: "relative", zIndex: 2, flexShrink: 0 }}>
@@ -349,7 +453,7 @@ function AccTable({ rows, cols, rowStyle }) {
         ))}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-        {sorted.map((r, i) => (
+        {visible.map((r, i) => (
           <div key={i} className="transition-colors duration-150" style={{ display: "flex", borderBottom: `1px solid ${R.surface}`, backgroundColor: i % 2 === 1 ? `${R.surface}80` : "transparent", cursor: "default", ...(rowStyle ? rowStyle(r) : {}) }}
             onMouseEnter={e => e.currentTarget.style.backgroundColor = `${R.blueLight}60`}
             onMouseLeave={e => e.currentTarget.style.backgroundColor = i % 2 === 1 ? `${R.surface}80` : "transparent"}>
@@ -361,6 +465,11 @@ function AccTable({ rows, cols, rowStyle }) {
           </div>
         ))}
       </div>
+      {pageSize > 0 && total > 0 && (
+        <Pager page={curPage} totalPages={totalPages} total={total}
+          from={(curPage - 1) * pageSize + 1} to={Math.min(curPage * pageSize, total)}
+          onPage={setPage} />
+      )}
     </div>
   );
 }
@@ -417,6 +526,10 @@ export default function AnalyticsDashboard() {
   const calRef = useRef(null);
   const [openAcc, setOpenAcc] = useState(new Set());
   const [trainerTab, setTrainerTab] = useState("all");
+  // Table search terms. Both filter client-side over the fully-loaded group data,
+  // so the dashboard's totals/cohorts (derived from the unfiltered set) are untouched.
+  const [trainerSearch, setTrainerSearch] = useState("");
+  const [clientSearch, setClientSearch] = useState("");
   const [cohortTab, setCohortTab] = useState(0);
   const [cohortSubTab, setCohortSubTab] = useState("trainers");
   // Trainer rows temporarily excluded via the Trainer Adoption checkboxes. A
@@ -758,6 +871,17 @@ export default function AnalyticsDashboard() {
   const atRiskTrainers = tabTr.filter(t => t.pct < 30);
   const eliteCount = eliteTrainers.length;
   const atRiskTrainerCount = atRiskTrainers.length;
+  // Rows behind the Trainer Adoption table: the active tab's list, narrowed by the
+  // search box. The "All" tab uses the UNFILTERED list so a checkbox-excluded
+  // trainer stays visible (dimmed) and can be unchecked.
+  const trainerTabRows = ({ all: tabTrAll, active: activeTrainers, elite: eliteTrainers, atrisk: atRiskTrainers })[trainerTab] || [];
+  const trainerRows = trainerSearch.trim()
+    ? trainerTabRows.filter(t => rowMatches(trainerSearchFields(t), trainerSearch))
+    : trainerTabRows;
+  // Rows behind the Client Engagement table — same idea, over this tab's clients.
+  const clientRows = clientSearch.trim()
+    ? tabCl.filter(c => rowMatches(clientSearchFields(c), clientSearch))
+    : tabCl;
   const highestRate = tabCl.length > 0 ? Math.max(...tabCl.map(c => c.pct)) : 0;
   const lowestRate = tabCl.length > 0 ? Math.min(...tabCl.map(c => c.pct)) : 0;
 
@@ -1383,7 +1507,7 @@ export default function AnalyticsDashboard() {
           </div>
 
           {/* ── Left Bottom: Trainer Adoption ── */}
-          <div className="p-5 analytics-card-animate" style={{ ...CS, display: "flex", flexDirection: "column", height: "420px" }}
+          <div className="p-5 analytics-card-animate" style={{ ...CS, display: "flex", flexDirection: "column", height: "480px" }}
             onMouseEnter={e => Object.assign(e.currentTarget.style, csHover)}
             onMouseLeave={e => Object.assign(e.currentTarget.style, csReset)}>
 
@@ -1431,6 +1555,16 @@ export default function AnalyticsDashboard() {
               ))}
             </div>
 
+            {/* Search — filters the active tab's rows */}
+            <div className="flex items-center gap-2 mt-2">
+              <SearchBox value={trainerSearch} onChange={setTrainerSearch} placeholder="Search trainers" />
+              {trainerSearch.trim() && (
+                <span className="shrink-0" style={{ fontSize: "10px", fontWeight: 600, color: R.blue, backgroundColor: R.blueLight, borderRadius: R.rBadge, padding: "4px 8px", letterSpacing: "-0.2px", whiteSpace: "nowrap" }}>
+                  {trainerRows.length} {trainerRows.length === 1 ? "match" : "matches"}
+                </span>
+              )}
+            </div>
+
             {/* Exclusion banner — shown while any trainer is checkbox-excluded */}
             {excludedTrainerIds.size > 0 && (
               <div className="flex items-center justify-between mt-2" style={{ backgroundColor: "#FFF8EB", border: "1px solid #FFE3AD", borderRadius: "8px", padding: "6px 10px" }}>
@@ -1449,18 +1583,20 @@ export default function AnalyticsDashboard() {
                 to the filtered set. */}
             <div className="mt-3 flex-1 flex flex-col" style={{ overflow: "hidden" }}>
               {(() => {
-                const tabs = { all: tabTrAll, active: activeTrainers, elite: eliteTrainers, atrisk: atRiskTrainers };
-                const list = tabs[trainerTab] || [];
+                const list = trainerRows;
+                const searching = !!trainerSearch.trim();
                 if (list.length === 0) return <div className="flex flex-col items-center justify-center flex-1 gap-3">
                   <div className="rounded-full flex items-center justify-center" style={{ width: 48, height: 48, backgroundColor: "#F8FAFC", border: "1px solid #EEF2F6" }}>
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
                   </div>
                   <div className="text-center">
-                    <div style={{ fontSize: "13px", fontWeight: 600, color: R.ts }}>No trainers in this group</div>
-                    <div style={{ fontSize: "11px", color: R.tm, marginTop: "4px" }}>Try selecting a different tab</div>
+                    <div style={{ fontSize: "13px", fontWeight: 600, color: R.ts }}>{searching ? `No trainers match “${trainerSearch.trim()}”` : "No trainers in this group"}</div>
+                    {searching
+                      ? <button onClick={() => setTrainerSearch("")} className="cursor-pointer mt-2" style={{ border: "none", background: R.blueLight, color: R.blue, fontSize: "11px", fontWeight: 600, borderRadius: R.rBadge, padding: "4px 10px" }}>Clear search</button>
+                      : <div style={{ fontSize: "11px", color: R.tm, marginTop: "4px" }}>Try selecting a different tab</div>}
                   </div>
                 </div>;
-                if (trainerTab === "all") return <AccTable rows={list} rowStyle={excludedRowStyle} cols={[
+                if (trainerTab === "all") return <AccTable rows={list} rowStyle={excludedRowStyle} pageSize={TRAINER_PAGE_SIZE} resetKey={`${trainerTab}|${trainerSearch}|${activeTab}`} cols={[
                   excludeCol,
                   { key: "name", label: "Trainer", val: r => r.name || "—" },
                   { key: "realClientCount", label: "Clients", align: "center", val: r => r.realClientCount ?? 0 },
@@ -1475,7 +1611,7 @@ export default function AnalyticsDashboard() {
                         : <span style={badgeStyle("#fef2f2", R.red)}>At Risk</span>
                   },
                 ]} />;
-                return <AccTable rows={list} rowStyle={excludedRowStyle} cols={trainerCols} />;
+                return <AccTable rows={list} rowStyle={excludedRowStyle} pageSize={TRAINER_PAGE_SIZE} resetKey={`${trainerTab}|${trainerSearch}|${activeTab}`} cols={trainerCols} />;
               })()}
             </div>
 
@@ -1524,9 +1660,32 @@ export default function AnalyticsDashboard() {
               ))}
             </div>
 
+            {/* Search — filters this tab's clients */}
+            <div className="flex items-center gap-2 mt-3">
+              <SearchBox value={clientSearch} onChange={setClientSearch} placeholder="Search clients" />
+              {clientSearch.trim() && (
+                <span className="shrink-0" style={{ fontSize: "10px", fontWeight: 600, color: R.blue, backgroundColor: R.blueLight, borderRadius: R.rBadge, padding: "4px 8px", letterSpacing: "-0.2px", whiteSpace: "nowrap" }}>
+                  {clientRows.length} {clientRows.length === 1 ? "match" : "matches"}
+                </span>
+              )}
+            </div>
+
             {/* Client table */}
-            <div className="mt-3 pt-3" style={{ borderTop: "1px solid #EEF2F6", height: "200px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-              <AccTable rows={tabCl} cols={[
+            <div className="mt-3 pt-3" style={{ borderTop: "1px solid #EEF2F6", height: "230px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              {clientRows.length === 0 ? (
+                <div className="flex flex-col items-center justify-center flex-1 gap-3">
+                  <div className="rounded-full flex items-center justify-center" style={{ width: 48, height: 48, backgroundColor: "#F8FAFC", border: "1px solid #EEF2F6" }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M5 21v-1a7 7 0 0114 0v1" /></svg>
+                  </div>
+                  <div className="text-center">
+                    <div style={{ fontSize: "13px", fontWeight: 600, color: R.ts }}>{clientSearch.trim() ? `No clients match “${clientSearch.trim()}”` : "No clients in this group"}</div>
+                    {clientSearch.trim() && (
+                      <button onClick={() => setClientSearch("")} className="cursor-pointer mt-2" style={{ border: "none", background: R.blueLight, color: R.blue, fontSize: "11px", fontWeight: 600, borderRadius: R.rBadge, padding: "4px 10px" }}>Clear search</button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+              <AccTable rows={clientRows} pageSize={CLIENT_PAGE_SIZE} resetKey={`${clientSearch}|${activeTab}`} cols={[
                 { key: "name", label: "Client", val: r => r.name || "—" },
                 { key: "profile_id", label: "Profile ID", val: r => r.profile_id || "—", className: "text-muted font-mono" },
                 { key: "fitness_goal", label: "Goal", val: r => goalLabel(r.fitness_goal), render: r => <span style={{ fontSize: "11px", fontWeight: 500, padding: "3px 10px", borderRadius: R.rPill, color: goalColor(r.fitness_goal), backgroundColor: goalColor(r.fitness_goal) + "15", letterSpacing: "-0.22px" }}>{goalLabel(r.fitness_goal)}</span> },
@@ -1535,6 +1694,7 @@ export default function AnalyticsDashboard() {
                 { key: "metabolism_score", label: "Score", align: "center", val: r => r.metabolism_score ?? null, render: r => r.metabolism_score != null ? <span style={{ fontWeight: 600, color: R.tp }}>{Math.round(r.metabolism_score)}</span> : <span style={{ color: R.td }}>—</span> },
                 { key: "pct", label: "Rate", align: "right", render: r => <RateCell pct={r.pct} /> },
               ]} />
+              )}
             </div>
             <div className="mt-2" style={deltaStyle(readingsWeekDelta)}>
               <DeltaArrow v={readingsWeekDelta} />{Math.abs(readingsWeekDelta)} readings this week vs last week
