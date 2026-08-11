@@ -93,7 +93,7 @@ export default function RightSidebar({ isOpen, onClose, profileId, dietitianId }
     clientData?.gender,
     !isRedacted(clientData?.age) ? `${clientData.age} years` : null,
     !isRedacted(clientData?.height) ? `${clientData.height} cm` : null,
-    !isRedacted(clientData?.weight) ? `${clientData.weight} kg` : null,
+    !isRedacted(clientData?.weight) ? `${Math.round(Number(clientData.weight) * 2.20462)} lbs` : null,
   ]
     .filter((part) => !isRedacted(part))
     .join(", ");

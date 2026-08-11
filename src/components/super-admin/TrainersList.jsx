@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import Cookies from "js-cookie";
@@ -27,36 +27,80 @@ function getLoggedInActorUserId() {
   return null;
 }
 
+const PAGE_LIMIT = 20;
+
 export default function TrainersList({ trainerAdmin, onBack }) {
   const [trainers, setTrainers] = useState([]);
   const [overview, setOverview] = useState(null);
   const [actor, setActor] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const selectedEmail = trainerAdmin?.email || trainerAdmin?.user_id;
 
-  const loadTrainers = useCallback(async () => {
-    const actorUserId = getLoggedInActorUserId();
-    if (!actorUserId || !selectedEmail) return;
-    setIsLoading(true);
-    try {
-      const res = await fetchTrainerAdminOverviewService(actorUserId, selectedEmail);
-      setTrainers(res?.network?.trainers || []);
-      setOverview(res?.overview || null);
-      setActor(res?.actor || null);
-    } catch (error) {
-      toast.error(error?.message || "Failed to load trainers");
-      setTrainers([]);
-      setOverview(null);
-      setActor(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedEmail]);
+  // Pages already fetched this visit, keyed by email|page. Prev/Next re-renders
+  // from here instead of re-hitting the API; Refresh clears it.
+  const cacheRef = useRef(new Map());
+
+  const applyResult = useCallback((entry) => {
+    setTrainers(entry.trainers);
+    setPagination(entry.pagination);
+    setOverview(entry.overview);
+    setActor(entry.actor);
+  }, []);
+
+  const loadTrainers = useCallback(
+    async ({ force = false } = {}) => {
+      const actorUserId = getLoggedInActorUserId();
+      if (!actorUserId || !selectedEmail) return;
+
+      const cacheKey = `${selectedEmail}|${page}`;
+      if (!force && cacheRef.current.has(cacheKey)) {
+        applyResult(cacheRef.current.get(cacheKey));
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const res = await fetchTrainerAdminOverviewService(actorUserId, selectedEmail, {
+          page,
+          limit: PAGE_LIMIT,
+        });
+        const entry = {
+          trainers: res?.network?.trainers || [],
+          pagination: res?.network?.trainers_pagination || null,
+          overview: res?.overview || null,
+          actor: res?.actor || null,
+        };
+        cacheRef.current.set(cacheKey, entry);
+        applyResult(entry);
+      } catch (error) {
+        toast.error(error?.message || "Failed to load trainers");
+        setTrainers([]);
+        setPagination(null);
+        setOverview(null);
+        setActor(null);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [selectedEmail, page, applyResult]
+  );
 
   useEffect(() => {
     loadTrainers();
   }, [loadTrainers]);
+
+  const handleRefresh = useCallback(() => {
+    cacheRef.current.clear();
+    loadTrainers({ force: true });
+  }, [loadTrainers]);
+
+  const totalPages = useMemo(() => {
+    if (!pagination?.total) return 1;
+    return Math.max(1, Math.ceil(pagination.total / (pagination.limit || PAGE_LIMIT)));
+  }, [pagination]);
 
   const trainersCount = overview?.total_trainers ?? trainers.length;
   const clientsCount = overview?.total_clients_in_network ?? 0;
@@ -110,7 +154,7 @@ export default function TrainersList({ trainerAdmin, onBack }) {
 
         <button
           type="button"
-          onClick={loadTrainers}
+          onClick={handleRefresh}
           disabled={isLoading}
           className="rounded-full bg-[#EEF4FE] text-[#308BF9] text-[11px] font-semibold px-3 py-1 disabled:opacity-60 cursor-pointer"
         >
@@ -215,6 +259,48 @@ export default function TrainersList({ trainerAdmin, onBack }) {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!isLoading && pagination?.total > 0 && (
+          <div className="flex items-center justify-between flex-wrap gap-3 mt-3">
+            <div className="text-[#A1A1A1] text-[11px]">
+              Showing{" "}
+              <span className="text-[#252525] font-semibold">
+                {(pagination.offset ?? (pagination.page - 1) * pagination.limit) + 1}
+                {"–"}
+                {Math.min(
+                  (pagination.offset ?? (pagination.page - 1) * pagination.limit) +
+                    trainers.length,
+                  pagination.total
+                )}
+              </span>{" "}
+              of{" "}
+              <span className="text-[#252525] font-semibold">
+                {pagination.total}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1 || isLoading}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="rounded-full border border-[#E1E6ED] text-[#535359] text-[11px] font-semibold px-3 py-1 disabled:opacity-40 cursor-pointer"
+              >
+                Prev
+              </button>
+              <span className="text-[#535359] text-[11px]">
+                Page {pagination.page ?? page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={!pagination.has_more || isLoading}
+                onClick={() => setPage((p) => p + 1)}
+                className="rounded-full border border-[#E1E6ED] text-[#535359] text-[11px] font-semibold px-3 py-1 disabled:opacity-40 cursor-pointer"
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </div>

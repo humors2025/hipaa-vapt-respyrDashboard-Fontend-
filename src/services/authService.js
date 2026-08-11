@@ -1416,7 +1416,11 @@ export const fetchDownstreamUsersService = async (actorUserId) => {
   return res.json();
 };
 
-export const fetchTrainerAdminOverviewService = async (actorUserId, email) => {
+export const fetchTrainerAdminOverviewService = async (
+  actorUserId,
+  email,
+  { page = 1, limit = 20 } = {}
+) => {
   if (!actorUserId) {
     throw new Error("Actor user ID missing.");
   }
@@ -1432,6 +1436,8 @@ export const fetchTrainerAdminOverviewService = async (actorUserId, email) => {
     body: JSON.stringify({
       actor_user_id: actorUserId,
       ...(email ? { email } : {}),
+      page,
+      limit,
     }),
   });
 };

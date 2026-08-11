@@ -25,6 +25,34 @@ const RANGES = ["1W", "1M", "3M", "All"];
 
 const RANGE_DAYS = { "1W": 7, "1M": 30, "3M": 90, All: Infinity };
 
+const UNITS = ["kg", "lbs"];
+
+const KG_TO_LBS = 2.20462;
+
+// Countries where body weight is customarily shown in pounds
+// (USA, Liberia, Myanmar). Everyone else defaults to kg.
+const LBS_COUNTRIES = ["US", "LR", "MM"];
+
+const UNIT_STORAGE_KEY = "weight_display_unit";
+
+// Best-effort country detection from the browser locale, e.g. "en-US" -> "US",
+// "hi-IN" -> "IN". Returns "kg" when the country can't be determined.
+const detectUnitFromCountry = () => {
+  try {
+    const locales =
+      navigator.languages && navigator.languages.length
+        ? navigator.languages
+        : [navigator.language];
+    for (const locale of locales) {
+      const country = new Intl.Locale(locale).region;
+      if (country) return LBS_COUNTRIES.includes(country) ? "lbs" : "kg";
+    }
+  } catch {
+    // ignore — fall through to kg
+  }
+  return "kg";
+};
+
 // Target BMI used to derive a goal weight from the client's height.
 // 21.5 sits in the healthy BMI range (18.5–24.9).
 const TARGET_BMI = 21.5;
@@ -72,6 +100,30 @@ const normaliseLogs = (rawLogs) => {
 
 export default function WeightTrackingTab({ profileData, profileId, isActive }) {
   const [range, setRange] = useState("1M");
+  // Display unit only — all data stays in kg internally and is converted on render.
+  const [unit, setUnit] = useState("kg");
+
+  // Default the unit from the viewer's country (browser locale): USA -> lbs,
+  // India (and most others) -> kg. A manual switch is remembered and wins over
+  // the detected default. Runs in an effect so SSR/hydration always renders "kg".
+  useEffect(() => {
+    let stored = null;
+    try {
+      stored = localStorage.getItem(UNIT_STORAGE_KEY);
+    } catch {
+      // storage unavailable — fall back to detection
+    }
+    setUnit(UNITS.includes(stored) ? stored : detectUnitFromCountry());
+  }, []);
+
+  const changeUnit = (u) => {
+    setUnit(u);
+    try {
+      localStorage.setItem(UNIT_STORAGE_KEY, u);
+    } catch {
+      // storage unavailable — the choice just won't persist
+    }
+  };
   // Which tile's "how is this calculated" panel is open: "goal" | "progress" | null
   const [infoSection, setInfoSection] = useState(null);
   const [logs, setLogs] = useState([]);
@@ -159,6 +211,13 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
   // Most recent change between the last two weigh-ins.
   const weeklyChange = hasData ? logs[logs.length - 1].delta : 0;
 
+  const isKg = unit === "kg";
+  // kg -> selected display unit (raw number).
+  const toUnit = (kg) => (kg == null ? null : isKg ? kg : kg * KG_TO_LBS);
+  // kg -> whole number in the selected display unit.
+  const fmtWeight = (kg) => (kg == null ? null : Math.round(toUnit(kg)));
+  const fmtDelta = (kg) => Math.round(Math.abs(isKg ? kg : kg * KG_TO_LBS));
+
   const startingDateLabel = hasData ? formatLogDate(logs[0].logDate) : "—";
 
   // Newest first for the "Recent entries" list.
@@ -169,7 +228,7 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
     datasets: [
       {
         label: "Weight",
-        data: rangedLogs.map((p) => p.weight),
+        data: rangedLogs.map((p) => toUnit(p.weight)),
         borderColor: "#308BF9",
         backgroundColor: "rgba(48,139,249,0.06)",
         fill: true,
@@ -185,7 +244,7 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
         ? [
             {
               label: "Goal",
-              data: Array(rangedLogs.length).fill(goalWeight),
+              data: Array(rangedLogs.length).fill(toUnit(goalWeight)),
               borderColor: "rgba(48,139,249,0.25)",
               borderDash: [6, 4],
               borderWidth: 1.5,
@@ -198,16 +257,18 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
     ],
   };
 
-  // Dynamic y-axis bounds with a little padding around the observed range.
+  // Dynamic y-axis bounds with a little padding around the observed range,
+  // computed in the currently displayed unit.
   const yBounds = useMemo(() => {
-    const values = rangedLogs.map((p) => p.weight);
-    if (goalWeight != null) values.push(goalWeight);
+    const factor = unit === "kg" ? 1 : KG_TO_LBS;
+    const values = rangedLogs.map((p) => p.weight * factor);
+    if (goalWeight != null) values.push(goalWeight * factor);
     if (values.length === 0) return { min: undefined, max: undefined };
     const min = Math.min(...values);
     const max = Math.max(...values);
     const pad = Math.max(2, Math.round((max - min) * 0.15));
     return { min: Math.max(0, Math.floor(min - pad)), max: Math.ceil(max + pad) };
-  }, [rangedLogs, goalWeight]);
+  }, [rangedLogs, goalWeight, unit]);
 
   const chartOptions = {
     responsive: true,
@@ -226,7 +287,7 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
         padding: 10,
         cornerRadius: 10,
         callbacks: {
-          label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} kg`,
+          label: (ctx) => `${ctx.dataset.label}: ${Math.round(ctx.parsed.y)} ${unit}`,
         },
       },
     },
@@ -260,8 +321,8 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
   const statTiles = [
     {
       label: "Current weight",
-      value: currentWeight != null ? currentWeight.toFixed(1) : "—",
-      unit: "kg",
+      value: currentWeight != null ? fmtWeight(currentWeight) : "—",
+      unit,
       accent: null,
       sub:
         weeklyChange !== 0 ? (
@@ -291,7 +352,7 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
                 isLoss ? "text-[#16a34a]" : "text-[#dc2626]"
               }`}
             >
-              {Math.abs(weeklyChange)} kg last log
+              {fmtDelta(weeklyChange)} {unit} last log
             </span>
           </div>
         ) : (
@@ -301,22 +362,22 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
     },
     {
       label: "Starting Weight",
-      value: startingWeight != null ? startingWeight.toFixed(1) : "—",
-      unit: "kg",
+      value: startingWeight != null ? fmtWeight(startingWeight) : "—",
+      unit,
       sub: <p className="text-[#A1A1A1] text-[10px] font-semibold tracking-[-0.2px] mt-2">{startingDateLabel}</p>,
     },
     {
       label: "Goal",
       info: "goal",
-      value: goalWeight != null ? goalWeight.toFixed(1) : "—",
-      unit: "kg",
+      value: goalWeight != null ? fmtWeight(goalWeight) : "—",
+      unit,
       sub: (
         <p
           className={`text-[10px] font-semibold tracking-[-0.2px] mt-2 ${
             reachedGoal ? "text-[#16a34a]" : "text-[#A1A1A1]"
           }`}
         >
-          {remaining == null ? "Not set" : reachedGoal ? "Goal reached" : `${remaining} kg to go`}
+          {remaining == null ? "Not set" : reachedGoal ? "Goal reached" : `${fmtWeight(currentGap)} ${unit} to go`}
         </p>
       ),
     },
@@ -341,6 +402,25 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
 
   return (
     <div className="flex flex-col gap-4 mt-[16px] mb-[20px] mx-[5px]">
+      {/* Unit switch — applies to every value on this tab */}
+      <div className="flex justify-end">
+        <div className="flex gap-1 bg-[#F5F7FA] rounded-[40px] p-[3px]">
+          {UNITS.map((u) => (
+            <button
+              key={u}
+              onClick={() => changeUnit(u)}
+              className={`px-3 py-[4px] rounded-[40px] text-[11px] font-semibold tracking-[-0.22px] transition-all duration-200 cursor-pointer ${
+                unit === u
+                  ? "bg-[#308BF9] text-white shadow-sm"
+                  : "text-[#535359] hover:text-[#252525] hover:bg-[#e8eaed]"
+              }`}
+            >
+              {u}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Stat tiles */}
       <div className="grid grid-cols-4 gap-3">
         {statTiles.map((tile) => (
@@ -412,6 +492,7 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
               <>
                 {TARGET_BMI} × ({heightCm} ÷ 100)² ={" "}
                 <span className="font-semibold">{goalWeight} kg</span>
+                {!isKg && <> ({fmtWeight(goalWeight)} lbs)</>}
               </>
             ) : (
               "Height isn't available for this client, so an ideal weight can't be derived."
@@ -447,12 +528,12 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
           {startingWeight != null && currentWeight != null && goalWeight != null ? (
             <div className="mt-2 text-[12px] text-[#252525] bg-white border border-[#E1E6ED] rounded-[8px] px-3 py-2 leading-[175%]">
               <div>
-                Starting <span className="font-semibold">{startingWeight.toFixed(1)} kg</span> ·
-                Current <span className="font-semibold">{currentWeight.toFixed(1)} kg</span> ·
-                Goal <span className="font-semibold">{goalWeight.toFixed(1)} kg</span>
+                Starting <span className="font-semibold">{fmtWeight(startingWeight)} {unit}</span> ·
+                Current <span className="font-semibold">{fmtWeight(currentWeight)} {unit}</span> ·
+                Goal <span className="font-semibold">{fmtWeight(goalWeight)} {unit}</span>
               </div>
               <div>
-                (1 − {currentGap.toFixed(1)} ÷ {totalGap.toFixed(1)}) × 100 ={" "}
+                (1 − {fmtWeight(currentGap)} ÷ {fmtWeight(totalGap)}) × 100 ={" "}
                 <span className="font-semibold">{progress}%</span>
               </div>
             </div>
@@ -519,7 +600,7 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
             {goalWeight != null && (
               <span className="flex items-center gap-1.5 text-[#535359] text-[11px] tracking-[-0.22px]">
                 <span className="w-3.5 h-0 rounded-sm" style={{ borderTop: "1.5px dashed rgba(48,139,249,0.4)" }} />
-                Goal ({goalWeight} kg)
+                Goal ({fmtWeight(goalWeight)} {unit})
               </span>
             )}
           </div>
@@ -557,8 +638,8 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
                     {entry.label}
                   </span>
                   <span className="text-[#252525] text-[12px] font-semibold tracking-[-0.24px] mr-3">
-                    {entry.weight}
-                    <span className="text-[#A1A1A1] font-normal ml-0.5">kg</span>
+                    {fmtWeight(entry.weight)}
+                    <span className="text-[#A1A1A1] font-normal ml-0.5">{unit}</span>
                   </span>
                   {entry.delta !== 0 && (
                     <span
@@ -581,7 +662,7 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
                           </>
                         )}
                       </svg>
-                      {Math.abs(entry.delta)}
+                      {fmtDelta(entry.delta)}
                     </span>
                   )}
                 </div>
