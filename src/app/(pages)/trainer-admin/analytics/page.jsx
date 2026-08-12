@@ -868,7 +868,8 @@ export default function AnalyticsDashboard() {
   const engagementRate = cTotal > 0 ? Math.round((cActive / cTotal) * 100) : 0;
   const activeTrainers = tabTr.filter(t => t.pct >= ACTIVE_THRESHOLD);
   const eliteTrainers = tabTr.filter(t => t.pct >= 100);
-  const atRiskTrainers = tabTr.filter(t => t.pct < 30);
+  // Below the Active threshold ⇒ At Risk — must stay in sync with the Status badge.
+  const atRiskTrainers = tabTr.filter(t => t.pct < ACTIVE_THRESHOLD);
   const eliteCount = eliteTrainers.length;
   const atRiskTrainerCount = atRiskTrainers.length;
   // Rows behind the Trainer Adoption table: the active tab's list, narrowed by the
