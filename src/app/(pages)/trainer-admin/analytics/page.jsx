@@ -831,7 +831,7 @@ export default function AnalyticsDashboard() {
   const pm = periodMetrics(tabCl, tabTr, readingDatesMap, range);
   const ppm = prevR ? periodMetrics(tabCl, tabTr, readingDatesMap, prevR) : null;
 
-  // Onboarding drill-down: the two "Onboarded" cards open /super-admin/onboarding
+  // Onboarding drill-down: the two "Onboarded" cards open /trainer-admin/onboarding
   // (get_group_onboarding) scoped to the SAME window + member the dashboard is on.
   const onbRange = range || getPeriodRange("today", now);
   const periodWord = period === "week" ? "this week" : period === "month" ? "this month" : period === "custom" ? "on this day" : "today";
@@ -845,10 +845,10 @@ export default function AnalyticsDashboard() {
       member: overviewMemberCode || "",
       label: periodWord,
     });
-    router.push(`/super-admin/onboarding?${qs.toString()}`);
+    router.push(`/trainer-admin/onboarding?${qs.toString()}`);
   };
 
-  // Reading Split drill-down: the Trainers / Clients rows open /super-admin/readers
+  // Reading Split drill-down: the Trainers / Clients rows open /trainer-admin/readers
   // (get_group_period_readers) scoped to the SAME window + member the dashboard is
   // on. overview_from/overview_to default to today via the period range.
   const openPeriodReaders = (type) => {
@@ -861,7 +861,7 @@ export default function AnalyticsDashboard() {
       member: overviewMemberCode || "",
       label: periodWord,
     });
-    router.push(`/super-admin/readers?${qs.toString()}`);
+    router.push(`/trainer-admin/readers?${qs.toString()}`);
   };
 
   const adoptionRate = tTotal > 0 ? Math.round((tActive / tTotal) * 100) : 0;
