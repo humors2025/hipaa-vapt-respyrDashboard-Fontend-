@@ -7,7 +7,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { getAdminGroups, selectAdminGroupsRaw, selectPrimaryGroupName } from "@/store/adminGroupsSlice";
 import { fetchGroupPeriodReadersService } from "@/services/authService";
 
-const PAGE_LIMIT = 50;
+const PAGE_LIMIT = 20;
 const R = {
   dark: "#252525", blue: "#308bf9", blueLight: "#e9f3ff",
   green: "#3faf58", greenLight: "#eaffef", red: "#e74c3c", orange: "#e48326", amber: "#ffbf2d",
@@ -71,7 +71,6 @@ function EmptyState({ text }) {
 function Pager({ pagination, onPage }) {
   if (!pagination) return null;
   const { page = 1, limit = PAGE_LIMIT, total = 0, has_more = false } = pagination;
-  if (total <= limit) return null;
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
   const btn = (disabled) => ({
@@ -86,6 +85,27 @@ function Pager({ pagination, onPage }) {
         <button style={btn(page <= 1)} disabled={page <= 1} onClick={() => onPage(page - 1)}>Prev</button>
         <button style={btn(!has_more)} disabled={!has_more} onClick={() => onPage(page + 1)}>Next</button>
       </div>
+    </div>
+  );
+}
+
+// On the "all" tab the API pages both lists with one shared `page` (and caps the
+// trainer side at its own limit), so per-list Prev/Next isn't possible there.
+// Instead, a truncated list links to its dedicated tab, where Pager works.
+function ViewAllFooter({ pagination, noun, onView }) {
+  if (!pagination) return null;
+  const { limit = PAGE_LIMIT, total = 0, has_more = false } = pagination;
+  if (!has_more && total <= limit) return null;
+  return (
+    <div className="flex items-center justify-between" style={{ padding: "12px 18px", borderTop: `1px solid ${R.border}` }}>
+      <div style={{ fontSize: "12px", color: R.tm }}>Showing first {Math.min(limit, total)} of {total} {noun}</div>
+      <button
+        onClick={onView}
+        className="cursor-pointer"
+        style={{ borderRadius: R.rPill, border: "none", background: R.blueLight, color: R.blue, fontSize: "12px", fontWeight: 600, padding: "6px 16px", letterSpacing: "-0.24px" }}
+      >
+        View all {total} →
+      </button>
     </div>
   );
 }
@@ -484,7 +504,9 @@ function PeriodReadersContent() {
                   ? <EmptyState text={`No trainer readings ${whenLabel}`} />
                   : <>
                       <Table cols={trainerCols} rows={trainerReaders} />
-                      {type === "trainers" && <Pager pagination={data.trainer_readers_pagination} onPage={setPage} />}
+                      {type === "trainers"
+                        ? <Pager pagination={data.trainer_readers_pagination} onPage={setPage} />
+                        : <ViewAllFooter pagination={data.trainer_readers_pagination} noun="trainers" onView={() => { setType("trainers"); setPage(1); }} />}
                     </>}
               </div>
             )}
@@ -499,7 +521,9 @@ function PeriodReadersContent() {
                   ? <EmptyState text={`No client readings ${whenLabel}`} />
                   : <>
                       <Table cols={clientCols} rows={clientReaders} />
-                      {type === "clients" && <Pager pagination={data.client_readers_pagination} onPage={setPage} />}
+                      {type === "clients"
+                        ? <Pager pagination={data.client_readers_pagination} onPage={setPage} />
+                        : <ViewAllFooter pagination={data.client_readers_pagination} noun="clients" onView={() => { setType("clients"); setPage(1); }} />}
                     </>}
               </div>
             )}
