@@ -219,7 +219,7 @@ export default function MacrosCalculation() {
       <div className="relative bg-white rounded-[20px] w-full overflow-hidden">
         <div className="border border-[#E1E6ED] rounded-[15px] px-4 py-6">
           <div className="pl-2.5 pb-5">
-            <p className="text-[#252525] text-[25px] font-semibold leading-normal tracking-[-1px]">
+            <p className="text-[#252525] text-[25px] max-xl:text-[20px] font-semibold leading-normal tracking-[-1px]">
               Macro Calculation
             </p>
           </div>
@@ -254,7 +254,7 @@ export default function MacrosCalculation() {
                     <div
                       key={step.title}
                       onClick={() => handleStepClick(step.title, index)}
-                      className={`flex flex-col gap-2.5 py-2.5 pl-[15px] pr-2.5 w-[200px] cursor-pointer transition-all duration-200 ${
+                      className={`flex flex-col gap-2.5 py-2.5 pl-[15px] pr-2.5 max-xl:pl-2.5 w-[200px] max-xl:w-[150px] cursor-pointer transition-all duration-200 ${
                         isActive ? "bg-[#F0F6FD] rounded-[10px]" : ""
                       } ${
                         !isActive && index !== 0
@@ -283,7 +283,7 @@ export default function MacrosCalculation() {
 
               <div
                 ref={scrollContainerRef}
-                className="pt-[7px] pl-[15px] rounded-[15px] flex-1 h-[350px] overflow-y-auto group-hover-scrollbar"
+                className="pt-[7px] pl-[15px] max-xl:pl-2.5 rounded-[15px] flex-1 min-w-0 h-[350px] overflow-y-auto group-hover-scrollbar"
               >
                 <div className="flex flex-col gap-0">
                   {calculationSteps.map((step, index) => {
@@ -297,7 +297,7 @@ export default function MacrosCalculation() {
                       <div
                         ref={(el) => (sectionRefs.current[index] = el)}
                         key={step.title}
-                        className="relative flex flex-col gap-6 border-l-2 border-[#E1E6ED] pl-[20px] pr-[15px] pt-[6px] pb-6 last:pb-0"
+                        className="relative flex flex-col gap-6 border-l-2 border-[#E1E6ED] pl-[20px] pr-[15px] max-xl:pl-3 max-xl:pr-1.5 pt-[6px] pb-6 last:pb-0"
                       >
                         <div className="absolute left-[-6px] top-[10px]">
                           <svg
@@ -333,7 +333,7 @@ export default function MacrosCalculation() {
     : step.description}
 </p>
 
-                            <div className="flex gap-[5px] bg-[#F5F7FA] rounded-[5px] px-[15px] py-1.5">
+                            <div className="flex gap-[5px] max-xl:flex-wrap bg-[#F5F7FA] rounded-[5px] px-[15px] max-xl:px-2.5 py-1.5">
                               <p className="text-[#535359] text-[12px] font-normal leading-normal tracking-[-0.24px]">
                                 {stepInfo.label}
                               </p>
@@ -344,7 +344,7 @@ export default function MacrosCalculation() {
                           </div>
 
                           <div className="flex flex-col gap-2.5">
-                            <div className="flex flex-1 justify-between">
+                            <div className="flex flex-1 justify-between max-xl:flex-wrap max-xl:justify-start max-xl:gap-x-6 max-xl:gap-y-2.5">
                               {stepData?.macros.map((macro) => (
                                 <div
                                   key={macro.name}

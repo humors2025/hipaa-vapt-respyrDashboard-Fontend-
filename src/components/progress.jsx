@@ -305,12 +305,12 @@ export default function Progress({ title = "Progress", showDetails = true, showC
 
  {showDetails && (
       <div className="flex flex-col gap-[5px] mt-3">
-        <p className="text-[#252525] text-[25px] font-semibold leading-normal tracking-[-0.5px]">
+        <p className="text-[#252525] text-[25px] max-xl:text-[20px] font-semibold leading-normal tracking-[-0.5px]">
           {/* {overallFatLossData?.title || "Overall Fat Loss Score"} */}
             Score Chart
         </p>
 
-        <div className="flex gap-5 items-center px-[15px] py-[5px] rounded-[5px] bg-[#E0E0E0] whitespace-nowrap w-fit">
+        <div className="flex gap-5 max-xl:gap-2 max-xl:flex-wrap items-center px-[15px] py-[5px] rounded-[5px] bg-[#E0E0E0] whitespace-nowrap w-fit max-w-full">
           <div className="flex gap-[3px] items-center">
             <p className="text-[#535359] text-[10px] font-semibold leading-[110%] tracking-[-0.2px]">
               RECOMMENDED TREND RANGE

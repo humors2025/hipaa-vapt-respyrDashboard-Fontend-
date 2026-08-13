@@ -314,51 +314,51 @@ const formatLastLoggedDate = (dateString) => {
 
       <div>
         <div className="rounded-[15px] overflow-hidden h-[calc(100vh-290px)] ">
-          <div className="h-full overflow-y-auto group-hover-scrollbar">
-            <table className="w-full bg-[#FFFFFF] border-collapse relative">
+          <div className="h-full overflow-y-auto overflow-x-auto group-hover-scrollbar">
+            <table className="w-full min-w-[640px] lg:min-w-0 bg-[#FFFFFF] border-collapse relative">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-[#F0F0F0]">
-                  <th className="px-[15px] py-5 text-left rounded-tl-[15px]">
+                  <th className="px-2.5 xl:px-[15px] py-5 text-left rounded-tl-[15px]">
                     <p className="text-[#535359] font-normal text-xs leading-[1.1] tracking-[-0.24px] font-['Poppins']">
                       Client Name {sortOption === "A to Z" && "↑"}{" "}
                       {sortOption === "Z to A" && "↓"}
                     </p>
                   </th>
-                  <th className="px-[15px] py-5 text-center">
+                  <th className="px-2.5 xl:px-[15px] py-5 text-center">
                     <p className="text-[#535359] font-normal text-xs leading-[1.1] tracking-[-0.24px] font-['Poppins']">
                       Date Created {sortOption === "Recently Added" && "↓"}
                     </p>
                   </th>
-                  <th className="px-[15px] py-5 text-center">
+                  <th className="px-2.5 xl:px-[15px] py-5 text-center">
                     <p className="text-[#535359] font-normal text-xs leading-[1.1] tracking-[-0.24px] font-['Poppins']">
                       Fitness Goal
                     </p>
                   </th>
-                  <th className="px-[15px] py-5 text-center">
+                  <th className="px-2.5 xl:px-[15px] py-5 text-center">
                     <p className="text-[#535359] font-normal text-xs leading-[1.1] tracking-[-0.24px] font-['Poppins']">
                       Metabolism Score
                     </p>
                   </th>
-                  <th className="px-[15px] py-5 text-center">
+                  <th className="px-2.5 xl:px-[15px] py-5 text-center">
                     <p className="text-[#535359] font-normal text-xs leading-[1.1] tracking-[-0.24px] font-['Poppins']">
                       Level
                     </p>
                   </th>
 
-                  <th className="px-[15px] py-5 text-center">
+                  <th className="px-2.5 xl:px-[15px] py-5 text-center">
                     <p className="text-[#535359] font-normal text-xs leading-[1.1] tracking-[-0.24px] font-['Poppins']">
                       Diet Plan
                     </p>
                   </th>
 
-                  <th className="px-[15px] py-5 text-center rounded-tr-[15px]">
+                  <th className="px-2.5 xl:px-[15px] py-5 text-center rounded-tr-[15px]">
                     <p className="text-[#535359] font-normal text-xs leading-[1.1] tracking-[-0.24px] font-['Poppins']">
                       Last Tested
                     </p>
                   </th>
 
                   {showTestTaken && (
-                    <th className="px-[15px] py-5 text-left">
+                    <th className="px-2.5 xl:px-[15px] py-5 text-left">
                       <p className="text-[#535359] text-center font-normal text-xs leading-[1.1] tracking-[-0.24px] font-['Poppins']">
                         Test Taken
                       </p>
@@ -366,14 +366,14 @@ const formatLastLoggedDate = (dateString) => {
                   )}
 
                   {testAssigned && (
-                    <th className="px-[15px] py-5 text-left">
+                    <th className="px-2.5 xl:px-[15px] py-5 text-left">
                       <p className="text-[#535359] text-center font-normal text-xs leading-[1.1] tracking-[-0.24px] font-['Poppins']">
                         Test Assigned
                       </p>
                     </th>
                   )}
 
-                  <th className="px-[15px] py-5 text-left hidden">
+                  <th className="px-2.5 xl:px-[15px] py-5 text-left hidden">
                     <p className="text-[#535359] font-normal text-xs leading-[1.1] tracking-[-0.24px] font-['Poppins']">
                       Actions
                     </p>
@@ -384,7 +384,7 @@ const formatLastLoggedDate = (dateString) => {
               <tbody>
                 {filteredClients.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-[15px] py-8 text-center">
+                    <td colSpan={10} className="px-2.5 xl:px-[15px] py-8 text-center">
                       <p className="text-[#A1A1A1] text-[18px]">
                         No clients found.
                       </p>
@@ -398,8 +398,8 @@ const formatLastLoggedDate = (dateString) => {
                       onClick={() => handleRowClick(client)}
                     >
                       {/* Client Name */}
-                      <td className="px-[15px] py-5">
-                        <div className="flex gap-[15px]">
+                      <td className="px-2.5 xl:px-[15px] py-5">
+                        <div className="flex gap-2 xl:gap-[15px]">
                           <div className="relative h-8 w-8 rounded-full overflow-hidden bg-[#F0F0F0]">
                             <Image
                               // src={
@@ -427,33 +427,33 @@ const formatLastLoggedDate = (dateString) => {
                       </td>
 
                       {/* Date Created */}
-                      <td className="px-[15px] py-5 text-center">
+                      <td className="px-2.5 xl:px-[15px] py-5 text-center">
                         <span className="text-[#A1A1A1] text-[12px] font-normal leading-[126%] tracking-[-0.24px]">
                           {client.dateCreated}
                         </span>
                       </td>
 
-                      <td className="px-[15px] py-5 text-center">
+                      <td className="px-2.5 xl:px-[15px] py-5 text-center">
                         <span className="text-[#A1A1A1] text-[12px] font-normal leading-[126%] tracking-[-0.24px]">
                           {client.fitness_goal}
                         </span>
                       </td>
 
-                      <td className="px-[15px] py-5 text-center">
+                      <td className="px-2.5 xl:px-[15px] py-5 text-center">
                         <span className="text-[#A1A1A1] text-[12px] font-normal leading-[126%] tracking-[-0.24px]">
                           {client.metabolism_score}
                         </span>
                       </td>
 
                       {/* Level */}
-                      <td className="px-[15px] py-5 text-center">
+                      <td className="px-2.5 xl:px-[15px] py-5 text-center">
                         <span className="text-[#A1A1A1] text-[12px] font-normal leading-[126%] tracking-[-0.24px]">
                           {client.level_type}
                         </span>
                       </td>
 
                       {/* Diet Plan */}
-                      <td className="px-[15px] py-5 text-center">
+                      <td className="px-2.5 xl:px-[15px] py-5 text-center">
                         {client.diet_plan_generated_date ? (
                           <span className="text-[#252525] text-[12px] font-normal leading-[126%] tracking-[-0.24px]">
                             Yes,{" "}
@@ -469,7 +469,7 @@ const formatLastLoggedDate = (dateString) => {
                       </td>
 
                       {/* Last Tested */}
-                      <td className="px-[15px] py-5 text-center">
+                      <td className="px-2.5 xl:px-[15px] py-5 text-center">
                         <span className="text-[#A1A1A1] text-[12px] font-normal leading-[126%] tracking-[-0.24px]">
                           {client.last_logged}
                         </span>
@@ -477,7 +477,7 @@ const formatLastLoggedDate = (dateString) => {
 
                       {/* Test Count */}
                       {showTestTaken && (
-                        <td className="text-center px-[15px] py-5">
+                        <td className="text-center px-2.5 xl:px-[15px] py-5">
                           <span className="text-[#252525] text-center text-[12px] font-semibold leading-[1.26px]">
                             {client.plansCompleted}
                           </span>
@@ -485,7 +485,7 @@ const formatLastLoggedDate = (dateString) => {
                       )}
 
                       {testAssigned && (
-                        <td className="text-center px-[15px] py-5">
+                        <td className="text-center px-2.5 xl:px-[15px] py-5">
                           <span className="text-[#252525] text-center text-[12px] font-semibold leading-[1.26px]">
                             {client.testAssigned}
                           </span>
@@ -493,7 +493,7 @@ const formatLastLoggedDate = (dateString) => {
                       )}
 
                       {/* Actions */}
-                      <td className="px-[15px] py-5 hidden">
+                      <td className="px-2.5 xl:px-[15px] py-5 hidden">
                         <div className="py-2.5 flex gap-5">
                           <Image
                             src="/icons/hugeicons_message-02.svg"

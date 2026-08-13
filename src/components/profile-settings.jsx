@@ -108,9 +108,9 @@ export default function ProfileSettings() {
   };
 
   return (
-    <div className="flex gap-[27px] pt-[25px] pl-[23px] pr-5 bg-white rounded-[15px] min-h-[calc(100vh-50px)] overflow-hidden">
+    <div className="flex gap-4 lg:gap-[27px] pt-[25px] pl-4 pr-4 lg:pl-[23px] lg:pr-5 bg-white rounded-[15px] min-h-[calc(100vh-50px)] overflow-hidden">
       {/* LEFT MENU */}
-      <div>
+      <div className="w-[220px] lg:w-[303px] shrink-0">
         {menuItems.map((item) => {
           const isActive = activeItem === item.id;
           const isDisabled = item.disabled;
@@ -131,7 +131,7 @@ export default function ProfileSettings() {
           return (
             <div
               key={item.id}
-              className={`w-[303px] pl-[23px] pr-[15px] py-[22px] rounded-[5px] flex items-center
+              className={`w-full pl-4 lg:pl-[23px] pr-[15px] py-4 lg:py-[22px] rounded-[5px] flex items-center
                 ${bgClass}
                 ${isDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}
               `}

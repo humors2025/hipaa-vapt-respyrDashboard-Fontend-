@@ -12,9 +12,9 @@ export default function EarningsLayout({ children }) {
         </p>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6">
+      <div className="flex flex-col xl:flex-row gap-6">
         <EarningsTabs />
-        <section className="flex-1 min-w-0 bg-white rounded-[15px] p-6">
+        <section className="flex-1 min-w-0 bg-white rounded-[15px] p-6 max-xl:p-4">
           {children}
         </section>
       </div>

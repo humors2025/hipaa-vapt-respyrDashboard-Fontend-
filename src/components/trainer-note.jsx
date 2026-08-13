@@ -21,7 +21,7 @@ export default function TrainerNote() {
                 <div className="flex flex-col gap-4">
                     <div className="flex flex-col gap-2 mt-[22px]">
                         <p className="text-[#252525] text-[12px] font-normal leading-normal tracking-[-0.24px]">What to focus on today</p>
-                        <p className="text-[#252525] text-[25px] font-semibold leading-normal tracking-[-0.5px]"> {trainerNoteSection?.title || "NA"}</p>
+                        <p className="text-[#252525] text-[25px] max-xl:text-[20px] font-semibold leading-normal tracking-[-0.5px]"> {trainerNoteSection?.title || "NA"}</p>
                     </div>
 
 

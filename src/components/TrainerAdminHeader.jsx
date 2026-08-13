@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cookieManager } from "@/lib/cookies";
@@ -50,10 +50,27 @@ export default function TrainerAdminHeader() {
   // (js-cookie is client-only) so the first render matches the server and we
   // avoid a hydration mismatch. Defaults to hidden until the flag is confirmed.
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const mobileMenuRef = useRef(null);
 
   useEffect(() => {
     setActive(pathname);
+    // close everything on navigation
+    setIsMobileMenuOpen(false);
+    setIsDropdownOpen(false);
   }, [pathname]);
+
+  // close the drawer when tapping outside (needed for touch devices)
+  useEffect(() => {
+    const handleOutside = (e) => {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handleOutside);
+    return () => document.removeEventListener("pointerdown", handleOutside);
+  }, []);
 
   useEffect(() => {
     setShowAnalytics(cookieManager.get("ta_analytics_enabled") === "1");
@@ -80,16 +97,65 @@ export default function TrainerAdminHeader() {
 
   return (
     <>
-      <div className="flex justify-between bg-[#F5F7FA] p-4">
-        <div className="flex items-center gap-3">
+      <div className="flex justify-between items-center bg-[#F5F7FA] p-4">
+        {/* Left: hamburger (tab/mobile only) + logo */}
+        <div className="flex items-center gap-3" ref={mobileMenuRef}>
+          <button
+            type="button"
+            aria-label="Open menu"
+            className="xl:hidden flex items-center cursor-pointer rounded-[15px] p-[13px] bg-white"
+            onClick={() => setIsMobileMenuOpen((v) => !v)}
+          >
+            {isMobileMenuOpen ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 6l12 12M18 6L6 18" stroke="#252525" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 6h16M4 12h16M4 18h16" stroke="#252525" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            )}
+          </button>
+
           <Link href="/trainer-admin/trainers">
             <div className="flex flex-col items-center">
               <img src="/icons/logorespyr.png" alt="logo" width={50} height={50} />
             </div>
           </Link>
+
+          {/* Mobile / tablet drawer */}
+          {isMobileMenuOpen && (
+            <div className="xl:hidden absolute left-4 right-4 top-[82px] z-50 bg-white rounded-[15px] shadow-lg border border-gray-100 p-2">
+              {menu.map((m) => {
+                const isActive =
+                  pathname === m.path ||
+                  pathname?.startsWith(m.path + "/") ||
+                  active === m.path;
+                const color = isActive ? "#308BF9" : "#A1A1A1";
+
+                return (
+                  <Link
+                    key={m.name}
+                    href={m.path}
+                    onClick={() => {
+                      setActive(m.path);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="flex items-center gap-3 w-full px-4 py-3 rounded-[10px] hover:bg-gray-100"
+                  >
+                    <MonoIcon src={m.icon} color={color} alt={m.name} />
+                    <span className="font-semibold text-[12px]" style={{ color }}>
+                      {m.name}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        <div className="flex gap-2 items-center">
+        {/* Center: desktop pill nav (hidden below xl) */}
+        <div className="hidden xl:flex gap-2 items-center">
           {menu.map((m) => {
             const isActive =
               pathname === m.path ||

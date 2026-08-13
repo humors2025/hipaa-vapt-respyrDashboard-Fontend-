@@ -657,19 +657,19 @@ function PendingInvites({
               </span>
             </div>
           )}
-          <table className={`w-full text-[12px] transition-opacity ${isLoading ? "opacity-50" : "opacity-100"}`}>
+          <table className={`w-full text-[12px] max-xl:text-[11px] transition-opacity ${isLoading ? "opacity-50" : "opacity-100"}`}>
             <thead>
               <tr className="bg-[#F5F7FA] text-[#535359] text-left">
-                <th className="py-2.5 px-4 font-semibold">Name</th>
-                <th className="py-2.5 px-4 font-semibold">Mobile</th>
-                <th className="py-2.5 px-4 font-semibold">Invite Email</th>
-                <th className="py-2.5 px-4 font-semibold">Accepted Email</th>
-                <th className="py-2.5 px-4 font-semibold">Referral Code</th>
-                <th className="py-2.5 px-4 font-semibold">Plan</th>
-                <th className="py-2.5 px-4 font-semibold">Status</th>
-                <th className="py-2.5 px-4 font-semibold">Trial</th>
-                <th className="py-2.5 px-4 font-semibold">Sent</th>
-                <th className="py-2.5 px-4 font-semibold">Actions</th>
+                <th className="py-2.5 px-4 max-xl:px-2 font-semibold whitespace-nowrap">Name</th>
+                <th className="py-2.5 px-4 max-xl:px-2 font-semibold whitespace-nowrap max-xl:hidden">Mobile</th>
+                <th className="py-2.5 px-4 max-xl:px-2 font-semibold whitespace-nowrap">Invite Email</th>
+                <th className="py-2.5 px-4 max-xl:px-2 font-semibold whitespace-nowrap">Accepted Email</th>
+                <th className="py-2.5 px-4 max-xl:px-2 font-semibold whitespace-nowrap">Referral Code</th>
+                <th className="py-2.5 px-4 max-xl:px-2 font-semibold whitespace-nowrap">Plan</th>
+                <th className="py-2.5 px-4 max-xl:px-2 font-semibold whitespace-nowrap">Status</th>
+                <th className="py-2.5 px-4 max-xl:px-2 font-semibold whitespace-nowrap">Trial</th>
+                <th className="py-2.5 px-4 max-xl:px-2 font-semibold whitespace-nowrap">Sent</th>
+                <th className="py-2.5 px-4 max-xl:px-2 font-semibold whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -680,16 +680,25 @@ function PendingInvites({
                 
                 return (
                   <tr key={uniqueKey} className="border-t border-[#F5F7FA]">
-                    <td className="py-2.5 px-4 text-[#252525] font-semibold">{inv.name}</td>
-                    <td className="py-2.5 px-4 text-[#535359]">{inv.phone || "NA"}</td>
-                    <td className="py-2.5 px-4 text-[#535359]">{inv.email}</td>
-                    <td className="py-2.5 px-4 text-[#535359]">
+                    <td className="py-2.5 px-4 max-xl:px-2 text-[#252525] font-semibold">
+                      <div className="flex flex-col gap-0.5">
+                        <span>{inv.name}</span>
+                        {/* Phone shown under the name only on tablet widths,
+                            where the separate Mobile column is hidden. */}
+                        <span className="text-[#535359] text-[11px] font-normal xl:hidden">
+                          {inv.phone || "NA"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-4 max-xl:px-2 text-[#535359] max-xl:hidden">{inv.phone || "NA"}</td>
+                    <td className="py-2.5 px-4 max-xl:px-2 text-[#535359] max-xl:break-all">{inv.email}</td>
+                    <td className="py-2.5 px-4 max-xl:px-2 text-[#535359] max-xl:break-all">
                       {inv.accepted_email || inv.accepted_by_email || "-"}
                     </td>
-                    <td className="py-2.5 px-4 text-[#535359]">
+                    <td className="py-2.5 px-4 max-xl:px-2 text-[#535359]">
                       {inv.redeem_code || "-"}
                     </td>
-                    <td className="py-2.5 px-4">
+                    <td className="py-2.5 px-4 max-xl:px-2">
                       {planObj ? (
                         <span className={`inline-flex rounded-full text-[11px] font-semibold px-2.5 py-0.5 ${planObj.badgeColor}`}>
                           {planObj.badge}
@@ -700,7 +709,7 @@ function PendingInvites({
                         </span>
                       )}
                     </td>
-                    <td className="py-2.5 px-4">
+                    <td className="py-2.5 px-4 max-xl:px-2">
                       <div className="flex flex-col gap-1">
                         {/* {getStatusBadge(inv.status)} */}
                         {inv.status_label && (
@@ -710,7 +719,7 @@ function PendingInvites({
                         )}
                       </div>
                     </td>
-                    <td className="py-2.5 px-4">
+                    <td className="py-2.5 px-4 max-xl:px-2">
                       {(() => {
                         const trial = inv.free_trial_subscription;
                         if (!trial?.exists || trial.added_days == null) {
@@ -720,8 +729,8 @@ function PendingInvites({
                         const addedDays = trial.added_days;
 
                         return (
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex rounded-full text-[11px] font-semibold px-2.5 py-0.5 bg-[#FFF4E0] text-[#A66B00]">
+                          <div className="flex items-center gap-2 max-xl:flex-wrap">
+                            <span className="inline-flex rounded-full text-[11px] font-semibold px-2.5 py-0.5 bg-[#FFF4E0] text-[#A66B00] whitespace-nowrap">
                               {addedDays} days added
                             </span>
                             {/* TODO: temporarily always shown for API integration.
@@ -740,13 +749,13 @@ function PendingInvites({
                         );
                       })()}
                     </td>
-                    <td className="py-2.5 px-4 text-[#A1A1A1]">
+                    <td className="py-2.5 px-4 max-xl:px-2 text-[#A1A1A1]">
                       {inv.sent_on_date ? new Date(inv.sent_on_date).toLocaleString("en-US", {
                         month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
                       }) : "-"}
                     </td>
-                    <td className="py-2.5 px-4">
-                      <div className="flex items-center gap-2">
+                    <td className="py-2.5 px-4 max-xl:px-2">
+                      <div className="flex items-center gap-2 max-xl:flex-wrap">
                         {inv.actions?.can_resend && (
                           <button
                             type="button"

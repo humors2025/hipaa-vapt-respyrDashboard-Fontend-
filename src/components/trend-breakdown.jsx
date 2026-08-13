@@ -146,7 +146,7 @@ export default function TrendBreakdown() {
             <div className="w-full border border-[#E1E6ED] rounded-[15px] px-5 pt-[18px] pb-6">
 
                 {/* Header */}
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center flex-wrap gap-2">
                     <p className="text-[#252525] text-[15px] font-semibold leading-normal tracking-[-0.3px]">
                         Trend Breakdown
                     </p>
@@ -163,7 +163,7 @@ export default function TrendBreakdown() {
 
 
                 {/* Tabs */}
-                <div className="flex w-full gap-[25px] mt-[18px] border-b border-[#E1E6ED]">
+                <div className="flex w-full gap-[25px] max-xl:gap-4 mt-[18px] border-b border-[#E1E6ED] max-xl:overflow-x-auto scroll-hide">
 
                     {/* Digestive */}
                     <button

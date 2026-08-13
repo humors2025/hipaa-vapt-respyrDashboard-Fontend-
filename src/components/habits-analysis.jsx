@@ -8,7 +8,7 @@ export default function HabitsAnalysis() {
     return (
         <>
 
-            <div className="flex gap-5 mt-[17px] mx-[5px]">
+            <div className="flex max-xl:flex-col gap-5 mt-[17px] mx-[5px]">
                 <Overview />
                 <HabitsMonitoring />
             </div>

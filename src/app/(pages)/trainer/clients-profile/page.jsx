@@ -56,7 +56,7 @@ export default function ClientsProfile() {
     return(
         <Suspense fallback={null}>
             {roleChecked && <PartnerCodeSync isSuperAdmin={isSuperAdmin} />}
-            <div className="flex gap-5 h-[85vh] overflow-hidden ">
+            <div className="flex gap-5 max-xl:gap-3 h-[85vh] overflow-hidden ">
                 {roleChecked && <ClientLists/>}
                 <ClientDetails/>
             </div>
