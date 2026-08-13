@@ -19,7 +19,7 @@ export default function EarningsTabs() {
   return (
     <nav
       aria-label="Earnings sections"
-      className="flex flex-row lg:flex-col gap-2 overflow-x-auto lg:overflow-visible lg:w-[220px] lg:flex-shrink-0 pb-2 lg:pb-0 -mx-1 lg:mx-0 px-1"
+      className="flex flex-row xl:flex-col gap-2 overflow-x-auto xl:overflow-visible xl:w-[220px] xl:flex-shrink-0 pb-2 xl:pb-0 -mx-1 xl:mx-0 px-1 scroll-hide"
     >
       {TABS.map((tab) => {
         const isActive = pathname === tab.href || pathname.startsWith(tab.href + "/");

@@ -288,18 +288,18 @@ export default function SuperAdminAllClientsPage() {
         <table className="w-full text-[12px]">
           <thead>
             <tr className="bg-[#F5F7FA] text-[#535359] text-left">
-              <th className="py-2.5 px-4 font-semibold">Name</th>
-              <th className="py-2.5 px-4 font-semibold">Profile ID</th>
-              <th className="py-2.5 px-4 font-semibold">Trainer</th>
-              <th className="py-2.5 px-4 font-semibold">Fitness goal</th>
-              <th className="py-2.5 px-4 font-semibold">Status</th>
-              <th className="py-2.5 px-4 font-semibold text-right">Score</th>
-              <th className="py-2.5 px-4 font-semibold">Zone</th>
-              <th className="py-2.5 px-4 font-semibold text-right">Acetone</th>
-              <th className="py-2.5 px-4 font-semibold text-right">Ethanol</th>
-              <th className="py-2.5 px-4 font-semibold text-right">H₂</th>
-              <th className="py-2.5 px-4 font-semibold">Diet plan</th>
-              <th className="py-2.5 px-4 font-semibold">Last active</th>
+              <th className="py-2.5 px-3 xl:px-4 font-semibold">Name</th>
+              <th className="hidden xl:table-cell py-2.5 px-3 xl:px-4 font-semibold">Profile ID</th>
+              <th className="hidden lg:table-cell py-2.5 px-3 xl:px-4 font-semibold">Trainer</th>
+              <th className="hidden xl:table-cell py-2.5 px-3 xl:px-4 font-semibold">Fitness goal</th>
+              <th className="py-2.5 px-3 xl:px-4 font-semibold">Status</th>
+              <th className="py-2.5 px-3 xl:px-4 font-semibold text-right">Score</th>
+              <th className="py-2.5 px-3 xl:px-4 font-semibold">Zone</th>
+              <th className="hidden lg:table-cell py-2.5 px-3 xl:px-4 font-semibold text-right">Acetone</th>
+              <th className="hidden lg:table-cell py-2.5 px-3 xl:px-4 font-semibold text-right">Ethanol</th>
+              <th className="hidden lg:table-cell py-2.5 px-3 xl:px-4 font-semibold text-right">H₂</th>
+              <th className="py-2.5 px-3 xl:px-4 font-semibold">Diet plan</th>
+              <th className="hidden xl:table-cell py-2.5 px-3 xl:px-4 font-semibold">Last active</th>
             </tr>
           </thead>
           <tbody>
@@ -324,40 +324,67 @@ export default function SuperAdminAllClientsPage() {
             ) : (
               clients.map((c) => {
                 const status = c.selected_date_status?.status;
+                const fitnessGoal = c.fitness_goal
+                  ? c.fitness_goal.replace(/_/g, " ")
+                  : null;
+                const gasMeta = [
+                  c.acetone_ppm != null ? `Ace ${c.acetone_ppm}` : null,
+                  c.ethanol_ppm != null ? `Eth ${c.ethanol_ppm}` : null,
+                  c.h2_ppm != null ? `H₂ ${c.h2_ppm}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
                 return (
                   <tr
                     key={c.profile_id}
                     className="border-t border-[#F5F7FA] hover:bg-[#F5F7FA]"
                   >
                     <td
-                      className="py-2.5 px-4 cursor-pointer"
+                      className="py-2.5 px-3 xl:px-4 cursor-pointer"
                       onClick={() => goToClientProfile(c)}
                     >
                       <div className="text-[#252525] font-semibold hover:text-[#308BF9]">
                         {c.name || "-"}
                       </div>
-                      <div className="text-[#A1A1A1] text-[11px]">
+                      <div className="text-[#A1A1A1] text-[11px] break-all">
                         {c.email || "-"}
                       </div>
+                      {c.profile_id && (
+                        <div className="xl:hidden text-[#535359] text-[11px] font-mono">
+                          {c.profile_id}
+                        </div>
+                      )}
+                      <div className="lg:hidden text-[#A1A1A1] text-[11px]">
+                        {c.associated_dietitian?.name || "-"}
+                        {fitnessGoal ? ` · ${fitnessGoal}` : ""}
+                      </div>
                     </td>
-                    <td className="py-2.5 px-4 text-[#535359] font-mono">
+                    <td className="hidden xl:table-cell py-2.5 px-3 xl:px-4 text-[#535359] font-mono">
                       {c.profile_id || "-"}
                     </td>
-                    <td className="py-2.5 px-4 text-[#535359]">
+                    <td className="hidden lg:table-cell py-2.5 px-3 xl:px-4 text-[#535359]">
                       <div>{c.associated_dietitian?.name || "-"}</div>
                       <div className="text-[#A1A1A1] text-[11px] font-mono">
                         {c.dietitian_id || c.partner_code || "-"}
                       </div>
+                      {fitnessGoal && (
+                        <div className="xl:hidden text-[#A1A1A1] text-[11px]">
+                          {fitnessGoal}
+                        </div>
+                      )}
                     </td>
-                    <td className="py-2.5 px-4 text-[#535359]">
-                      {c.fitness_goal
-                        ? c.fitness_goal.replace(/_/g, " ")
-                        : "-"}
+                    <td className="hidden xl:table-cell py-2.5 px-3 xl:px-4 text-[#535359]">
+                      {fitnessGoal || "-"}
                     </td>
-                    <td className="py-2.5 px-4">
+                    <td className="py-2.5 px-3 xl:px-4">
                       <StatusBadge status={status} />
+                      {c.last_active && (
+                        <div className="xl:hidden text-[#A1A1A1] text-[11px] mt-1 whitespace-nowrap">
+                          {c.last_active}
+                        </div>
+                      )}
                     </td>
-                    <td className="py-2.5 px-4 text-right">
+                    <td className="py-2.5 px-3 xl:px-4 text-right">
                       {c.metabolism_score != null ? (
                         <span className="text-[#252525] font-semibold">
                           {c.metabolism_score}
@@ -366,19 +393,24 @@ export default function SuperAdminAllClientsPage() {
                         <span className="text-[#A1A1A1]">-</span>
                       )}
                     </td>
-                    <td className="py-2.5 px-4">
+                    <td className="py-2.5 px-3 xl:px-4">
                       <ZoneBadge zone={c.zone} />
+                      {gasMeta && (
+                        <div className="lg:hidden text-[#A1A1A1] text-[11px] mt-1 whitespace-nowrap">
+                          {gasMeta}
+                        </div>
+                      )}
                     </td>
-                    <td className="py-2.5 px-4 text-right text-[#535359]">
+                    <td className="hidden lg:table-cell py-2.5 px-3 xl:px-4 text-right text-[#535359]">
                       {c.acetone_ppm ?? "-"}
                     </td>
-                    <td className="py-2.5 px-4 text-right text-[#535359]">
+                    <td className="hidden lg:table-cell py-2.5 px-3 xl:px-4 text-right text-[#535359]">
                       {c.ethanol_ppm ?? "-"}
                     </td>
-                    <td className="py-2.5 px-4 text-right text-[#535359]">
+                    <td className="hidden lg:table-cell py-2.5 px-3 xl:px-4 text-right text-[#535359]">
                       {c.h2_ppm ?? "-"}
                     </td>
-                    <td className="py-2.5 px-4">
+                    <td className="py-2.5 px-3 xl:px-4">
                       {c.diet_plan?.generated ? (
                         <span className="inline-flex rounded-full text-[11px] font-semibold px-2.5 py-0.5 bg-[#E5F6EE] text-[#1F7A4A]">
                           Generated
@@ -389,7 +421,7 @@ export default function SuperAdminAllClientsPage() {
                         </span>
                       )}
                     </td>
-                    <td className="py-2.5 px-4 text-[#A1A1A1]">
+                    <td className="hidden xl:table-cell py-2.5 px-3 xl:px-4 text-[#A1A1A1] whitespace-nowrap">
                       {c.last_active || "-"}
                     </td>
                   </tr>

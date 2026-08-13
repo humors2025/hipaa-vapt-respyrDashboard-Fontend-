@@ -183,7 +183,7 @@ export default function FatUsePatternTrend() {
   return (
     <>
     <div className="w-full flex flex-col gap-[28px] border border-[#E1E6ED] px-5 pt-[18px] pb-5 rounded-[15px] bg-white">
-      <div className="flex justify-between items-center gap-3">
+      <div className="flex justify-between items-center gap-3 flex-wrap">
         <div className="flex gap-[5px] items-center min-w-0">
           <p className="text-[#252525] text-[15px] font-semibold leading-normal tracking-[-0.3px] whitespace-nowrap">
             {title}
@@ -203,7 +203,7 @@ export default function FatUsePatternTrend() {
          
 
           <div
-            className="px-[25px] py-1.5 rounded-[24px]"
+            className="px-[25px] max-xl:px-4 py-1.5 rounded-[24px]"
             style={{ backgroundColor: statusColor }}
           >
             <p className="text-white text-[12px] font-semibold leading-normal tracking-[-0.24px]">
@@ -237,7 +237,7 @@ export default function FatUsePatternTrend() {
 
         <div className="flex items-center">
           <div className="flex items-baseline gap-[4px]">
-            <p className="text-[#252525] text-[72px] font-normal leading-none tracking-[-1.44px]">
+            <p className="text-[#252525] text-[72px] max-xl:text-[52px] font-normal leading-none tracking-[-1.44px]">
               {value !== "NA" && !isNaN(Number(value))
                 ? Math.round(Number(value))
                 : value}

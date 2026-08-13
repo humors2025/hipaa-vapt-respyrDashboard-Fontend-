@@ -236,7 +236,7 @@ const summary = useSelector((state) => state.clients.summary);
   return (
     <>
       {/* Card */}
-      <div className="w-[385px] rounded-[15px] border border-[#E1E6ED] bg-[#F5F7FA] px-2.5 pt-2.5">
+      <div className="w-full lg:w-[320px] xl:w-[385px] rounded-[15px] border border-[#E1E6ED] bg-[#F5F7FA] px-2.5 pt-2.5">
         {/* <div className="flex flex-col gap-1 bg-[#DBDFE5] rounded-[15px]">
           <div className="flex justify-between py-5 pl-[18px] pr-14">
             <div className="flex flex-col gap-1.5">

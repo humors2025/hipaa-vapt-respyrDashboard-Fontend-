@@ -149,13 +149,13 @@ export default function ClientDirectory() {
             {pagination?.total ?? 0}
           </span>
         </div>
-        <div className="relative">
+        <div className="relative w-full sm:w-auto">
           <input
             type="text"
             placeholder="Search by name, email or phone"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-[280px] rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] text-[#252525] placeholder:text-[#A1A1A1] focus:outline-none focus:border-[#308BF9]"
+            className="w-full sm:w-[280px] rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] text-[#252525] placeholder:text-[#A1A1A1] focus:outline-none focus:border-[#308BF9]"
           />
         </div>
       </div>
@@ -170,18 +170,18 @@ export default function ClientDirectory() {
         <table className="w-full text-[12px]">
           <thead>
             <tr className="bg-[#F5F7FA] text-[#535359] text-left">
-              <th className="py-2.5 px-4 font-semibold">Profile ID</th>
-              <th className="py-2.5 px-4 font-semibold">Client</th>
-              <th className="py-2.5 px-4 font-semibold">Email</th>
-              <th className="py-2.5 px-4 font-semibold">Phone</th>
-              <th className="py-2.5 px-4 font-semibold">DOB</th>
-              <th className="py-2.5 px-4 font-semibold">Age</th>
-              <th className="py-2.5 px-4 font-semibold">Gender</th>
-              <th className="py-2.5 px-4 font-semibold text-right">Height</th>
-              <th className="py-2.5 px-4 font-semibold text-right">Weight</th>
-              <th className="py-2.5 px-4 font-semibold">Fitness Goal</th>
-              <th className="py-2.5 px-4 font-semibold">Level</th>
-              <th className="py-2.5 px-4 font-semibold">Joined</th>
+              <th className="py-2.5 px-3 xl:px-4 font-semibold">Profile ID</th>
+              <th className="py-2.5 px-3 xl:px-4 font-semibold">Client</th>
+              <th className="hidden xl:table-cell py-2.5 px-3 xl:px-4 font-semibold">Email</th>
+              <th className="hidden xl:table-cell py-2.5 px-3 xl:px-4 font-semibold">Phone</th>
+              <th className="hidden xl:table-cell py-2.5 px-3 xl:px-4 font-semibold">DOB</th>
+              <th className="py-2.5 px-3 xl:px-4 font-semibold">Age</th>
+              <th className="hidden lg:table-cell py-2.5 px-3 xl:px-4 font-semibold">Gender</th>
+              <th className="hidden lg:table-cell py-2.5 px-3 xl:px-4 font-semibold text-right">Height</th>
+              <th className="hidden lg:table-cell py-2.5 px-3 xl:px-4 font-semibold text-right">Weight</th>
+              <th className="py-2.5 px-3 xl:px-4 font-semibold">Fitness Goal</th>
+              <th className="py-2.5 px-3 xl:px-4 font-semibold">Level</th>
+              <th className="py-2.5 px-3 xl:px-4 font-semibold">Joined</th>
             </tr>
           </thead>
           <tbody>
@@ -203,54 +203,78 @@ export default function ClientDirectory() {
               clients.map((c) => {
                 const levelTone = LEVEL_TONE[c?.level_type] || "bg-[#F5F7FA] text-[#535359]";
                 const name = c?.profile_name || c?.client_name || "Unnamed";
+                const phone =
+                  c?.phone_no && c.phone_no !== "NA" ? c.phone_no : null;
+                const bodyMeta = [
+                  c?.gender,
+                  c?.height ? `${c.height} cm` : null,
+                  c?.weight ? `${c.weight} kg` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
                 return (
                   <tr
                     key={c?.profile_id}
                     className="border-t border-[#F5F7FA] hover:bg-[#F8FAFC]"
                   >
-                    <td className="py-2.5 px-4 text-[#535359] font-mono">
+                    <td className="py-2.5 px-3 xl:px-4 text-[#535359] font-mono">
                       {c?.profile_id || "-"}
                     </td>
-                    <td className="py-2.5 px-4">
+                    <td className="py-2.5 px-3 xl:px-4">
                       <div className="text-[#252525] font-semibold">{name}</div>
                       {c?.client_name && c.client_name !== c.profile_name && (
                         <div className="text-[#A1A1A1] text-[11px]">
                           {c.client_name}
                         </div>
                       )}
+                      {c?.email && (
+                        <div className="xl:hidden text-[#535359] text-[11px] break-all">
+                          {c.email}
+                        </div>
+                      )}
+                      {phone && (
+                        <div className="xl:hidden text-[#A1A1A1] text-[11px]">
+                          {phone}
+                        </div>
+                      )}
+                      {bodyMeta && (
+                        <div className="lg:hidden text-[#A1A1A1] text-[11px] whitespace-nowrap">
+                          {bodyMeta}
+                        </div>
+                      )}
                     </td>
-                    <td className="py-2.5 px-4 text-[#535359]">
+                    <td className="hidden xl:table-cell py-2.5 px-3 xl:px-4 text-[#535359]">
                       {c?.email || "-"}
                     </td>
-                    <td className="py-2.5 px-4 text-[#535359]">
-                      {c?.phone_no && c.phone_no !== "NA" ? c.phone_no : "-"}
+                    <td className="hidden xl:table-cell py-2.5 px-3 xl:px-4 text-[#535359]">
+                      {phone || "-"}
                     </td>
-                    <td className="py-2.5 px-4 text-[#535359]">
+                    <td className="hidden xl:table-cell py-2.5 px-3 xl:px-4 text-[#535359]">
                       {c?.dob && c.dob !== "hidden" ? c.dob : "-"}
                     </td>
-                    <td className="py-2.5 px-4 text-[#535359]">
+                    <td className="py-2.5 px-3 xl:px-4 text-[#535359]">
                       {c?.age || "-"}
                     </td>
-                    <td className="py-2.5 px-4 text-[#535359]">
+                    <td className="hidden lg:table-cell py-2.5 px-3 xl:px-4 text-[#535359]">
                       {c?.gender || "-"}
                     </td>
-                    <td className="py-2.5 px-4 text-right text-[#535359]">
+                    <td className="hidden lg:table-cell py-2.5 px-3 xl:px-4 text-right text-[#535359] whitespace-nowrap">
                       {c?.height ? `${c.height} cm` : "-"}
                     </td>
-                    <td className="py-2.5 px-4 text-right text-[#535359]">
+                    <td className="hidden lg:table-cell py-2.5 px-3 xl:px-4 text-right text-[#535359] whitespace-nowrap">
                       {c?.weight ? `${c.weight} kg` : "-"}
                     </td>
-                    <td className="py-2.5 px-4 text-[#535359] capitalize">
+                    <td className="py-2.5 px-3 xl:px-4 text-[#535359] capitalize">
                       {prettify(c?.fitness_goal)}
                     </td>
-                    <td className="py-2.5 px-4">
+                    <td className="py-2.5 px-3 xl:px-4">
                       <span
                         className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 ${levelTone}`}
                       >
                         L{c?.level_type ?? "-"}
                       </span>
                     </td>
-                    <td className="py-2.5 px-4 text-[#A1A1A1]">
+                    <td className="py-2.5 px-3 xl:px-4 text-[#A1A1A1] whitespace-nowrap">
                       {formatJoined(c?.joined_dttm)}
                     </td>
                   </tr>

@@ -536,8 +536,8 @@ const transformDatesToDisplay = () => {
           className={`w-full h-full bg-white px-[15px] pt-[23px] pb-5 rounded-[15px] flex flex-col overflow-hidden transition-all duration-300 relative ${isSidebarOpen ? "opacity-90" : "opacity-100"
             }`}
         >
-          <div className="flex justify-between items-center pb-[22px] border-b border-[#E1E6ED]">
-            <div className="flex gap-[15px]">
+          <div className="flex justify-between items-center gap-3 pb-[22px] border-b border-[#E1E6ED]">
+            <div className="flex gap-[15px] min-w-0">
              
                 <div className="rounded-full w-12 h-12 flex items-center justify-center overflow-hidden">
                   {profileDetails?.profile_image &&
@@ -560,10 +560,10 @@ const transformDatesToDisplay = () => {
                 </div>
             
 
-              <div className="flex flex-col gap-3">
-                <div className="flex gap-3 items-center">
-                
-                    <p className="text-[#252525] text-[20px] font-semibold tracking-[-0.4px] leading-[110%]">
+              <div className="flex flex-col gap-3 min-w-0">
+                <div className="flex gap-3 max-xl:gap-2 items-center flex-wrap">
+
+                    <p className="text-[#252525] text-[20px] max-xl:text-[17px] font-semibold tracking-[-0.4px] leading-[110%]">
                       {profileDetails?.profile_name || "NA"}
                     </p>
                  
@@ -630,7 +630,7 @@ const transformDatesToDisplay = () => {
             </div>
 
             {/* {showWhenNotSuperAdmin && ( */}
-              <div className="flex gap-[30px]">
+              <div className="flex gap-[30px] max-xl:gap-4 shrink-0">
                 <Image
                   src="/icons/hugeicons_file-export.svg"
                   width={26}
@@ -652,11 +652,11 @@ const transformDatesToDisplay = () => {
             {/* )} */}
           </div>
 
-          <div className="flex py-[11px] pl-[5px]">
-            <div className="flex bg-[#F5F7FA] rounded-[6px]">
+          <div className="flex py-[11px] pl-[5px] max-xl:overflow-x-auto scroll-hide">
+            <div className="flex bg-[#F5F7FA] rounded-[6px] max-xl:w-max">
               <div
                 onClick={() => handleTabChange("test")}
-                className={`flex items-center rounded-[6px] py-[11px] px-[31px] cursor-pointer ${activeTab === "test"
+                className={`flex items-center rounded-[6px] py-[11px] px-[31px] max-xl:px-4 cursor-pointer ${activeTab === "test"
                   ? "bg-[#252525] cursor-pointer hover:bg-[#3a3a3a]"
                   : "bg-[#F5F7FA] cursor-pointer hover:bg-[#e8eaed]"
                   }`}
@@ -671,7 +671,7 @@ const transformDatesToDisplay = () => {
 
               <div
                 onClick={() => handleTabChange("macros")}
-                className={`flex items-center gap-2.5 rounded-[6px] py-[11px] px-[31px] transition-all duration-200 ${activeTab === "macros"
+                className={`flex items-center gap-2.5 rounded-[6px] py-[11px] px-[31px] max-xl:px-4 transition-all duration-200 ${activeTab === "macros"
                   ? "bg-[#252525] cursor-pointer hover:bg-[#3a3a3a]"
                   : "bg-[#F5F7FA] cursor-pointer hover:bg-[#e8eaed]"
                   }`}
@@ -686,7 +686,7 @@ const transformDatesToDisplay = () => {
 
               <div
                 onClick={() => handleTabChange("diet")}
-                className={`flex items-center gap-2.5 rounded-[6px] py-[11px] px-[31px] transition-all duration-200 ${!isDietAnalysisAvailable
+                className={`flex items-center gap-2.5 rounded-[6px] py-[11px] px-[31px] max-xl:px-4 transition-all duration-200 ${!isDietAnalysisAvailable
                   ? "opacity-50 cursor-not-allowed bg-[#F5F7FA]"
                   : activeTab === "diet"
                     ? "bg-[#252525] cursor-pointer hover:bg-[#3a3a3a]"
@@ -720,7 +720,7 @@ const transformDatesToDisplay = () => {
 
               <div
                 onClick={() => handleTabChange("habits")}
-                className={`flex items-center gap-2.5 rounded-[6px] py-[11px] px-[31px] transition-all duration-200 ${activeTab === "habits"
+                className={`flex items-center gap-2.5 rounded-[6px] py-[11px] px-[31px] max-xl:px-4 transition-all duration-200 ${activeTab === "habits"
                   ? "bg-[#252525] cursor-pointer hover:bg-[#3a3a3a]"
                   : "bg-[#F5F7FA] cursor-pointer hover:bg-[#e8eaed]"
                   }`}
@@ -743,7 +743,7 @@ const transformDatesToDisplay = () => {
 
               <div
                 onClick={() => handleTabChange("weight")}
-                className={`flex items-center gap-2.5 rounded-[6px] py-[11px] px-[31px] transition-all duration-200 ${activeTab === "weight"
+                className={`flex items-center gap-2.5 rounded-[6px] py-[11px] px-[31px] max-xl:px-4 transition-all duration-200 ${activeTab === "weight"
                   ? "bg-[#252525] cursor-pointer hover:bg-[#3a3a3a]"
                   : "bg-[#F5F7FA] cursor-pointer hover:bg-[#e8eaed]"
                   }`}
@@ -792,21 +792,21 @@ const transformDatesToDisplay = () => {
           {activeTab === "habits" || activeTab === "weight" ? (
             <div className="border-b border-[#E1E6ED]"></div>
           ) : (
-            <div className="flex items-center gap-[26px] border-t border-b border-[#E1E6ED] pl-[38px] py-[5px]">
-              <p className="text-[#535359] text-[15px] font-semibold whitespace-nowrap">
+            <div className="flex items-center gap-[26px] max-xl:gap-3 border-t border-b border-[#E1E6ED] pl-[38px] max-xl:pl-3 py-[5px]">
+              <p className="text-[#535359] text-[15px] max-xl:text-[13px] font-semibold whitespace-nowrap">
                 {activeTab === "diet" ? "Select a week" : "Select a date"}
               </p>
 
-              <div className="flex gap-3 items-center w-full">
+              <div className="flex gap-3 max-xl:gap-2 items-center w-full min-w-0">
                 <IoChevronBackOutline
                   onClick={handleBack}
-                  className={`text-[#252525] w-6 h-6 cursor-pointer ${startIndex === 0 || currentData.length === 0
+                  className={`text-[#252525] w-6 h-6 shrink-0 cursor-pointer ${startIndex === 0 || currentData.length === 0
                     ? "opacity-50 cursor-not-allowed"
                     : ""
                     }`}
                 />
 
-                <div className="w-full flex gap-[5px] items-center overflow-x-auto no-scrollbar">
+                <div className="flex-1 min-w-0 flex gap-[5px] items-center overflow-x-auto scroll-hide">
                   {currentData.length === 0 ? (
                     <div className="text-center py-4 text-gray-500 w-full">
                       {activeTab === "diet"
@@ -824,7 +824,7 @@ const transformDatesToDisplay = () => {
                               ? handleWeekSelect(actualIndex)
                               : handleDateSelect(actualIndex)
                           }
-                          className={`flex flex-col gap-[5px] rounded-[8px] pl-[15px] pt-[15px] pr-[15px] pb-[15px] cursor-pointer min-w-[160px] ${activeIndex === actualIndex ? "bg-[#308BF9]" : ""
+                          className={`flex flex-col gap-[5px] rounded-[8px] pl-[15px] pt-[15px] pr-[15px] pb-[15px] max-xl:p-2.5 cursor-pointer min-w-[160px] max-xl:min-w-[128px] ${activeIndex === actualIndex ? "bg-[#308BF9]" : ""
                             }`}
                         >
                           {activeTab === "diet" ? (
@@ -914,10 +914,10 @@ const transformDatesToDisplay = () => {
                   )}
                 </div>
 
-                <div className="flex justify-end">
+                <div className="flex justify-end shrink-0">
                   <IoChevronForwardOutline
                     onClick={handleForward}
-                    className={`text-[#252525] w-6 h-6 cursor-pointer ${startIndex + ITEMS_TO_SHOW >= currentData.length ||
+                    className={`text-[#252525] w-6 h-6 shrink-0 cursor-pointer ${startIndex + ITEMS_TO_SHOW >= currentData.length ||
                       currentData.length === 0
                       ? "opacity-50 cursor-not-allowed"
                       : ""
@@ -1806,7 +1806,7 @@ const transformDatesToDisplay = () => {
 //                               ? handleWeekSelect(actualIndex)
 //                               : handleDateSelect(actualIndex)
 //                           }
-//                           className={`flex flex-col gap-[5px] rounded-[8px] pl-[15px] pt-[15px] pr-[15px] pb-[15px] cursor-pointer min-w-[160px] ${activeIndex === actualIndex ? "bg-[#308BF9]" : ""
+//                           className={`flex flex-col gap-[5px] rounded-[8px] pl-[15px] pt-[15px] pr-[15px] pb-[15px] max-xl:p-2.5 cursor-pointer min-w-[160px] max-xl:min-w-[128px] ${activeIndex === actualIndex ? "bg-[#308BF9]" : ""
 //                             }`}
 //                         >
 //                           {activeTab === "diet" ? (

@@ -155,7 +155,7 @@ export default function ClientsSection() {
   };
 
   const tabClass = (tabName) =>
-    `px-[30px] py-[11px] rounded-[20px] cursor-pointer transition-all duration-200 whitespace-nowrap ${
+    `px-4 xl:px-[30px] py-[11px] rounded-[20px] cursor-pointer transition-all duration-200 whitespace-nowrap ${
       activeTab === tabName ? "bg-[#252525]" : "border border-[#E1E6ED]"
     }`;
 
@@ -175,8 +175,8 @@ export default function ClientsSection() {
   return (
     <div className="flex flex-col gap-7">
       <div className="flex flex-col gap-[15px] border-[#E1E6ED] rounded-[10px]">
-        <div className="flex items-center justify-between w-full">
-          <div className="flex gap-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+          <div className="flex flex-wrap gap-2.5">
             <div className={tabClass("all")} onClick={() => changeTab("all")}>
               <p className={textClass("all")}>All ({summary.all_total})</p>
             </div>
@@ -200,7 +200,7 @@ export default function ClientsSection() {
             </div>
           </div>
 
-          <div className="w-full sm:w-[323px]">
+          <div className="flex-1 min-w-[220px] sm:max-w-[323px]">
             <UserProfile
               showOnlySearch={true}
               searchQuery={search}

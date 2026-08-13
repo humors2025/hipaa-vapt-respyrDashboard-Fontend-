@@ -157,6 +157,13 @@
 
         }
 
+        /* Tablet portrait (e.g. 768×1024): sidebar leaves too little room for two columns */
+        @media (max-width: 1023.98px) {
+          .form-container {
+            grid-template-columns: 1fr;
+          }
+        }
+
         .input-group {
             position: relative;
             width: 100%;

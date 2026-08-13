@@ -242,7 +242,7 @@ export default function ClientLists() {
 
   return (
     <>
-      <div className=" bg-white rounded-[15px]  px-[5px]">
+      <div className=" bg-white rounded-[15px]  px-[5px] max-xl:w-[290px] max-xl:min-w-[290px] max-xl:shrink-0">
         <div className="flex flex-col gap-6 mb-[22px]">
         
             <div className="flex gap-1.5 items-center pt-[22px] pl-[15px]">
@@ -264,7 +264,7 @@ export default function ClientLists() {
             </div>
         
 
-          <p className="pl-5 text-[#252525] text-[25px] font-semibold leading-normal tracking-[-1px]">
+          <p className="pl-5 text-[#252525] text-[25px] max-xl:text-[20px] font-semibold leading-normal tracking-[-1px]">
             Clients ({totalCount})
           </p>
         </div>
@@ -281,7 +281,7 @@ export default function ClientLists() {
         <div className="flex gap-2.5 ml-[15px] my-[15px]">
           <div
             onClick={() => setSelectedLevel("all")}
-            className={`rounded-[20px] py-[11px] px-[30px] cursor-pointer ${selectedLevel === "all"
+            className={`rounded-[20px] py-[11px] px-[30px] max-xl:px-4 max-xl:py-2 cursor-pointer ${selectedLevel === "all"
               ? "bg-[#252525]"
               : "bg-[#FFFFFF] border border-[#E1E6ED]"
               }`}
@@ -298,7 +298,7 @@ export default function ClientLists() {
 
           <div
             onClick={() => setSelectedLevel("1")}
-            className={`rounded-[20px] py-[11px] px-[30px] cursor-pointer ${selectedLevel === "1"
+            className={`rounded-[20px] py-[11px] px-[30px] max-xl:px-4 max-xl:py-2 cursor-pointer ${selectedLevel === "1"
               ? "bg-[#252525]"
               : "bg-[#FFFFFF] border border-[#E1E6ED]"
               }`}
@@ -315,7 +315,7 @@ export default function ClientLists() {
 
           <div
             onClick={() => setSelectedLevel("2")}
-            className={`rounded-[20px] py-[11px] px-[30px] cursor-pointer ${selectedLevel === "2"
+            className={`rounded-[20px] py-[11px] px-[30px] max-xl:px-4 max-xl:py-2 cursor-pointer ${selectedLevel === "2"
               ? "bg-[#252525]"
               : "bg-[#FFFFFF] border border-[#E1E6ED]"
               }`}
@@ -332,7 +332,7 @@ export default function ClientLists() {
 
           <div
             onClick={() => setSelectedLevel("3")}
-            className={`rounded-[20px] py-[11px] px-[30px] cursor-pointer ${selectedLevel === "3"
+            className={`rounded-[20px] py-[11px] px-[30px] max-xl:px-4 max-xl:py-2 cursor-pointer ${selectedLevel === "3"
               ? "bg-[#252525]"
               : "bg-[#FFFFFF] border border-[#E1E6ED]"
               }`}
@@ -371,7 +371,7 @@ export default function ClientLists() {
               <div
                 key={client.profile_id}
                 onClick={() => handleClientClick(index, client.profile_id)}
-                className="flex flex-col gap-2.5 pl-5 py-[15px] pr-[15px] border-b border-[#E1E6ED] cursor-pointer"
+                className="flex flex-col gap-2.5 pl-5 py-[15px] pr-[15px] max-xl:pl-3 max-xl:pr-2.5 border-b border-[#E1E6ED] cursor-pointer"
                 style={{
                   backgroundColor:
                     activeIndex === index ? "#F0F6FD" : "#FFFFFF",
@@ -394,12 +394,12 @@ export default function ClientLists() {
                     />
                   </div>
 
-                  <div>
-                    <p className="text-[#252525] text-[15px] font-semibold leading-[126%] tracking-[-0.3px]">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[#252525] text-[15px] font-semibold leading-[126%] tracking-[-0.3px] truncate">
                       {client.client_name}
                     </p>
 
-                    <div className="flex items-center">
+                    <div className="flex items-center max-xl:flex-wrap">
                       <p className="text-[#535359] text-[12px] font-semibold">
                         {client.metabolism_score
                           ? `${Math.round(client.metabolism_score)}%`
@@ -431,9 +431,9 @@ export default function ClientLists() {
                   </div>
                 </div>
 
-                <div className="flex gap-3 items-center">
+                <div className="flex gap-3 items-center max-xl:flex-wrap max-xl:gap-2">
                   <div
-                    className="px-2.5 py-2 rounded-[5px]"
+                    className="px-2.5 py-2 rounded-[5px] shrink-0"
                     style={{
                       backgroundColor: client.level_type === "1" ? "#E9F3FF" :
                         client.level_type === "2" ? "#FFFAF0" :

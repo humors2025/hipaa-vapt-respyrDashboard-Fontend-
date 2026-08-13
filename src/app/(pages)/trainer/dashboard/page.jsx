@@ -79,16 +79,16 @@ const Dashboard = () => {
 
         </div>
 
-        <div className="flex gap-5 w-full bg-white px-[15px] pt-2.5 pb-1.5 rounded-[15px]">
-          <div className="flex-shrink-0">
+        <div className="flex flex-col lg:flex-row gap-5 w-full bg-white px-[15px] pt-2.5 pb-1.5 rounded-[15px]">
+          <div className="flex-shrink-0 w-full lg:w-auto">
             {/* Pass selectedDate state and handler to Calendar */}
-            <Calender 
+            <Calender
               selectedDate={selectedDate}
               onDateSelect={handleDateSelect}
             />
           </div>
 
-          <div className="flex-1 ">
+          <div className="flex-1 min-w-0">
             {/* Pass selectedDate to ClientMonitor which contains ClientsSection */}
             <ClientMonitor selectedDate={selectedDate} />
           </div>

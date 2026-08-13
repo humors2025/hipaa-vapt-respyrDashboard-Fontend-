@@ -6,7 +6,7 @@ export default function MacrosAnalysis({ activeTab }) {
 
     return(
         <>
-         <div className="flex gap-5 mt-[17px] mx-[5px]">
+         <div className="flex max-xl:flex-col gap-5 mt-[17px] mx-[5px]">
                        <MacrosUpdate title="Macros Analysis" activeTab={activeTab}/>
                       <MacrosCalculation />
                    </div>
