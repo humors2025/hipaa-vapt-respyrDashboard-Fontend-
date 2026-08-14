@@ -845,7 +845,7 @@ export default function AnalyticsDashboard() {
       member: overviewMemberCode || "",
       label: periodWord,
     });
-    router.push(`/super-admin/onboarding?${qs.toString()}`);
+    router.push(`/trainer-admin/onboarding?${qs.toString()}`);
   };
 
   // Reading Split drill-down: the Trainers / Clients rows open /super-admin/readers
@@ -861,7 +861,7 @@ export default function AnalyticsDashboard() {
       member: overviewMemberCode || "",
       label: periodWord,
     });
-    router.push(`/super-admin/readers?${qs.toString()}`);
+    router.push(`/trainer-admin/readers?${qs.toString()}`);
   };
 
   const adoptionRate = tTotal > 0 ? Math.round((tActive / tTotal) * 100) : 0;
