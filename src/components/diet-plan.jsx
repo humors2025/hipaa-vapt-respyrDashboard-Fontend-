@@ -545,8 +545,8 @@ export default function DietPlan() {
         </div>
 
         <div>
-          <div className="flex gap-[3px] mt-[15px]">
-            <div className="flex flex-col gap-[15px] px-[15px] pt-[15px] pb-[54px] rounded-[15px] border-4 border-[#F5F7FA] min-w-[180px] xl:min-w-[200px] 2xl:min-w-[220px]">
+          <div className="flex max-2xl:flex-col gap-[3px] mt-[15px]">
+            <div className="flex flex-col max-2xl:flex-row max-2xl:overflow-x-auto scroll-hide gap-[15px] px-[15px] pt-[15px] max-2xl:pb-[15px] 2xl:pb-[54px] rounded-[15px] border-4 border-[#F5F7FA] min-w-[180px] xl:min-w-[200px] 2xl:min-w-[220px]">
               {meals.map((meal, index) => {
                 const isActive = activeMeal === meal.name;
 
@@ -557,11 +557,11 @@ export default function DietPlan() {
                       setActiveMeal(meal.name);
                       setEditingFoodIndex(null);
                     }}
-                    className={`flex flex-col gap-2.5 py-2.5 pl-[15px] pr-2.5 w-full cursor-pointer ${
+                    className={`flex flex-col gap-2.5 py-2.5 pl-[15px] pr-2.5 w-full max-2xl:w-auto max-2xl:shrink-0 max-2xl:whitespace-nowrap cursor-pointer ${
                       isActive ? "bg-[#308BF9] rounded-[10px]" : ""
                     } ${
                       !isActive && index !== 0
-                        ? "border-t border-[#E1E6ED]"
+                        ? "border-t max-2xl:border-t-0 max-2xl:border-l border-[#E1E6ED]"
                         : ""
                     }`}
                   >
@@ -585,7 +585,7 @@ export default function DietPlan() {
               })}
             </div>
 
-            <div className="pt-5 pb-[15px] pl-[15px] pr-2.5 border-4 border-[#F5F7FA] rounded-[15px] flex-1 h-[360px] xl:h-[400px] 2xl:h-[440px] flex flex-col scroll-hide">
+            <div className="pt-5 pb-[15px] pl-[15px] pr-2.5 border-4 border-[#F5F7FA] rounded-[15px] flex-1 max-2xl:flex-none h-[360px] xl:h-[400px] 2xl:h-[440px] flex flex-col scroll-hide">
               {dietAnalysisLoading ? (
                 <div className="h-full flex items-center justify-center">
                   <p className="text-[#738298] text-[13px] xl:text-[14px] 2xl:text-[15px] font-medium">

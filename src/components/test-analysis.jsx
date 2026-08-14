@@ -8,7 +8,7 @@ import TrainerNote from "./trainer-note";
 export default function TestAnalysis() {
     return (
         <div className="flex flex-col gap-5 mt-[17px] mb-[22px] mx-[5px] min-h-full">
-            <div className="flex max-xl:flex-col gap-5 flex-1 xl:min-h-[400px]">
+            <div className="flex max-2xl:flex-col gap-5 flex-1 2xl:min-h-[400px]">
                 <div className="flex-1 flex">
                     <FatUsePatternTrend />
                 </div>
@@ -17,7 +17,7 @@ export default function TestAnalysis() {
                 </div>
             </div>
 
-            <div id="test-analysis-bottom-row" className="flex max-xl:flex-col gap-5 flex-1 xl:min-h-[400px] scroll-mt-2">
+            <div id="test-analysis-bottom-row" className="flex max-2xl:flex-col gap-5 flex-1 2xl:min-h-[400px] scroll-mt-2">
                 <div className="flex-1 flex">
                     <Progress />
                 </div>

@@ -224,7 +224,7 @@ export default function Progress({ title = "Progress", showDetails = true, showC
 
   if (loading && !graphData) {
     return (
-      <div className="w-[410px] flex flex-col border border-[#E1E6ED] px-5 pt-[18px] pb-5 rounded-[15px] bg-white">
+      <div className="w-full flex flex-col border border-[#E1E6ED] px-5 pt-[18px] pb-5 rounded-[15px] bg-white">
         <div className="flex justify-center items-center h-[300px]">
           <div className="text-[#535359]">Loading...</div>
         </div>
@@ -234,7 +234,7 @@ export default function Progress({ title = "Progress", showDetails = true, showC
 
   if (error && !graphData) {
     return (
-      <div className="w-[410px] flex flex-col border border-[#E1E6ED] px-5 pt-[18px] pb-5 rounded-[15px] bg-white">
+      <div className="w-full flex flex-col border border-[#E1E6ED] px-5 pt-[18px] pb-5 rounded-[15px] bg-white">
         <div className="flex justify-center items-center h-[300px]">
           <div className="text-red-500 text-center">
             <p>Error loading data</p>

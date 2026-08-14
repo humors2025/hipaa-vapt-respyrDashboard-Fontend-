@@ -23,7 +23,7 @@ export default function DietAnalysis() {
   }, []);
 
   return (
-    <div className="flex max-xl:flex-col gap-5 mt-[17px] mx-[5px]">
+    <div className="flex max-2xl:flex-col gap-5 mt-[17px] mx-[5px]">
       <MacrosUpdate />
 
       {isLargeScreen ? <DietPlanLargeSize /> : <DietPlan />}

@@ -347,7 +347,7 @@ const macros = [
       <>
         <div
           id="macros-update-container"
-          className="w-[356px] max-xl:w-full max-xl:shrink-0 pt-5 pr-1 pb-5 bg-[#F5F7FA] rounded-[15px]"
+          className="w-[356px] max-2xl:w-full max-2xl:shrink-0 pt-5 pr-1 pb-5 bg-[#F5F7FA] rounded-[15px]"
         >
           <div className="flex items-center justify-between px-[18px] pr-[10px]">
             <p className="text-[#738298] text-[12px] font-semibold uppercase">
@@ -374,7 +374,7 @@ const macros = [
       <>
         <div
           id="macros-update-container"
-          className="w-[356px] max-xl:w-full max-xl:shrink-0 pt-5 pr-1 pb-5 bg-[#F5F7FA] rounded-[15px]"
+          className="w-[356px] max-2xl:w-full max-2xl:shrink-0 pt-5 pr-1 pb-5 bg-[#F5F7FA] rounded-[15px]"
         >
           <div className="flex items-center justify-between px-[18px] pr-[10px]">
             <p className="text-[#738298] text-[12px] font-semibold uppercase">
@@ -405,7 +405,7 @@ const macros = [
     <>
       <div
         id="macros-update-container"
-        className="w-[356px] max-xl:w-full max-xl:shrink-0 pt-5 pr-1 pb-5 bg-[#F5F7FA] rounded-[15px]"
+        className="w-[356px] max-2xl:w-full max-2xl:shrink-0 pt-5 pr-1 pb-5 bg-[#F5F7FA] rounded-[15px]"
       >
         <div className="flex items-center justify-between px-[18px] pr-[10px]">
           <p className="text-[#738298] text-[12px] font-semibold uppercase">
@@ -451,7 +451,7 @@ const macros = [
             </div>
 
             <div className="flex flex-col gap-2.5">
-              <div className="flex max-xl:justify-center">
+              <div className="flex max-2xl:justify-center">
                 {macros.map((macro, index) => (
                   <div
                     key={index}
