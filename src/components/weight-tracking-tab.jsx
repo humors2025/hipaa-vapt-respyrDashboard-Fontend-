@@ -422,7 +422,7 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
       </div>
 
       {/* Stat tiles */}
-      <div className="grid grid-cols-4 max-xl:grid-cols-2 gap-3">
+      <div className="grid grid-cols-4 max-2xl:grid-cols-2 gap-3">
         {statTiles.map((tile) => (
           <div
             key={tile.label}
@@ -550,9 +550,9 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
       )}
 
       {/* Chart + Recent entries side by side */}
-      <div className="flex max-xl:flex-col gap-4 xl:h-[320px]">
+      <div className="flex max-2xl:flex-col gap-4 2xl:h-[320px]">
         {/* Chart */}
-        <div className="flex-[3] max-xl:flex-none max-xl:h-[320px] border border-[#E1E6ED] rounded-[12px] p-5 min-w-0 flex flex-col">
+        <div className="flex-[3] max-2xl:flex-none max-2xl:h-[320px] border border-[#E1E6ED] rounded-[12px] p-5 min-w-0 flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <p className="text-[#252525] text-[16px] font-semibold leading-[110%] tracking-[-0.64px]">
               Weight trend
@@ -607,7 +607,7 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
         </div>
 
         {/* Recent entries */}
-        <div className="flex-[2] max-xl:flex-none max-xl:h-[300px] flex flex-col min-w-0">
+        <div className="flex-[2] max-2xl:flex-none max-2xl:h-[300px] flex flex-col min-w-0">
           <div className="flex items-center gap-2 mb-3">
             <p className="text-[#252525] text-[16px] font-semibold leading-[110%] tracking-[-0.64px]">
               Recent entries

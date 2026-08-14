@@ -9,6 +9,11 @@ export default function MacrosCalculation() {
 
   const scrollContainerRef = useRef(null);
   const sectionRefs = useRef([]);
+  // While a click-initiated smooth scroll is animating, the scroll-spy must not
+  // recompute the active step from the in-between scroll positions — it would
+  // snap the highlight back to the step the user just navigated away from.
+  const programmaticScrollRef = useRef(false);
+  const programmaticScrollTimerRef = useRef(null);
 
   const clientIndividualProfile = useSelector(
     (state) => state.clientIndividualProfile.data
@@ -32,7 +37,7 @@ export default function MacrosCalculation() {
   const getStepTitle = (stage) => {
     if (stage === 1) return "1st CALCULATION";
     if (stage === 2) return "2nd CALCULATION";
-    if (stage === 3) return "3Rd CALCULATION";
+    if (stage === 3) return "3rd CALCULATION";
     return "FINAL CALCULATION";
   };
 
@@ -168,6 +173,16 @@ export default function MacrosCalculation() {
     if (!container || isNoMacroData) return;
 
     const handleScroll = () => {
+      if (programmaticScrollRef.current) {
+        // Smooth scroll from a step click is still in flight — once its scroll
+        // events stop for a beat, hand control back to the spy.
+        clearTimeout(programmaticScrollTimerRef.current);
+        programmaticScrollTimerRef.current = setTimeout(() => {
+          programmaticScrollRef.current = false;
+        }, 150);
+        return;
+      }
+
       const containerTop = container.getBoundingClientRect().top;
       let currentActive = calculationSteps[0]?.title || "1st CALCULATION";
       let minDistance = Infinity;
@@ -202,6 +217,14 @@ export default function MacrosCalculation() {
     const container = scrollContainerRef.current;
 
     if (section && container) {
+      // Hold the scroll-spy off until this animation settles (the fallback
+      // timeout covers the "already at the target, no scroll events" case).
+      programmaticScrollRef.current = true;
+      clearTimeout(programmaticScrollTimerRef.current);
+      programmaticScrollTimerRef.current = setTimeout(() => {
+        programmaticScrollRef.current = false;
+      }, 1000);
+
       const containerTop = container.getBoundingClientRect().top;
       const sectionTop = section.getBoundingClientRect().top;
 
@@ -211,6 +234,22 @@ export default function MacrosCalculation() {
         top: scrollOffset - 10,
         behavior: "smooth",
       });
+
+      // On stacked layouts (≤1535px) the steps sit above the detail panel,
+      // which can be below the fold of the tab's outer scroll panel — the
+      // inner scroll then happens out of sight and the click looks dead.
+      // Bring the detail panel into view first when it isn't fully visible.
+      const outer = container.closest(".scroll-target");
+      if (outer) {
+        const outerRect = outer.getBoundingClientRect();
+        const contRect = container.getBoundingClientRect();
+        if (contRect.top < outerRect.top || contRect.bottom > outerRect.bottom) {
+          outer.scrollTo({
+            top: outer.scrollTop + (contRect.top - outerRect.top) - 10,
+            behavior: "smooth",
+          });
+        }
+      }
     }
   };
 
@@ -245,8 +284,8 @@ export default function MacrosCalculation() {
 
         <div>
           <div className="w-full rounded-[15px] bg-white">
-            <div className="flex gap-[3px]">
-              <div className="flex flex-col gap-[15px] pb-[54px] rounded-[15px]">
+            <div className="flex max-2xl:flex-col gap-[3px]">
+              <div className="flex flex-col max-2xl:flex-row max-2xl:overflow-x-auto max-2xl:pb-[15px] scroll-hide gap-[15px] 2xl:pb-[54px] rounded-[15px]">
                 {calculationSteps.map((step, index) => {
                   const isActive = activeCalculation === step.title;
 
@@ -254,11 +293,11 @@ export default function MacrosCalculation() {
                     <div
                       key={step.title}
                       onClick={() => handleStepClick(step.title, index)}
-                      className={`flex flex-col gap-2.5 py-2.5 pl-[15px] pr-2.5 max-xl:pl-2.5 w-[200px] max-xl:w-[150px] cursor-pointer transition-all duration-200 ${
+                      className={`flex flex-col gap-2.5 py-2.5 pl-[15px] pr-2.5 max-xl:pl-2.5 w-[200px] max-xl:w-[150px] max-2xl:shrink-0 cursor-pointer transition-all duration-200 ${
                         isActive ? "bg-[#F0F6FD] rounded-[10px]" : ""
                       } ${
                         !isActive && index !== 0
-                          ? "border-t border-[#E1E6ED]"
+                          ? "border-t max-2xl:border-t-0 max-2xl:border-l border-[#E1E6ED]"
                           : ""
                       }`}
                     >
@@ -283,7 +322,7 @@ export default function MacrosCalculation() {
 
               <div
                 ref={scrollContainerRef}
-                className="pt-[7px] pl-[15px] max-xl:pl-2.5 rounded-[15px] flex-1 min-w-0 h-[350px] overflow-y-auto group-hover-scrollbar"
+                className="pt-[7px] pl-[15px] max-xl:pl-2.5 rounded-[15px] flex-1 max-2xl:flex-none min-w-0 h-[350px] overflow-y-auto group-hover-scrollbar"
               >
                 <div className="flex flex-col gap-0">
                   {calculationSteps.map((step, index) => {

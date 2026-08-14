@@ -295,7 +295,7 @@ const { loading, response, data, habitList, error } = useSelector(
                                                     {renderTrackingDots(habit, colorScheme.color)}
                                                 </div>
                                             </div>
-                                            <div className="flex gap-[109px] max-xl:gap-0 max-xl:justify-between">
+                                            <div className="flex gap-[109px] max-2xl:gap-0 max-2xl:justify-between">
                                                 <div className="flex flex-col gap-5">
                                                     <p className="text-[#535359] text-[10px] font-semibold leading-[110%] tracking-[-0.2px] uppercase whitespace-nowrap">
                                                         Completion Rate

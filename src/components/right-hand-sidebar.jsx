@@ -200,7 +200,7 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
       )}
 
       <div
-        className={`absolute top-0 right-0 h-full z-50 flex items-start gap-3 transition-all duration-300 ${isOpen
+        className={`absolute top-0 right-0 h-full z-50 flex items-start gap-3 w-full max-w-[502px] transition-all duration-300 ${isOpen
             ? "translate-x-0 opacity-100 pointer-events-auto"
             : "translate-x-full opacity-0 pointer-events-none"
           }`}
@@ -208,12 +208,12 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
         <button
           type="button"
           onClick={handleClose}
-          className="mt-4 cursor-pointer text-black bg-white border border-[#E1E6ED] rounded-full w-10 h-10 flex items-center justify-center shadow-sm hover:bg-gray-50 z-50"
+          className="mt-4 cursor-pointer text-black bg-white border border-[#E1E6ED] rounded-full w-10 h-10 shrink-0 flex items-center justify-center shadow-sm hover:bg-gray-50 z-50"
         >
           ✕
         </button>
 
-        <div className="flex flex-col h-full w-[450px] bg-white shadow-lg rounded-r-[15px] overflow-hidden pt-[26px]">
+        <div className="flex flex-col h-full flex-1 min-w-0 bg-white shadow-lg rounded-r-[15px] overflow-hidden pt-[26px]">
           <div className="flex gap-1.5 ml-[25px] mb-[29px] items-center">
             <IoIosArrowRoundBack
               onClick={handleBackToList}
@@ -361,7 +361,7 @@ export default function RightHandSidebar({ isOpen, onClose, selectedHabit, setSe
                           (day, index) => (
                             <div
                               key={day}
-                              className="flex justify-center px-3.5 py-1.5"
+                              className="flex justify-center px-1 py-1.5"
                             >
                               <span
                                 className={`text-[10px] font-normal leading-normal tracking-[-0.2px] ${index === 0
