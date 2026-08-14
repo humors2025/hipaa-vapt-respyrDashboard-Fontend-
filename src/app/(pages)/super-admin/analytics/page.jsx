@@ -866,9 +866,11 @@ export default function AnalyticsDashboard() {
 
   const adoptionRate = tTotal > 0 ? Math.round((tActive / tTotal) * 100) : 0;
   const engagementRate = cTotal > 0 ? Math.round((cActive / cTotal) * 100) : 0;
-  const activeTrainers = tabTr.filter(t => t.pct >= ACTIVE_THRESHOLD);
+  // Trainer status buckets — a clean partition of ALL trainers so the tab
+  // counts always sum to the All count: 0-59% At Risk, 60-99% Active, 100% Elite.
+  const activeTrainers = tabTr.filter(t => t.pct >= ACTIVE_THRESHOLD && t.pct < 100);
   const eliteTrainers = tabTr.filter(t => t.pct >= 100);
-  const atRiskTrainers = tabTr.filter(t => t.pct < 30);
+  const atRiskTrainers = tabTr.filter(t => t.pct < ACTIVE_THRESHOLD);
   const eliteCount = eliteTrainers.length;
   const atRiskTrainerCount = atRiskTrainers.length;
   // Rows behind the Trainer Adoption table: the active tab's list, narrowed by the
@@ -1551,7 +1553,7 @@ export default function AnalyticsDashboard() {
             <div className="flex gap-1 mt-4 p-1" style={{ backgroundColor: "#F1F5F9", borderRadius: "10px" }}>
               {[
                 { key: "all", dotColor: R.blue, count: tTotal, label: "All" },
-                { key: "active", dotColor: R.green, count: tActive, label: `Active` },
+                { key: "active", dotColor: R.green, count: activeTrainers.length, label: `Active` },
                 { key: "elite", dotColor: "#10B981", count: eliteCount, label: "Elite" },
                 { key: "atrisk", dotColor: R.red, count: atRiskTrainerCount, label: "At Risk" },
               ].map(t => (
