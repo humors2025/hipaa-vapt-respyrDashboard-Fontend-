@@ -831,7 +831,7 @@ export default function AnalyticsDashboard() {
   const pm = periodMetrics(tabCl, tabTr, readingDatesMap, range);
   const ppm = prevR ? periodMetrics(tabCl, tabTr, readingDatesMap, prevR) : null;
 
-  // Onboarding drill-down: the two "Onboarded" cards open /trainer-admin/onboarding
+  // Onboarding drill-down: the two "Onboarded" cards open /super-admin/onboarding
   // (get_group_onboarding) scoped to the SAME window + member the dashboard is on.
   const onbRange = range || getPeriodRange("today", now);
   const periodWord = period === "week" ? "this week" : period === "month" ? "this month" : period === "custom" ? "on this day" : "today";
@@ -845,10 +845,10 @@ export default function AnalyticsDashboard() {
       member: overviewMemberCode || "",
       label: periodWord,
     });
-    router.push(`/trainer-admin/onboarding?${qs.toString()}`);
+    router.push(`/super-admin/onboarding?${qs.toString()}`);
   };
 
-  // Reading Split drill-down: the Trainers / Clients rows open /trainer-admin/readers
+  // Reading Split drill-down: the Trainers / Clients rows open /super-admin/readers
   // (get_group_period_readers) scoped to the SAME window + member the dashboard is
   // on. overview_from/overview_to default to today via the period range.
   const openPeriodReaders = (type) => {
@@ -861,14 +861,15 @@ export default function AnalyticsDashboard() {
       member: overviewMemberCode || "",
       label: periodWord,
     });
-    router.push(`/trainer-admin/readers?${qs.toString()}`);
+    router.push(`/super-admin/readers?${qs.toString()}`);
   };
 
   const adoptionRate = tTotal > 0 ? Math.round((tActive / tTotal) * 100) : 0;
   const engagementRate = cTotal > 0 ? Math.round((cActive / cTotal) * 100) : 0;
-  const activeTrainers = tabTr.filter(t => t.pct >= ACTIVE_THRESHOLD);
+  // Trainer status buckets — a clean partition of ALL trainers so the tab
+  // counts always sum to the All count: 0-59% At Risk, 60-99% Active, 100% Elite.
+  const activeTrainers = tabTr.filter(t => t.pct >= ACTIVE_THRESHOLD && t.pct < 100);
   const eliteTrainers = tabTr.filter(t => t.pct >= 100);
-  // Below the Active threshold ⇒ At Risk — must stay in sync with the Status badge.
   const atRiskTrainers = tabTr.filter(t => t.pct < ACTIVE_THRESHOLD);
   const eliteCount = eliteTrainers.length;
   const atRiskTrainerCount = atRiskTrainers.length;
@@ -1245,6 +1246,19 @@ export default function AnalyticsDashboard() {
         .wc-cal .react-calendar__tile--now { background: ${R.blueLight}; color: ${R.blue}; font-weight: 700; }
         .wc-cal .react-calendar__tile--now:enabled:hover, .wc-cal .react-calendar__tile--now:enabled:focus { background: ${R.blueLight}; }
         .wc-cal .react-calendar__tile--active, .wc-cal .react-calendar__tile--active:enabled:hover, .wc-cal .react-calendar__tile--active:enabled:focus { background: ${R.dark}; color: ${R.white}; font-weight: 700; }
+
+        /* Tablet (1024x768 landscape & 768x1024 portrait): stack the hero grid so the
+           snapshot cards render full-width right below the sticky header, then the
+           Period Overview card, then Trainer Adoption. */
+        @media (max-width: 1024px) {
+          .an-hero-grid { grid-template-columns: 1fr !important; grid-template-rows: none !important; }
+          .an-snapshot-grid { order: -1; }
+          .an-period-card { grid-row: auto !important; grid-column: auto !important; }
+          .an-row3-grid { grid-template-columns: 1fr !important; }
+        }
+        @media (max-width: 820px) {
+          .an-snapshot-grid { gap: 10px !important; }
+        }
       `}</style>
 
       <div className="flex flex-col gap-5 pb-8 pt-2">
@@ -1266,10 +1280,10 @@ export default function AnalyticsDashboard() {
         )}
 
         {/* ═══ 2-ROW GRID: Left (Snapshot + Trainer Adoption) | Right (Period + Reading Split spanning both) ═══ */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 420px", gap: "14px", gridTemplateRows: "auto 1fr" }}>
+        <div className="an-hero-grid" style={{ display: "grid", gridTemplateColumns: "1fr 420px", gap: "14px", gridTemplateRows: "auto 1fr" }}>
 
           {/* ── Left Top: Snapshot cards ── */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px" }}>
+          <div className="an-snapshot-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px" }}>
             {/* Card: Trainers */}
             <div className="analytics-card-animate" style={{ ...CS, padding: "20px 20px 16px", borderLeft: `3px solid ${R.blue}`, height: "200px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}
               onMouseEnter={e => Object.assign(e.currentTarget.style, csHover)}
@@ -1373,7 +1387,7 @@ export default function AnalyticsDashboard() {
           </div>
 
           {/* ── Right: Period + Reading Split — spans 2 rows ── */}
-          <div className="analytics-card-animate" style={{ gridRow: "1 / 3", gridColumn: 2, alignSelf: "start", borderRadius: "16px", padding: "28px 24px", background: "linear-gradient(160deg, #1e293b 0%, #0f172a 100%)", color: "#ffffff", position: "relative", overflow: "hidden", transition: "box-shadow 0.3s ease, transform 0.3s ease", display: "flex", flexDirection: "column" }}
+          <div className="analytics-card-animate an-period-card" style={{ gridRow: "1 / 3", gridColumn: 2, alignSelf: "start", borderRadius: "16px", padding: "28px 24px", background: "linear-gradient(160deg, #1e293b 0%, #0f172a 100%)", color: "#ffffff", position: "relative", overflow: "hidden", transition: "box-shadow 0.3s ease, transform 0.3s ease", display: "flex", flexDirection: "column" }}
             onMouseEnter={e => Object.assign(e.currentTarget.style, { boxShadow: "0 8px 32px rgba(15,23,42,0.4)", transform: "translateY(-2px)" })}
             onMouseLeave={e => Object.assign(e.currentTarget.style, { boxShadow: "none", transform: "none" })}>
 
@@ -1539,7 +1553,7 @@ export default function AnalyticsDashboard() {
             <div className="flex gap-1 mt-4 p-1" style={{ backgroundColor: "#F1F5F9", borderRadius: "10px" }}>
               {[
                 { key: "all", dotColor: R.blue, count: tTotal, label: "All" },
-                { key: "active", dotColor: R.green, count: tActive, label: `Active` },
+                { key: "active", dotColor: R.green, count: activeTrainers.length, label: `Active` },
                 { key: "elite", dotColor: "#10B981", count: eliteCount, label: "Elite" },
                 { key: "atrisk", dotColor: R.red, count: atRiskTrainerCount, label: "At Risk" },
               ].map(t => (
@@ -1627,7 +1641,7 @@ export default function AnalyticsDashboard() {
         </div>
 
         {/* ═══ ROW 3: CLIENT ENGAGEMENT (wide) + READING RATE COHORTS ═══ */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", alignItems: "stretch" }}>
+        <div className="an-row3-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", alignItems: "stretch" }}>
           {/* Client Engagement */}
           <div className="p-5 analytics-card-animate" style={CS}
             onMouseEnter={e => Object.assign(e.currentTarget.style, csHover)}
