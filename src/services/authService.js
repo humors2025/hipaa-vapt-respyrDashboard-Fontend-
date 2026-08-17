@@ -1729,7 +1729,12 @@ export const uploadAgreementPdfToS3 = async (uploadUrl, file) => {
 };
 
 
-export const fetchTrainerClientInvitesService = async ({ actorUserId }) => {
+export const fetchTrainerClientInvitesService = async ({
+  actorUserId,
+  page = 1,
+  limit = 10,
+  search = "",
+}) => {
   if (!actorUserId) {
     throw new Error("Actor user ID missing. Please login again.");
   }
@@ -1740,15 +1745,23 @@ export const fetchTrainerClientInvitesService = async ({ actorUserId }) => {
     throw new Error("Access token missing. Please login again.");
   }
 
+  const body = {
+    actor_user_id: actorUserId,
+    page,
+    limit,
+  };
+
+  if (search) {
+    body.search = search;
+  }
+
   return apiFetcher(API_ENDPOINTS.ADMINPANEL.TRAINERLISTINVITES, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({
-      actor_user_id: actorUserId,
-    }),
+    body: JSON.stringify(body),
   });
 };
 
