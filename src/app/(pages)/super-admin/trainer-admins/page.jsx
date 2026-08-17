@@ -12,7 +12,6 @@ import {
   resendTrainerAdminInviteService,
   revokeTrainerAdminInviteService,
 } from "@/services/authService";
-import { getCurrentUser } from "@/lib/user";
 import TrainersList from "@/components/super-admin/TrainersList";
 
 
@@ -165,6 +164,17 @@ function formatAuditDate(dateValue) {
     month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
   });
 }
+
+const INVITE_STATUS_STYLES = {
+  pending: "bg-[#EEF4FE] text-[#308BF9]",
+  expired: "bg-[#FFF4E0] text-[#A66B00]",
+  revoked: "bg-[#FCEAEB] text-[#B5363A]",
+  active: "bg-[#E5F6EE] text-[#1F7A4A]",
+};
+
+const getInviteStatusStyle = (status) =>
+  INVITE_STATUS_STYLES[String(status || "").toLowerCase()] ||
+  "bg-[#F5F7FA] text-[#535359]";
 
 const AUDIT_ACTION_STYLES = {
   invited: "bg-[#E5F6EE] text-[#1F7A4A]",
@@ -463,7 +473,13 @@ function ExistingTrainerAdminsTable({ existingTrainerAdmins, onSelectTrainerAdmi
   );
 }
 
-function PendingAdminInvitationsTable({ pendingAdminInvitations, onResend, onRevoke, auditLogs }) {
+function InvitationsTable({
+  invitations,
+  onResend,
+  onRevoke,
+  auditLogs,
+  emptyMessage = "No invites found.",
+}) {
   const [actionInProgress, setActionInProgress] = useState({});
   const [expandedRows, setExpandedRows] = useState({});
   const [revokeModalInvitation, setRevokeModalInvitation] = useState(null);
@@ -526,10 +542,10 @@ function PendingAdminInvitationsTable({ pendingAdminInvitations, onResend, onRev
     }
   };
 
-  if (pendingAdminInvitations.length === 0) {
+  if (invitations.length === 0) {
     return (
       <div className="rounded-[10px] border border-dashed border-[#E1E6ED] p-6 text-[#A1A1A1] text-[12px] text-center">
-        No invites pending. Use the form above to invite a new Trainer Admin.
+        {emptyMessage}
       </div>
     );
   }
@@ -551,12 +567,14 @@ function PendingAdminInvitationsTable({ pendingAdminInvitations, onResend, onRev
         </thead>
 
         <tbody>
-          {pendingAdminInvitations.map((pendingInvitation) => {
+          {invitations.map((pendingInvitation) => {
             const invId = pendingInvitation.invitation_id;
             const resendKey = `resend-${invId}`;
             const revokeKey = `revoke-${invId}`;
             const isExpanded = expandedRows[invId];
             const logs = auditLogs[invId] || [];
+            const canResend = pendingInvitation.can_resend !== false;
+            const canRevoke = pendingInvitation.can_revoke !== false;
 
             return (
               <Fragment key={invId}>
@@ -588,7 +606,11 @@ function PendingAdminInvitationsTable({ pendingAdminInvitations, onResend, onRev
                   </td>
 
                   <td className="py-2.5 px-4">
-                    <span className="inline-flex rounded-full bg-[#EEF4FE] text-[#308BF9] text-[11px] font-semibold px-2.5 py-0.5">
+                    <span
+                      className={`inline-flex rounded-full text-[11px] font-semibold px-2.5 py-0.5 ${getInviteStatusStyle(
+                        pendingInvitation.status || "pending"
+                      )}`}
+                    >
                       {pendingInvitation.status || "pending"}
                     </span>
                   </td>
@@ -599,22 +621,29 @@ function PendingAdminInvitationsTable({ pendingAdminInvitations, onResend, onRev
 
                   <td className="py-2.5 px-4">
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleResend(pendingInvitation)}
-                        disabled={actionInProgress[resendKey]}
-                        className="rounded-full bg-[#EEF4FE] text-[#308BF9] text-[11px] font-semibold px-2.5 py-0.5 hover:bg-[#d9e8fd] disabled:opacity-60 cursor-pointer"
-                      >
-                        {actionInProgress[resendKey] ? "Sending..." : "Resend"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRevoke(pendingInvitation)}
-                        disabled={actionInProgress[revokeKey]}
-                        className="rounded-full bg-[#FCEAEB] text-[#B5363A] text-[11px] font-semibold px-2.5 py-0.5 hover:bg-[#f8d4d5] disabled:opacity-60 cursor-pointer"
-                      >
-                        {actionInProgress[revokeKey] ? "Revoking..." : "Revoke"}
-                      </button>
+                      {canResend && (
+                        <button
+                          type="button"
+                          onClick={() => handleResend(pendingInvitation)}
+                          disabled={actionInProgress[resendKey]}
+                          className="rounded-full bg-[#EEF4FE] text-[#308BF9] text-[11px] font-semibold px-2.5 py-0.5 hover:bg-[#d9e8fd] disabled:opacity-60 cursor-pointer"
+                        >
+                          {actionInProgress[resendKey] ? "Sending..." : "Resend"}
+                        </button>
+                      )}
+                      {canRevoke && (
+                        <button
+                          type="button"
+                          onClick={() => handleRevoke(pendingInvitation)}
+                          disabled={actionInProgress[revokeKey]}
+                          className="rounded-full bg-[#FCEAEB] text-[#B5363A] text-[11px] font-semibold px-2.5 py-0.5 hover:bg-[#f8d4d5] disabled:opacity-60 cursor-pointer"
+                        >
+                          {actionInProgress[revokeKey] ? "Revoking..." : "Revoke"}
+                        </button>
+                      )}
+                      {!canResend && !canRevoke && (
+                        <span className="text-[#A1A1A1] text-[11px]">&mdash;</span>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -704,19 +733,145 @@ function PendingAdminInvitationsTable({ pendingAdminInvitations, onResend, onRev
   );
 }
 
+function SectionSearch({ value, onChange, placeholder, minChars = 3 }) {
+  const trimmedLength = value.trim().length;
+  const showMinHint = trimmedLength > 0 && trimmedLength < minChars;
+
+  return (
+    <div className="relative w-full sm:w-64 shrink-0">
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 20 20"
+        fill="none"
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1A1]"
+      >
+        <circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="2" />
+        <path d="M14 14L17 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-[10px] border border-[#E1E6ED] bg-white pl-9 pr-8 py-2 text-[12px] text-[#252525] focus:outline-none focus:border-[#308BF9]"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#A1A1A1] hover:text-[#535359] cursor-pointer text-[14px] leading-none"
+          aria-label="Clear search"
+        >
+          &times;
+        </button>
+      )}
+      {/* {showMinHint && (
+        <div className="absolute right-0 top-full mt-1 z-20 rounded-[6px] border border-[#E1E6ED] bg-white px-2 py-1 text-[10px] text-[#A1A1A1] shadow-sm whitespace-nowrap">
+          Type at least {minChars} letters to search
+        </div>
+      )} */}
+    </div>
+  );
+}
+
+function Pagination({ meta, page, onPageChange, disabled }) {
+  const total = meta?.total ?? 0;
+  const limit = meta?.limit ?? 10;
+  const offset = meta?.offset ?? (page - 1) * limit;
+  const hasMore = meta?.has_more ?? false;
+
+  const from = total === 0 ? 0 : offset + 1;
+  const to = Math.min(offset + limit, total);
+  const canPrev = page > 1 && !disabled;
+  const canNext = hasMore && !disabled;
+
+  return (
+    <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
+      <p className="text-[#A1A1A1] text-[11px]">
+        Showing {from}&ndash;{to} of {total}
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPageChange(page - 1)}
+          disabled={!canPrev}
+          className="rounded-[8px] border border-[#E1E6ED] text-[#535359] text-[11px] font-semibold px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#F5F7FA] cursor-pointer"
+        >
+          Previous
+        </button>
+        <span className="text-[#535359] text-[11px] font-semibold">
+          Page {page}
+        </span>
+        <button
+          type="button"
+          onClick={() => onPageChange(page + 1)}
+          disabled={!canNext}
+          className="rounded-[8px] border border-[#E1E6ED] text-[#535359] text-[11px] font-semibold px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#F5F7FA] cursor-pointer"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function TrainerAdminsPage() {
   const [existingTrainerAdmins, setExistingTrainerAdmins] = useState([]);
   const [pendingAdminInvitations, setPendingAdminInvitations] = useState([]);
+  const [expiredAdminInvitations, setExpiredAdminInvitations] = useState([]);
+  const [revokedAdminInvitations, setRevokedAdminInvitations] = useState([]);
   const [trainerAdminTotals, setTrainerAdminTotals] = useState({
     accepted_count: 0,
     pending_count: 0,
+    expired_count: 0,
+    revoked_count: 0,
     total_trainers: 0,
     total_clients: 0,
   });
 
   const [auditLogs, setAuditLogs] = useState({});
 
+  const [searchTerms, setSearchTerms] = useState({
+    existing: "",
+    pending: "",
+    expired: "",
+    revoked: "",
+  });
+
+  const [page, setPage] = useState(1);
+  const PAGE_LIMIT = 10;
+
+  const [pagination, setPagination] = useState({
+    existing: null,
+    pending: null,
+    expired: null,
+    revoked: null,
+  });
+
+  // Changing a search term always sends the user back to the first page.
+  const updateSearchTerm = (key, value) => {
+    setSearchTerms((prev) => ({ ...prev, [key]: value }));
+    setPage(1);
+  };
+
+  // Only search once the user has typed at least this many characters.
+  // Shorter (1-2 char) input is treated as empty so the full list is shown.
+  const MIN_SEARCH_LENGTH = 3;
+
+  const toEffectiveSearch = (term) => {
+    const trimmed = term.trim();
+    return trimmed.length >= MIN_SEARCH_LENGTH ? trimmed : "";
+  };
+
+  const effectiveSearch = {
+    existing: toEffectiveSearch(searchTerms.existing),
+    pending: toEffectiveSearch(searchTerms.pending),
+    expired: toEffectiveSearch(searchTerms.expired),
+    revoked: toEffectiveSearch(searchTerms.revoked),
+  };
+
   const [isLoadingTrainerAdmins, setIsLoadingTrainerAdmins] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [trainerAdminsErrorMessage, setTrainerAdminsErrorMessage] =
     useState("");
 
@@ -737,40 +892,40 @@ export default function TrainerAdminsPage() {
     setTrainerAdminsErrorMessage("");
 
     try {
-      const trainerAdminsResponse = await fetchTrainerAdminListService();
+      const trainerAdminsResponse = await fetchTrainerAdminListService({
+        page,
+        limit: PAGE_LIMIT,
+        existingSearch: effectiveSearch.existing,
+        pendingSearch: effectiveSearch.pending,
+        expiredSearch: effectiveSearch.expired,
+        revokedSearch: effectiveSearch.revoked,
+      });
 
-      const existingFromApi = trainerAdminsResponse?.existing || [];
-
-      const currentUser = getCurrentUser();
-      if (currentUser?.role === "super_admin" && currentUser?.partner_code) {
-        const alreadyInList = existingFromApi.some(
-          (ta) => ta.user_id === currentUser.user_id || ta.partner_code === currentUser.partner_code
-        );
-        if (!alreadyInList) {
-          const taClientsCount = existingFromApi.reduce((sum, ta) => sum + (ta.clients_count ?? 0), 0);
-          const totalClients = trainerAdminsResponse?.totals?.total_clients ?? 0;
-
-          existingFromApi.unshift({
-            role_id: "sa-self",
-            user_id: currentUser.user_id,
-            name: `${currentUser.first_name} ${currentUser.last_name}`.trim() || "Super Admin",
-            email: currentUser.email || currentUser.user_id,
-            partner_code: currentUser.partner_code,
-            trainers_count: existingFromApi.length,
-            clients_count: Math.max(0, totalClients - taClientsCount),
-            status: "active",
-          });
-        }
-      }
-
-      setExistingTrainerAdmins(existingFromApi);
+      // The API now returns the super-admin's own entry inline as the first
+      // row (is_self / is_super_admin_as_trainer_admin), so no manual
+      // self-injection is required here.
+      setExistingTrainerAdmins(trainerAdminsResponse?.existing || []);
       setPendingAdminInvitations(
         trainerAdminsResponse?.pending_invites || []
       );
+      setExpiredAdminInvitations(
+        trainerAdminsResponse?.expired_invites || []
+      );
+      setRevokedAdminInvitations(
+        trainerAdminsResponse?.revoked_invites || []
+      );
+      setPagination({
+        existing: trainerAdminsResponse?.existing_pagination || null,
+        pending: trainerAdminsResponse?.pending_invites_pagination || null,
+        expired: trainerAdminsResponse?.expired_invites_pagination || null,
+        revoked: trainerAdminsResponse?.revoked_invites_pagination || null,
+      });
       setTrainerAdminTotals(
         trainerAdminsResponse?.totals || {
           accepted_count: 0,
           pending_count: 0,
+          expired_count: 0,
+          revoked_count: 0,
           total_trainers: 0,
           total_clients: 0,
         }
@@ -787,12 +942,28 @@ export default function TrainerAdminsPage() {
       toast.error(errorMessage);
     } finally {
       setIsLoadingTrainerAdmins(false);
+      setHasLoadedOnce(true);
     }
   };
 
+  // Debounced: re-fetch (server-side search + pagination) whenever an
+  // effective search term (>= MIN_SEARCH_LENGTH chars) or the page changes.
+  // Keying off the effective values means typing 1-2 characters does not
+  // trigger a request. Also covers the initial load on mount.
+  const effectiveSearchKey = [
+    effectiveSearch.existing,
+    effectiveSearch.pending,
+    effectiveSearch.expired,
+    effectiveSearch.revoked,
+  ].join("|");
+
   useEffect(() => {
-    loadTrainerAdmins();
-  }, []);
+    const timeoutId = setTimeout(() => {
+      loadTrainerAdmins();
+    }, 400);
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveSearchKey, page]);
 
   const handleAdminInvitationSent = (newAdminInvitation) => {
     setPendingAdminInvitations((currentPendingInvitations) => [
@@ -881,7 +1052,7 @@ export default function TrainerAdminsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="rounded-[10px] border border-[#E1E6ED] p-4">
           <p className="text-[#A1A1A1] text-[11px] font-semibold">
             Accepted Admins
@@ -897,6 +1068,24 @@ export default function TrainerAdminsPage() {
           </p>
           <h3 className="text-[#252525] text-[20px] font-bold mt-1">
             {trainerAdminTotals.pending_count ?? 0}
+          </h3>
+        </div>
+
+        <div className="rounded-[10px] border border-[#E1E6ED] p-4">
+          <p className="text-[#A1A1A1] text-[11px] font-semibold">
+            Expired Invites
+          </p>
+          <h3 className="text-[#252525] text-[20px] font-bold mt-1">
+            {trainerAdminTotals.expired_count ?? 0}
+          </h3>
+        </div>
+
+        <div className="rounded-[10px] border border-[#E1E6ED] p-4">
+          <p className="text-[#A1A1A1] text-[11px] font-semibold">
+            Revoked Invites
+          </p>
+          <h3 className="text-[#252525] text-[20px] font-bold mt-1">
+            {trainerAdminTotals.revoked_count ?? 0}
           </h3>
         </div>
 
@@ -928,11 +1117,18 @@ export default function TrainerAdminsPage() {
       ) : null}
 
       <div>
-        <h3 className="text-[#252525] text-[14px] font-bold mb-3">
-          Existing Trainer Admins
-        </h3>
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <h3 className="text-[#252525] text-[14px] font-bold">
+            Existing Trainer Admins
+          </h3>
+          <SectionSearch
+            value={searchTerms.existing}
+            onChange={(v) => updateSearchTerm("existing", v)}
+            placeholder="Search name, email, code"
+          />
+        </div>
 
-        {isLoadingTrainerAdmins ? (
+        {isLoadingTrainerAdmins && !hasLoadedOnce ? (
           <div className="rounded-[10px] border border-[#E1E6ED] p-6 text-[#A1A1A1] text-[12px] text-center">
             Loading Trainer Admins...
           </div>
@@ -942,25 +1138,115 @@ export default function TrainerAdminsPage() {
             onSelectTrainerAdmin={setSelectedTrainerAdmin}
           />
         )}
+
+        <Pagination
+          meta={pagination.existing}
+          page={page}
+          onPageChange={setPage}
+          disabled={isLoadingTrainerAdmins}
+        />
       </div>
 
       <div>
-        <h3 className="text-[#252525] text-[14px] font-bold mb-3">
-          Pending invites
-        </h3>
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <h3 className="text-[#252525] text-[14px] font-bold">
+            Pending invites
+          </h3>
+          <SectionSearch
+            value={searchTerms.pending}
+            onChange={(v) => updateSearchTerm("pending", v)}
+            placeholder="Search name, email, code"
+          />
+        </div>
 
-        {isLoadingTrainerAdmins ? (
+        {isLoadingTrainerAdmins && !hasLoadedOnce ? (
           <div className="rounded-[10px] border border-[#E1E6ED] p-6 text-[#A1A1A1] text-[12px] text-center">
             Loading pending invites...
           </div>
         ) : (
-          <PendingAdminInvitationsTable
-            pendingAdminInvitations={pendingAdminInvitations}
+          <InvitationsTable
+            invitations={pendingAdminInvitations}
             onResend={handleResendInvite}
             onRevoke={handleRevokeInvite}
             auditLogs={auditLogs}
+            emptyMessage="No invites pending. Use the form above to invite a new Trainer Admin."
           />
         )}
+
+        <Pagination
+          meta={pagination.pending}
+          page={page}
+          onPageChange={setPage}
+          disabled={isLoadingTrainerAdmins}
+        />
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <h3 className="text-[#252525] text-[14px] font-bold">
+            Expired invites
+          </h3>
+          <SectionSearch
+            value={searchTerms.expired}
+            onChange={(v) => updateSearchTerm("expired", v)}
+            placeholder="Search name, email, code"
+          />
+        </div>
+
+        {isLoadingTrainerAdmins && !hasLoadedOnce ? (
+          <div className="rounded-[10px] border border-[#E1E6ED] p-6 text-[#A1A1A1] text-[12px] text-center">
+            Loading expired invites...
+          </div>
+        ) : (
+          <InvitationsTable
+            invitations={expiredAdminInvitations}
+            onResend={handleResendInvite}
+            onRevoke={handleRevokeInvite}
+            auditLogs={auditLogs}
+            emptyMessage="No expired invites."
+          />
+        )}
+
+        <Pagination
+          meta={pagination.expired}
+          page={page}
+          onPageChange={setPage}
+          disabled={isLoadingTrainerAdmins}
+        />
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <h3 className="text-[#252525] text-[14px] font-bold">
+            Revoked invites
+          </h3>
+          <SectionSearch
+            value={searchTerms.revoked}
+            onChange={(v) => updateSearchTerm("revoked", v)}
+            placeholder="Search name, email, code"
+          />
+        </div>
+
+        {isLoadingTrainerAdmins && !hasLoadedOnce ? (
+          <div className="rounded-[10px] border border-[#E1E6ED] p-6 text-[#A1A1A1] text-[12px] text-center">
+            Loading revoked invites...
+          </div>
+        ) : (
+          <InvitationsTable
+            invitations={revokedAdminInvitations}
+            onResend={handleResendInvite}
+            onRevoke={handleRevokeInvite}
+            auditLogs={auditLogs}
+            emptyMessage="No revoked invites."
+          />
+        )}
+
+        <Pagination
+          meta={pagination.revoked}
+          page={page}
+          onPageChange={setPage}
+          disabled={isLoadingTrainerAdmins}
+        />
       </div>
     </div>
   );

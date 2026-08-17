@@ -983,7 +983,14 @@ export const inviteTrainerAdminService = async ({
 
 
 
-export const fetchTrainerAdminListService = async () => {
+export const fetchTrainerAdminListService = async ({
+  page = 1,
+  limit = 10,
+  existingSearch = "",
+  pendingSearch = "",
+  expiredSearch = "",
+  revokedSearch = "",
+} = {}) => {
   const accessToken = Cookies.get("access_token");
 
   if (!accessToken) {
@@ -1002,7 +1009,15 @@ export const fetchTrainerAdminListService = async () => {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ actor_user_id: actorUserId }),
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      page,
+      limit,
+      existing_search: existingSearch,
+      pending_search: pendingSearch,
+      expired_search: expiredSearch,
+      revoked_search: revokedSearch,
+    }),
   });
 };
 
