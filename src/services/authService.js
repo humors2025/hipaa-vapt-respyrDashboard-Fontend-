@@ -1766,7 +1766,15 @@ export const fetchTrainerClientInvitesService = async ({
 };
 
 
-export const fetchTrainerAdminTrainerSummaryService = async (page = 1) => {
+export const fetchTrainerAdminTrainerSummaryService = async ({
+  page = 1,
+  limit = 10,
+  acceptedSearch = "",
+  pendingSearch = "",
+  expiredSearch = "",
+  revokedSearch = "",
+  search = "",
+} = {}) => {
   const actorUserId = getActorUserIdFromAccessToken();
 
   if (!actorUserId) {
@@ -1781,7 +1789,13 @@ export const fetchTrainerAdminTrainerSummaryService = async (page = 1) => {
     },
     body: JSON.stringify({
       actor_user_id: actorUserId,
-      page: page,
+      page,
+      limit,
+      accepted_search: acceptedSearch,
+      pending_search: pendingSearch,
+      expired_search: expiredSearch,
+      revoked_search: revokedSearch,
+      search,
     }),
   });
 };
@@ -1790,7 +1804,15 @@ export const fetchTrainerAdminTrainerSummaryService = async (page = 1) => {
 // Super admin's trainer summary (super-admin-trainers-summary.php). Same
 // request/response shape as the trainer-admin summary; actor_user_id comes
 // from the super admin's access token (user_id).
-export const fetchSuperAdminTrainerSummaryService = async (page = 1) => {
+export const fetchSuperAdminTrainerSummaryService = async ({
+  page = 1,
+  limit = 10,
+  acceptedSearch = "",
+  pendingSearch = "",
+  expiredSearch = "",
+  revokedSearch = "",
+  search = "",
+} = {}) => {
   const accessToken = Cookies.get("access_token");
 
   if (!accessToken) {
@@ -1811,7 +1833,13 @@ export const fetchSuperAdminTrainerSummaryService = async (page = 1) => {
     },
     body: JSON.stringify({
       actor_user_id: actorUserId,
-      page: page,
+      page,
+      limit,
+      accepted_search: acceptedSearch,
+      pending_search: pendingSearch,
+      expired_search: expiredSearch,
+      revoked_search: revokedSearch,
+      search,
     }),
   });
 };

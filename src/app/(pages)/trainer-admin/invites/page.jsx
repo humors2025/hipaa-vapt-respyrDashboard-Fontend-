@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import Cookies from "js-cookie";
 import * as CountryFlags from "country-flag-icons/react/3x2";
@@ -61,13 +61,6 @@ function splitClientName(name = "") {
   return { first_name: parts[0] ?? "", last_name: parts.slice(1).join(" ") };
 }
 
-// Merge two normalized lists, de-duping by id. Used when appending paginated
-// pages so "Load more" doesn't double-add rows.
-function mergeById(prev, next) {
-  const seen = new Set(prev.map((item) => item.id));
-  return [...prev, ...next.filter((item) => !seen.has(item.id))];
-}
-
 function normalizeInvite(invite = {}) {
   // const hasExplicitNames = invite.first_name || invite.last_name;
   const hasExplicitNames =
@@ -94,7 +87,10 @@ function normalizeInvite(invite = {}) {
     status: invite.status ?? "pending",
     sentAt: invite.sent_at ?? invite.created_at ?? invite.updated_at ?? new Date().toISOString(),
     expires_at: invite.expires_at ?? null,
-    acceptedAt: invite.accepted_at ?? null,
+    acceptedAt: invite.accepted_at ?? invite.joined_date ?? invite.created_at ?? null,
+    location: invite.location ?? "",
+    clients_count: invite.clients_count ?? null,
+    is_self: invite.is_self ?? false,
     acceptedProfileId: invite.accepted_profile_id ?? invite.partner_code ?? null,
     trainer_name: invite.trainer_name ?? [invite.first_name, invite.last_name].filter(Boolean).join(" ") ?? "",
     trainer_code: invite.partner_code ?? invite.trainer_code ?? "",
@@ -455,67 +451,138 @@ function InviteForm({ onSent }) {
 }
 
 // ---------------------------------------------------------------------------
-// AcceptedClientsTable
+// SectionSearch — server-side search box shown next to each section heading.
+// The summary endpoint takes a separate search term per list
+// (accepted_search / pending_search / expired_search / revoked_search).
 // ---------------------------------------------------------------------------
-function AcceptedClientsTable({ clients }) {
-  const [q, setQ] = useState("");
+function SectionSearch({ value, onChange, placeholder }) {
+  return (
+    <div className="relative w-full sm:w-64 shrink-0">
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 20 20"
+        fill="none"
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1A1]"
+      >
+        <circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="2" />
+        <path d="M14 14L17 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-[10px] border border-[#E1E6ED] bg-white pl-9 pr-8 py-2 text-[12px] text-[#252525] focus:outline-none focus:border-[#308BF9]"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#A1A1A1] hover:text-[#535359] cursor-pointer text-[14px] leading-none"
+          aria-label="Clear search"
+        >
+          &times;
+        </button>
+      )}
+    </div>
+  );
+}
 
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return clients;
-    return clients.filter((client) =>
-    client.name?.toLowerCase().includes(needle) ||
-      client.email.toLowerCase().includes(needle) ||
-      client.phone.toLowerCase().includes(needle) ||
-      String(client.acceptedProfileId || "").toLowerCase().includes(needle)
-    );
-  }, [clients, q]);
+// ---------------------------------------------------------------------------
+// Pagination — the summary endpoint pages all four lists with one shared
+// `page`, returning per-list totals and has_more flags. Each section shows
+// its own "Showing X–Y of Z" but Previous/Next moves the shared page.
+// ---------------------------------------------------------------------------
+function Pagination({ meta, page, onPageChange, disabled }) {
+  const total = meta?.total ?? 0;
+  const limit = meta?.limit ?? 10;
+  const offset = meta?.offset ?? (page - 1) * limit;
+  const hasMore = meta?.has_more ?? false;
 
+  const from = total === 0 ? 0 : Math.min(offset + 1, total);
+  const to = Math.min(offset + limit, total);
+  const canPrev = page > 1 && !disabled;
+  const canNext = hasMore && !disabled;
+
+  return (
+    <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
+      <p className="text-[#A1A1A1] text-[11px]">
+        Showing {from}&ndash;{to} of {total}
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPageChange(page - 1)}
+          disabled={!canPrev}
+          className="rounded-[8px] border border-[#E1E6ED] text-[#535359] text-[11px] font-semibold px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#F5F7FA] cursor-pointer"
+        >
+          Previous
+        </button>
+        <span className="text-[#535359] text-[11px] font-semibold">
+          Page {page}
+        </span>
+        <button
+          type="button"
+          onClick={() => onPageChange(page + 1)}
+          disabled={!canNext}
+          className="rounded-[8px] border border-[#E1E6ED] text-[#535359] text-[11px] font-semibold px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#F5F7FA] cursor-pointer"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AcceptedClientsTable — search is server-side (accepted_search), so this
+// just renders whatever the summary endpoint returned.
+// ---------------------------------------------------------------------------
+function AcceptedClientsTable({ clients, hasSearch }) {
   if (clients.length === 0) {
     return (
       <div className="rounded-[10px] border border-dashed border-[#E1E6ED] p-6 text-[#A1A1A1] text-[12px] text-center">
-        No accepted trainers yet.
+        {hasSearch ? "No trainers match your search." : "No accepted trainers yet."}
       </div>
     );
   }
 
   return (
-    <>
-      <div className="flex flex-wrap gap-3 items-center mb-3">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, email, phone, or profile" className="rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] flex-1 min-w-[200px] focus:outline-none focus:border-[#308BF9] transition-colors" />
-      </div>
-      <div className="overflow-x-auto rounded-[10px] border border-[#E1E6ED]">
-        <table className="w-full text-[12px]">
-          <thead>
-            <tr className="bg-[#F5F7FA] text-[#535359] text-left">
-              <th className="py-2.5 px-4 font-semibold">Name</th>
-              <th className="py-2.5 px-4 font-semibold">Email</th>
-              <th className="py-2.5 px-4 font-semibold">Phone</th>
-              <th className="py-2.5 px-4 font-semibold">Profile ID</th>
-              <th className="py-2.5 px-4 font-semibold">Status</th>
-              <th className="py-2.5 px-4 font-semibold">Accepted</th>
+    <div className="overflow-x-auto rounded-[10px] border border-[#E1E6ED]">
+      <table className="w-full text-[12px]">
+        <thead>
+          <tr className="bg-[#F5F7FA] text-[#535359] text-left">
+            <th className="py-2.5 px-4 font-semibold">Name</th>
+            <th className="py-2.5 px-4 font-semibold">Email</th>
+            <th className="py-2.5 px-4 font-semibold">Phone</th>
+            <th className="py-2.5 px-4 font-semibold">Profile ID</th>
+            <th className="py-2.5 px-4 font-semibold">Clients</th>
+            <th className="py-2.5 px-4 font-semibold">Status</th>
+            <th className="py-2.5 px-4 font-semibold">Joined</th>
+          </tr>
+        </thead>
+        <tbody>
+          {clients.map((client) => (
+            <tr key={client.id} className="border-t border-[#F5F7FA]">
+              <td className="py-2.5 px-4 text-[#252525] font-semibold">
+                {client.name}
+                {client.is_self && (
+                  <span className="ml-1.5 inline-flex rounded-full bg-[#F3EEFE] text-[#6B45BC] text-[10px] font-semibold px-2 py-0.5">You</span>
+                )}
+              </td>
+              <td className="py-2.5 px-4 text-[#535359]">{client.email}</td>
+              <td className="py-2.5 px-4 text-[#535359]">{client.phone}</td>
+              <td className="py-2.5 px-4 text-[#535359] font-mono">{client.acceptedProfileId || "-"}</td>
+              <td className="py-2.5 px-4 text-[#535359]">{client.clients_count ?? "-"}</td>
+              <td className="py-2.5 px-4">
+                <span className="inline-flex rounded-full bg-[#E5F6EE] text-[#1F7A4A] text-[11px] font-semibold px-2.5 py-0.5">{client.status}</span>
+              </td>
+              <td className="py-2.5 px-4 text-[#A1A1A1]">{formatInviteDate(client.acceptedAt)}</td>
             </tr>
-          </thead>
-          <tbody>
-            {filtered.map((client) => (
-              <tr key={client.id} className="border-t border-[#F5F7FA]">
-                <td className="py-2.5 px-4 text-[#252525] font-semibold">{client.name}</td>
-                <td className="py-2.5 px-4 text-[#535359]">{client.email}</td>
-                <td className="py-2.5 px-4 text-[#535359]">{client.phone}</td>
-                <td className="py-2.5 px-4 text-[#535359] font-mono">{client.acceptedProfileId || "-"}</td>
-                <td className="py-2.5 px-4">
-                  <span className="inline-flex rounded-full bg-[#E5F6EE] text-[#1F7A4A] text-[11px] font-semibold px-2.5 py-0.5">{client.status}</span>
-                </td>
-                <td className="py-2.5 px-4 text-[#A1A1A1]">{formatInviteDate(client.acceptedAt)}</td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={6} className="py-8 px-4 text-center text-[#A1A1A1] text-[12px]">No clients match your search.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -704,11 +771,34 @@ export default function TrainerAdminInvitesPage() {
   const [loadingInvites, setLoadingInvites] = useState(false);
   const [inviteListError, setInviteListError] = useState("");
 
-  // Pagination: the summary endpoint returns one `page` (limit 10) across all
-  // four lists, with a per-list `*_has_more` flag. We append further pages.
+  // Pagination: the summary endpoint pages all four lists with one shared
+  // `page` (limit 10) and returns per-list `*_total` / `*_has_more` flags in
+  // `pagination`. Previous/Next replaces the lists with the requested page.
+  const PAGE_LIMIT = 10;
   const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState({ accepted: false, pending: false, expired: false, revoked: false });
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [paginationMeta, setPaginationMeta] = useState(null);
+
+  // Per-list server-side search (accepted_search / pending_search /
+  // expired_search / revoked_search on the summary endpoint). Terms shorter
+  // than MIN_SEARCH_LENGTH are treated as empty so the full list is shown.
+  const MIN_SEARCH_LENGTH = 3;
+  const [searchTerms, setSearchTerms] = useState({ accepted: "", pending: "", expired: "", revoked: "" });
+
+  const updateSearchTerm = (key, value) => {
+    setSearchTerms((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const toEffectiveSearch = (term) => {
+    const trimmed = term.trim();
+    return trimmed.length >= MIN_SEARCH_LENGTH ? trimmed : "";
+  };
+
+  const effectiveSearch = {
+    accepted: toEffectiveSearch(searchTerms.accepted),
+    pending: toEffectiveSearch(searchTerms.pending),
+    expired: toEffectiveSearch(searchTerms.expired),
+    revoked: toEffectiveSearch(searchTerms.revoked),
+  };
 
   const addAuditEntry = (inviteId, action, detail = null) => {
     const actor = user?.email || user?.user_id || "Unknown";
@@ -718,11 +808,10 @@ export default function TrainerAdminInvitesPage() {
     }));
   };
 
-  const loadInvites = useCallback(async (page = 1, { append = false } = {}) => {
-    if (append) setLoadingMore(true);
-    else setLoadingInvites(true);
+  const loadInvites = async (page = 1) => {
+    setLoadingInvites(true);
     setInviteListError("");
-  
+
     try {
       // Super admins read their trainer summary from the super-admin endpoint;
       // trainer admins use the trainer-admin endpoint. Both return the same shape.
@@ -732,47 +821,39 @@ export default function TrainerAdminInvitesPage() {
           ? fetchSuperAdminTrainerSummaryService
           : fetchTrainerAdminTrainerSummaryService;
 
-      const res = await fetchSummary(page);
+      const res = await fetchSummary({
+        page,
+        limit: PAGE_LIMIT,
+        acceptedSearch: effectiveSearch.accepted,
+        pendingSearch: effectiveSearch.pending,
+        expiredSearch: effectiveSearch.expired,
+        revokedSearch: effectiveSearch.revoked,
+      });
 
       setPage(page);
-      setHasMore({
-        accepted: !!res?.pagination?.accepted_has_more,
-        pending: !!res?.pagination?.pending_has_more,
-        expired: !!res?.pagination?.expired_has_more,
-        revoked: !!res?.pagination?.revoked_has_more,
-      });
-  
+      setPaginationMeta(res?.pagination || null);
+
       const acceptedTrainerList = Array.isArray(res?.accepted_trainers)
         ? res.accepted_trainers
         : [];
-  
+
       const pendingInviteList = Array.isArray(res?.pending_invites)
         ? res.pending_invites
         : [];
-  
+
       const expiredInviteList = Array.isArray(res?.expired_invites)
         ? res.expired_invites
         : [];
-  
+
       const revokedInviteList = Array.isArray(res?.revoked_invites)
         ? res.revoked_invites
         : [];
-  
-      const mapped = {
-        accepted: acceptedTrainerList.map(normalizeInvite),
-        pending: pendingInviteList.map(normalizeInvite),
-        expired: expiredInviteList.map(normalizeInvite),
-        revoked: revokedInviteList.map(normalizeInvite),
-      };
 
-      setAcceptedClients((prev) => (append ? mergeById(prev, mapped.accepted) : mapped.accepted));
-  
-      setPendingInvites((prev) => (append ? mergeById(prev, mapped.pending) : mapped.pending));
-  
-      setExpiredInvites((prev) => (append ? mergeById(prev, mapped.expired) : mapped.expired));
-  
-      setRevokedInvites((prev) => (append ? mergeById(prev, mapped.revoked) : mapped.revoked));
-  
+      setAcceptedClients(acceptedTrainerList.map(normalizeInvite));
+      setPendingInvites(pendingInviteList.map(normalizeInvite));
+      setExpiredInvites(expiredInviteList.map(normalizeInvite));
+      setRevokedInvites(revokedInviteList.map(normalizeInvite));
+
       if (res?.summary) {
         setTotals({
           accepted_count: res.summary.accepted_count || 0,
@@ -791,16 +872,43 @@ export default function TrainerAdminInvitesPage() {
       toast.error(message);
     } finally {
       setLoadingInvites(false);
-      setLoadingMore(false);
     }
-  }, []);
+  };
+
+  // Per-list view of the shared pagination block returned by the API,
+  // shaped for the Pagination component. The super-admin endpoint returns
+  // per-list totals in `pagination` (accepted_total, ...); the trainer-admin
+  // endpoint omits them, so fall back to the `summary` counts.
+  const listPagination = (key) => ({
+    total: paginationMeta?.[`${key}_total`] ?? totals?.[`${key}_count`] ?? 0,
+    limit: paginationMeta?.limit ?? PAGE_LIMIT,
+    offset: paginationMeta?.offset ?? (page - 1) * PAGE_LIMIT,
+    has_more: !!paginationMeta?.[`${key}_has_more`],
+  });
 
   useEffect(() => {
     const loggedInUser = getLoggedInUserFromCookie();
     setUser(loggedInUser);
     setCheckingSession(false);
-    loadInvites();
-  }, [loadInvites]);
+  }, []);
+
+  // Debounced: re-fetch from page 1 whenever an effective search term
+  // (>= MIN_SEARCH_LENGTH chars) changes. Typing 1-2 characters does not
+  // trigger a request. Also covers the initial load on mount.
+  const effectiveSearchKey = [
+    effectiveSearch.accepted,
+    effectiveSearch.pending,
+    effectiveSearch.expired,
+    effectiveSearch.revoked,
+  ].join("|");
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      loadInvites(1);
+    }, 400);
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveSearchKey]);
 
   if (checkingSession) return <div className="text-[#A1A1A1] text-[13px]">Loading&hellip;</div>;
   if (!user) return <div className="text-[#A1A1A1] text-[13px]">Session expired. Please log in again.</div>;
@@ -883,53 +991,72 @@ export default function TrainerAdminInvitesPage() {
         ))}
       </div>
 
-      {/* Accepted clients */}
+      {/* Accepted trainers */}
       <div>
-        <h3 className="text-[#252525] text-[14px] font-bold mb-3">Accepted trainers</h3>
-        {loadingInvites ? <div className="text-[#A1A1A1] text-[13px]">Loading&hellip;</div> : <AcceptedClientsTable clients={acceptedClients} />}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h3 className="text-[#252525] text-[14px] font-bold">
+            Accepted trainers <span className="ml-2 text-[#A1A1A1] text-[12px] font-normal">({totals.accepted_count})</span>
+          </h3>
+          <SectionSearch value={searchTerms.accepted} onChange={(v) => updateSearchTerm("accepted", v)} placeholder="Search name, email, code" />
+        </div>
+        {loadingInvites ? <div className="text-[#A1A1A1] text-[13px]">Loading&hellip;</div> : (
+          <>
+            <AcceptedClientsTable clients={acceptedClients} hasSearch={!!effectiveSearch.accepted} />
+            {listPagination("accepted").total > 0 && (
+              <Pagination meta={listPagination("accepted")} page={page} onPageChange={loadInvites} disabled={loadingInvites} />
+            )}
+          </>
+        )}
       </div>
 
       {/* Pending invites */}
       <div>
-        <h3 className="text-[#252525] text-[14px] font-bold mb-3">
-          Pending invites <span className="ml-2 text-[#A1A1A1] text-[12px] font-normal">({pendingInvites.length})</span>
-        </h3>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h3 className="text-[#252525] text-[14px] font-bold">
+            Pending invites <span className="ml-2 text-[#A1A1A1] text-[12px] font-normal">({totals.pending_count})</span>
+          </h3>
+          <SectionSearch value={searchTerms.pending} onChange={(v) => updateSearchTerm("pending", v)} placeholder="Search name, email, code" />
+        </div>
         {loadingInvites ? <div className="text-[#A1A1A1] text-[13px]">Loading&hellip;</div> : (
-          <PendingInvitesTable invites={pendingInvites} onResend={handleResendInvite} onRevoke={handleRevokeInvite} auditLogs={auditLogs} />
+          <>
+            <PendingInvitesTable invites={pendingInvites} onResend={handleResendInvite} onRevoke={handleRevokeInvite} auditLogs={auditLogs} />
+            {listPagination("pending").total > 0 && (
+              <Pagination meta={listPagination("pending")} page={page} onPageChange={loadInvites} disabled={loadingInvites} />
+            )}
+          </>
         )}
       </div>
 
-      {/* Expired invites */}
-      {expiredInvites.length > 0 && (
+      {/* Expired invites — stays visible while a search is active so the
+          user can clear or refine a search that returned no rows */}
+      {(expiredInvites.length > 0 || searchTerms.expired) && (
         <div>
-          <h3 className="text-[#252525] text-[14px] font-bold mb-3">
-            Expired invites <span className="ml-2 text-[#A1A1A1] text-[12px] font-normal">({expiredInvites.length})</span>
-          </h3>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <h3 className="text-[#252525] text-[14px] font-bold">
+              Expired invites <span className="ml-2 text-[#A1A1A1] text-[12px] font-normal">({totals.expired_count})</span>
+            </h3>
+            <SectionSearch value={searchTerms.expired} onChange={(v) => updateSearchTerm("expired", v)} placeholder="Search name, email, code" />
+          </div>
           <PendingInvitesTable invites={expiredInvites} onResend={handleResendInvite} onRevoke={handleRevokeInvite} auditLogs={auditLogs} />
+          {listPagination("expired").total > 0 && (
+            <Pagination meta={listPagination("expired")} page={page} onPageChange={loadInvites} disabled={loadingInvites} />
+          )}
         </div>
       )}
 
       {/* Revoked invites */}
-      {revokedInvites.length > 0 && (
+      {(revokedInvites.length > 0 || searchTerms.revoked) && (
         <div>
-          <h3 className="text-[#252525] text-[14px] font-bold mb-3">
-            Revoked invites <span className="ml-2 text-[#A1A1A1] text-[12px] font-normal">({revokedInvites.length})</span>
-          </h3>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <h3 className="text-[#252525] text-[14px] font-bold">
+              Revoked invites <span className="ml-2 text-[#A1A1A1] text-[12px] font-normal">({totals.revoked_count})</span>
+            </h3>
+            <SectionSearch value={searchTerms.revoked} onChange={(v) => updateSearchTerm("revoked", v)} placeholder="Search name, email, code" />
+          </div>
           <PendingInvitesTable invites={revokedInvites} onResend={handleResendInvite} onRevoke={handleRevokeInvite} auditLogs={auditLogs} />
-        </div>
-      )}
-
-      {/* Load more — fetches the next page and appends to every list */}
-      {(hasMore.accepted || hasMore.pending || hasMore.expired || hasMore.revoked) && (
-        <div className="flex justify-center">
-          <button
-            type="button"
-            onClick={() => loadInvites(page + 1, { append: true })}
-            disabled={loadingMore}
-            className="rounded-[10px] bg-[#EEF4FE] text-[#308BF9] text-[13px] font-semibold px-5 py-2.5 disabled:opacity-60 hover:bg-[#d9e8fd] transition-colors cursor-pointer"
-          >
-            {loadingMore ? "Loading…" : "Load more"}
-          </button>
+          {listPagination("revoked").total > 0 && (
+            <Pagination meta={listPagination("revoked")} page={page} onPageChange={loadInvites} disabled={loadingInvites} />
+          )}
         </div>
       )}
     </div>

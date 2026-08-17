@@ -190,10 +190,13 @@ export default function SuperAdminTrainersPage() {
             setStatusFilter(e.target.value);
             setPage(1);
           }}
-          className="rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px]"
+          className="rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] cursor-pointer"
         >
-          <option value="all">All statuses</option>
+          <option value="all">All status</option>
           <option value="active">Active</option>
+          <option value="pending">Pending</option>
+          <option value="expired">Expired</option>
+          <option value="revoked">Revoked</option>
         </select>
       </div>
 
