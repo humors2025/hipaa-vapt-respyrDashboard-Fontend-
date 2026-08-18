@@ -1,35 +1,37 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useEffect, useState } from "react";
 import { getCurrentUser } from "@/lib/user";
-import { fetchDownstreamUsersService } from "@/services/authService";
+// Downstream-users fetch disabled — feature not in use.
+// import { useCallback } from "react";
+// import { toast } from "sonner";
+// import { fetchDownstreamUsersService } from "@/services/authService";
 
 export default function TrainerAdminEarningsOverview() {
   const [user, setUser] = useState(null);
-  const [trainers, setTrainers] = useState([]);
-  const [totals, setTotals] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // const [trainers, setTrainers] = useState([]);
+  // const [totals, setTotals] = useState(null);
+  // const [loading, setLoading] = useState(true);
 
-  const loadData = useCallback(async (currentUser) => {
-    if (!currentUser) return;
-    setLoading(true);
-    try {
-      const res = await fetchDownstreamUsersService(currentUser.user_id);
-      setTrainers(res?.existing || []);
-      setTotals(res?.totals || {});
-    } catch (err) {
-      toast.error(err?.message || "Failed to load earnings data");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // const loadData = useCallback(async (currentUser) => {
+  //   if (!currentUser) return;
+  //   setLoading(true);
+  //   try {
+  //     const res = await fetchDownstreamUsersService(currentUser.user_id);
+  //     setTrainers(res?.existing || []);
+  //     setTotals(res?.totals || {});
+  //   } catch (err) {
+  //     toast.error(err?.message || "Failed to load earnings data");
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // }, []);
 
   useEffect(() => {
     const u = getCurrentUser();
     setUser(u);
-    loadData(u);
-  }, [loadData]);
+    // loadData(u);
+  }, []);
 
   if (!user) return <div className="text-[#A1A1A1] text-[13px]">Loading...</div>;
 
@@ -60,6 +62,7 @@ export default function TrainerAdminEarningsOverview() {
         </div>
       </div>
 
+      {/* Trainers-in-network section hidden — depends on the disabled downstream-users fetch.
       <div>
         <h3 className="text-[#252525] text-[14px] font-bold mb-3">
           Trainers in your network ({trainers.length})
@@ -109,6 +112,7 @@ export default function TrainerAdminEarningsOverview() {
           </div>
         )}
       </div>
+      */}
     </div>
   );
 }
