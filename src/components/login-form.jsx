@@ -6,7 +6,7 @@ import Link from "next/link";
 import React, { useState } from "react";
 import { loginService, updateDietPlanStatusService, fetchAdminGroupsService } from "@/services/authService";
 import { cookieManager } from "@/lib/cookies";
-import { persistLoginResponse, landingPathForUser, getCurrentUser } from "@/lib/user";
+import { persistLoginResponse, landingPathForUser, getCurrentUser, ROLES } from "@/lib/user";
 import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
@@ -123,19 +123,28 @@ const handleSubmit = async (e) => {
     // TA Analytics is gated on having at least one group: when the response's
     // `groups` array is non-empty we flag it so TrainerAdminHeader shows the
     // tab; an empty array (or any failure) clears the flag and hides the tab.
-    try {
-      const adminGroupsRes = await fetchAdminGroupsService();
-      // Store the full response in Redux so the trainer-admin AnalyticsDashboard
-      // can consume it after the client-side navigation below.
-      dispatch(setAdminGroups(adminGroupsRes));
-      const hasGroups = Array.isArray(adminGroupsRes?.groups) && adminGroupsRes.groups.length > 0;
-      if (hasGroups) {
-        cookieManager.set("ta_analytics_enabled", "1");
-      } else {
+    // Only trainer-admins can hit manage_admin_groups.php — the backend rejects
+    // everyone else with "Only an admin can access admin groups", so skip the
+    // call entirely for other roles.
+    const currentUser = getCurrentUser();
+    if (currentUser?.role === ROLES.TRAINER_ADMIN) {
+      try {
+        const adminGroupsRes = await fetchAdminGroupsService();
+        // Store the full response in Redux so the trainer-admin AnalyticsDashboard
+        // can consume it after the client-side navigation below.
+        dispatch(setAdminGroups(adminGroupsRes));
+        const hasGroups = Array.isArray(adminGroupsRes?.groups) && adminGroupsRes.groups.length > 0;
+        if (hasGroups) {
+          cookieManager.set("ta_analytics_enabled", "1");
+        } else {
+          cookieManager.remove("ta_analytics_enabled");
+        }
+      } catch (adminGroupsError) {
+        console.error("Fetch admin groups failed:", adminGroupsError);
+        dispatch(clearAdminGroups());
         cookieManager.remove("ta_analytics_enabled");
       }
-    } catch (adminGroupsError) {
-      console.error("Fetch admin groups failed:", adminGroupsError);
+    } else {
       dispatch(clearAdminGroups());
       cookieManager.remove("ta_analytics_enabled");
     }
@@ -166,8 +175,7 @@ const handleSubmit = async (e) => {
     // Role-aware routing. landingPathForUser returns the right path for
     // the user's role; for trainers (the only role that exists today) it
     // preserves the historic Qua-vs-partners split so behavior is unchanged.
-    const user = getCurrentUser();
-    router.push(landingPathForUser(user));
+    router.push(landingPathForUser(currentUser));
 
   } catch (error) {
     let errorMessage = "Invalid credentials";

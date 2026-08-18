@@ -983,7 +983,14 @@ export const inviteTrainerAdminService = async ({
 
 
 
-export const fetchTrainerAdminListService = async () => {
+export const fetchTrainerAdminListService = async ({
+  page = 1,
+  limit = 10,
+  existingSearch = "",
+  pendingSearch = "",
+  expiredSearch = "",
+  revokedSearch = "",
+} = {}) => {
   const accessToken = Cookies.get("access_token");
 
   if (!accessToken) {
@@ -1002,7 +1009,15 @@ export const fetchTrainerAdminListService = async () => {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ actor_user_id: actorUserId }),
+    body: JSON.stringify({
+      actor_user_id: actorUserId,
+      page,
+      limit,
+      existing_search: existingSearch,
+      pending_search: pendingSearch,
+      expired_search: expiredSearch,
+      revoked_search: revokedSearch,
+    }),
   });
 };
 
@@ -1714,7 +1729,12 @@ export const uploadAgreementPdfToS3 = async (uploadUrl, file) => {
 };
 
 
-export const fetchTrainerClientInvitesService = async ({ actorUserId }) => {
+export const fetchTrainerClientInvitesService = async ({
+  actorUserId,
+  page = 1,
+  limit = 10,
+  search = "",
+}) => {
   if (!actorUserId) {
     throw new Error("Actor user ID missing. Please login again.");
   }
@@ -1725,20 +1745,36 @@ export const fetchTrainerClientInvitesService = async ({ actorUserId }) => {
     throw new Error("Access token missing. Please login again.");
   }
 
+  const body = {
+    actor_user_id: actorUserId,
+    page,
+    limit,
+  };
+
+  if (search) {
+    body.search = search;
+  }
+
   return apiFetcher(API_ENDPOINTS.ADMINPANEL.TRAINERLISTINVITES, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({
-      actor_user_id: actorUserId,
-    }),
+    body: JSON.stringify(body),
   });
 };
 
 
-export const fetchTrainerAdminTrainerSummaryService = async (page = 1) => {
+export const fetchTrainerAdminTrainerSummaryService = async ({
+  page = 1,
+  limit = 10,
+  acceptedSearch = "",
+  pendingSearch = "",
+  expiredSearch = "",
+  revokedSearch = "",
+  search = "",
+} = {}) => {
   const actorUserId = getActorUserIdFromAccessToken();
 
   if (!actorUserId) {
@@ -1753,7 +1789,13 @@ export const fetchTrainerAdminTrainerSummaryService = async (page = 1) => {
     },
     body: JSON.stringify({
       actor_user_id: actorUserId,
-      page: page,
+      page,
+      limit,
+      accepted_search: acceptedSearch,
+      pending_search: pendingSearch,
+      expired_search: expiredSearch,
+      revoked_search: revokedSearch,
+      search,
     }),
   });
 };
@@ -1762,7 +1804,15 @@ export const fetchTrainerAdminTrainerSummaryService = async (page = 1) => {
 // Super admin's trainer summary (super-admin-trainers-summary.php). Same
 // request/response shape as the trainer-admin summary; actor_user_id comes
 // from the super admin's access token (user_id).
-export const fetchSuperAdminTrainerSummaryService = async (page = 1) => {
+export const fetchSuperAdminTrainerSummaryService = async ({
+  page = 1,
+  limit = 10,
+  acceptedSearch = "",
+  pendingSearch = "",
+  expiredSearch = "",
+  revokedSearch = "",
+  search = "",
+} = {}) => {
   const accessToken = Cookies.get("access_token");
 
   if (!accessToken) {
@@ -1783,7 +1833,13 @@ export const fetchSuperAdminTrainerSummaryService = async (page = 1) => {
     },
     body: JSON.stringify({
       actor_user_id: actorUserId,
-      page: page,
+      page,
+      limit,
+      accepted_search: acceptedSearch,
+      pending_search: pendingSearch,
+      expired_search: expiredSearch,
+      revoked_search: revokedSearch,
+      search,
     }),
   });
 };
