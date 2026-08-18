@@ -726,7 +726,7 @@ function PendingInvitesTable({ invites, onResend, onRevoke, auditLogs }) {
               );
             })}
             {invites.length === 0 && (
-              <tr><td colSpan={7} className="py-8 px-4 text-center text-[#A1A1A1] text-[12px]">No pending invites found.</td></tr>
+              <tr><td colSpan={7} className="py-8 px-4 text-center text-[#A1A1A1] text-[12px]">No pending invites found</td></tr>
             )}
           </tbody>
         </table>
