@@ -49,7 +49,6 @@ const WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export const ResultEvaluation = () => {
   const clientData = useSelector((state) => state.clientProfile.data);
   const scoresInsight = useSelector((state) => state.scoresInsight?.data);
-  console.log("scoresInsight2424:-", scoresInsight);
   const isLoading = useSelector((state) => state.clientProfile.loading);
 
   const searchParams = useSearchParams();

@@ -614,9 +614,9 @@ export default function AnalyticsDashboard() {
 
   // The stored MANAGEADMINGROUPS response is now available to this dashboard via
   // `adminGroups` (response.groups) and `adminGroupsRaw` (full payload).
-  useEffect(() => {
-    if (adminGroupsRaw) console.log("Admin groups (from Redux):", adminGroupsRaw);
-  }, [adminGroupsRaw]);
+  // useEffect(() => {
+  //   if (adminGroupsRaw) console.log("Admin groups (from Redux):", adminGroupsRaw);
+  // }, [adminGroupsRaw]);
 
   // Once we know the group name (from Redux), pull that group's details. Use a
   // high limit so every client loads in one shot — the dashboard's totals are

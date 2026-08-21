@@ -603,7 +603,6 @@ const fetchWeeklyAnalysis = async (startDate, endDate, dietPlanId, daysPayload) 
         food_json: JSON.stringify({ days: daysArray }),
       };
 
-      console.log("Sending request to weekly_analysis_complete1:", requestBody);
 
       const response = await fetchWeeklyAnalysisComplete1(requestBody);
 
@@ -675,7 +674,6 @@ const fetchWeeklyAnalysis = async (startDate, endDate, dietPlanId, daysPayload) 
           analysisAvailableDate.setHours(21, 0, 0, 0);
       
           const formattedDate = formatDisplayDate(analysisAvailableDate);
-          console.log("formattedDate:", formattedDate);
       
           setWeeklyAnalysisData([]);
           setApiMessage({
@@ -891,7 +889,6 @@ useEffect(() => {
   };
 
   const visibleWeeks = (weeks || []).slice(visibleWeekStart, visibleWeekStart + visibleWeeksCount); 
-  console.log("visibleWeeks888:-", visibleWeeks);
 
   const handleCreatePlanClick = () => {
     localStorage.clear();
