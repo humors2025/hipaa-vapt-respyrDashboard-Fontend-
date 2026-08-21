@@ -9,6 +9,7 @@ import { refreshAccessToken, clearAuthAndRedirect } from "../lib/tokenRefresh";
 const NO_REFRESH_ENDPOINTS = [
   API_ENDPOINTS.AUTH.LOGIN,
   API_ENDPOINTS.AUTH.REFRESH_TOKEN,
+   API_ENDPOINTS.AUTH.LOGOUT,
 ];
 
 export async function apiFetcher(endpoint, options = {}) {

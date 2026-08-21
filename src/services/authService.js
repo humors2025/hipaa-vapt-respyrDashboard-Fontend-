@@ -107,6 +107,12 @@ export const refreshTokenService = async () => {
   return refreshAccessToken();
 };
 
+export const logoutService = async () => {
+  return apiFetcher(API_ENDPOINTS.AUTH.LOGOUT, {
+    method: "POST",
+  });
+};
+
 export const sendOtpService = async (email) => {
   return apiFetcher(API_ENDPOINTS.AUTH.SEND_OTP, {
     method: "POST",

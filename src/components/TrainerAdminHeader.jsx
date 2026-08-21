@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cookieManager } from "@/lib/cookies";
 import { toast } from "sonner";
+import { logoutService } from "@/services/authService";
 
 const MonoIcon = ({ src, size = 20, color = "#A1A1A1", alt = "" }) => (
   <span
@@ -80,16 +81,35 @@ export default function TrainerAdminHeader() {
     ? MENU
     : MENU.filter((m) => m.path !== TA_ANALYTICS_PATH);
 
-  const handleLogout = () => {
-    try {
-      cookieManager.clearAuth();
-      localStorage.clear();
-      setIsDropdownOpen(false);
-      router.push("/");
-    } catch (error) {
-      console.error("Error during logout:", error);
-    }
-  };
+  // const handleLogout = () => {
+  //   try {
+  //     cookieManager.clearAuth();
+  //     localStorage.clear();
+  //     setIsDropdownOpen(false);
+  //     router.push("/");
+  //   } catch (error) {
+  //     console.error("Error during logout:", error);
+  //   }
+  // };
+
+const handleLogout = async () => {
+  try {
+    await logoutService();
+
+    cookieManager.clearAuth();
+    localStorage.clear();
+
+    setIsDropdownOpen(false);
+
+    router.replace("/");
+    router.refresh();
+  } catch (error) {
+    console.error("Error during logout:", error);
+
+    toast.error("Unable to logout. Please try again.");
+  }
+};
+
 
   const handleNotificationClick = () => {
     toast.info("Coming Soon");

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeftRight } from "lucide-react";
 import { cookieManager } from "../lib/cookies";
+import { logoutService } from "../services/authService";
 import { toast } from "sonner";
 import NotificationModal from "./modal/notification-modal";
 
@@ -106,16 +107,39 @@ const hideHeaderPaths = [
         ]
       : [];
 
-  const handleLogout = () => {
-    try {
-      cookieManager.clearAuth();
-      localStorage.clear();
-      setIsDropdownOpen(false);
-      router.push("/");
-    } catch (error) {
-      console.error("Error during logout:", error);
-    }
-  };
+  // const handleLogout = () => {
+  //   try {
+  //     cookieManager.clearAuth();
+  //     localStorage.clear();
+  //     setIsDropdownOpen(false);
+  //     router.push("/");
+  //   } catch (error) {
+  //     console.error("Error during logout:", error);
+  //   }
+  // };
+
+
+  const handleLogout = async () => {
+  try {
+    // 1. Revoke refresh session + delete HttpOnly refresh cookie
+    await logoutService();
+
+    // 2. Clear frontend-readable session data
+    cookieManager.clearAuth();
+    localStorage.clear();
+
+    setIsDropdownOpen(false);
+
+    // 3. Return to login
+    router.replace("/");
+    router.refresh();
+  } catch (error) {
+    console.error("Error during logout:", error);
+
+    toast.error("Unable to logout. Please try again.");
+  }
+};
+
 
   const handleMenuClick = (menuItem, e) => {
     e.preventDefault();

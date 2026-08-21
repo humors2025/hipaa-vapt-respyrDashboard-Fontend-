@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cookieManager } from "@/lib/cookies";
+import { logoutService } from "@/services/authService";
 import { ROLES } from "@/lib/user";
 import { toast } from "sonner";
 import RoleSwitcher, { isSwitchedView } from "@/components/RoleSwitcher";
@@ -90,16 +91,36 @@ export default function SuperAdminHeader() {
     return () => document.removeEventListener("pointerdown", handleOutside);
   }, []);
 
-  const handleLogout = () => {
-    try {
-      cookieManager.clearAuth();
-      localStorage.clear();
-      setIsDropdownOpen(false);
-      router.push("/");
-    } catch (error) {
-      console.error("Error during logout:", error);
-    }
-  };
+  // const handleLogout = () => {
+  //   try {
+  //     cookieManager.clearAuth();
+  //     localStorage.clear();
+  //     setIsDropdownOpen(false);
+  //     router.push("/");
+  //   } catch (error) {
+  //     console.error("Error during logout:", error);
+  //   }
+  // };
+
+
+const handleLogout = async () => {
+  try {
+    await logoutService();
+
+    cookieManager.clearAuth();
+    localStorage.clear();
+
+    setIsDropdownOpen(false);
+
+    router.replace("/");
+    router.refresh();
+  } catch (error) {
+    console.error("Error during logout:", error);
+
+    toast.error("Unable to logout. Please try again.");
+  }
+};
+
 
   const handleNotificationClick = () => {
     toast.info("Coming Soon");
