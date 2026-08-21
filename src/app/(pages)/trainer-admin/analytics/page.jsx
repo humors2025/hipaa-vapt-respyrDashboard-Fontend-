@@ -645,7 +645,6 @@ export default function AnalyticsDashboard() {
     if (groupDetails) {
       // Store the entire GETGROUPDETAILS response in a page-level variable.
       setGroupDetailsResponse(groupDetails);
-      console.log("GETGROUPDETAILS response:", groupDetails);
     }
   }, [groupDetails]);
 
