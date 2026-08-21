@@ -35,7 +35,7 @@ export const cookieManager = {
   // Clear all auth related cookies
   clearAuth: () => {
     Cookies.remove('access_token');
-    Cookies.remove('refresh_token');
+    // Cookies.remove('refresh_token');
     Cookies.remove('user');
     Cookies.remove('dietician');
   }
