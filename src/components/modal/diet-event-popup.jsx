@@ -56,7 +56,6 @@ export default function DietEvent({ open, onClose, selectedMeal, onSave }) {
   const [eventTitle, setEventTitle] = useState("Event1");
   const [planName, setPlanName] = useState("");
   const [foodItems, setFoodItems] = useState([emptyFoodItem]);
-  console.log("foodItems654:-", foodItems);
   const [updatedExtractedData, setUpdatedExtractedData] = useState(null);
   const UNIT_OPTIONS = ["Bowl", "Cup", "Plate", "Glass"];
 

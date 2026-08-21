@@ -68,7 +68,6 @@ const convertToDaysObject = (daysArray) => {
   const parseWeekDates = (weekText) => {
     if (!weekText) return { start_date: "", end_date: "" };
     
-    console.log("Parsing date from:", weekText);
     
     // Format: "22 Jan 2026 - 28 Jan 2026"
     const dateRegex = /(\d{1,2}\s+\w+\s+\d{4})\s*-\s*(\d{1,2}\s+\w+\s+\d{4})/;
