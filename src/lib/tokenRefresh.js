@@ -26,8 +26,8 @@ export function refreshAccessToken() {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
-    const refreshToken = Cookies.get("refresh_token");
-    if (!refreshToken) return null;
+    // const refreshToken = Cookies.get("refresh_token");
+    // if (!refreshToken) return null;
 
     try {
       const res = await fetch(
@@ -35,7 +35,8 @@ export function refreshAccessToken() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refresh_token: refreshToken }),
+          // body: JSON.stringify({ refresh_token: refreshToken }),
+           credentials: "include",
         }
       );
 
@@ -63,7 +64,7 @@ export function clearAuthAndRedirect() {
   if (typeof window === "undefined") return;
 
   Cookies.remove("access_token");
-  Cookies.remove("refresh_token");
+  // Cookies.remove("refresh_token");
   Cookies.remove("user");
   Cookies.remove("dietician");
 

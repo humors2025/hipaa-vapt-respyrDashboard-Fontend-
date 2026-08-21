@@ -69,11 +69,12 @@ export function persistLoginResponse(res) {
   // (15 min) access token. The backend rotates it on every refresh, so this is
   // re-written each time too (see persistRefreshedTokens). Cookie lifetime
   // follows refresh_expires_in (seconds → days), defaulting to 30 days.
-  if (res.refresh_token) {
-    cookieManager.set("refresh_token", res.refresh_token, {
-      expires: res.refresh_expires_in ? res.refresh_expires_in / 86400 : 30,
-    });
-  }
+  
+  // if (res.refresh_token) {
+  //   cookieManager.set("refresh_token", res.refresh_token, {
+  //     expires: res.refresh_expires_in ? res.refresh_expires_in / 86400 : 30,
+  //   });
+  // }
 
   // New shape
   if (res.user && typeof res.user === "object") {
@@ -123,11 +124,11 @@ export function persistRefreshedTokens(res) {
 
   cookieManager.set("access_token", res.access_token);
 
-  if (res.refresh_token) {
-    cookieManager.set("refresh_token", res.refresh_token, {
-      expires: res.refresh_expires_in ? res.refresh_expires_in / 86400 : 30,
-    });
-  }
+  // if (res.refresh_token) {
+  //   cookieManager.set("refresh_token", res.refresh_token, {
+  //     expires: res.refresh_expires_in ? res.refresh_expires_in / 86400 : 30,
+  //   });
+  // }
 }
 
 // Pick the route a logged-in user should land on based on their role.

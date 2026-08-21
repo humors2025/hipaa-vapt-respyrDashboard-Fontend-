@@ -31,18 +31,36 @@ export async function apiFetcher(endpoint, options = {}) {
 
   const doFetch = (overrideToken) => {
     const token = overrideToken || Cookies.get("access_token");
-    return fetch(`${API_BASE_URL}${endpoint}`, {
-      ...fetchOptions,
-      signal: controller?.signal,
-      headers: {
-        ...(isFormData ? {} : { "Content-Type": "application/json" }),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(fetchOptions.headers || {}),
-        ...(overrideToken
-          ? { Authorization: `Bearer ${overrideToken}` }
-          : {}),
-      },
-    });
+    // return fetch(`${API_BASE_URL}${endpoint}`, {
+    //   ...fetchOptions,
+    //   signal: controller?.signal,
+    //   headers: {
+    //     ...(isFormData ? {} : { "Content-Type": "application/json" }),
+    //     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    //     ...(fetchOptions.headers || {}),
+    //     ...(overrideToken
+    //       ? { Authorization: `Bearer ${overrideToken}` }
+    //       : {}),
+    //   },
+    // });
+ 
+ return fetch(`${API_BASE_URL}${endpoint}`, {
+  ...fetchOptions,
+
+  credentials: "include",
+
+  signal: controller?.signal,
+
+  headers: {
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(fetchOptions.headers || {}),
+    ...(overrideToken
+      ? { Authorization: `Bearer ${overrideToken}` }
+      : {}),
+  },
+});
+
   };
 
   try {
