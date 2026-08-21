@@ -11,6 +11,23 @@ import {
   Tooltip,
 } from "chart.js";
 import { fetchWeightTracking } from "../services/authService";
+import { cookieManager } from "../lib/cookies";
+
+function decodeJwt(token) {
+  try {
+    const payload = token.split(".")[1];
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((char) => `%${`00${char.charCodeAt(0).toString(16)}`.slice(-2)}`)
+        .join("")
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+}
 
 ChartJS.register(
   CategoryScale,
@@ -76,6 +93,16 @@ const formatLogDate = (logDate) => {
   return `${MONTHS[monthIdx]} ${Number(d)}`;
 };
 
+// "fat_loss" -> "Fat Loss"
+const formatFitnessGoal = (goal) => {
+  if (!goal || typeof goal !== "string") return null;
+  return goal
+    .split("_")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+};
+
 // Normalise raw API logs into chronological (oldest -> newest) points with
 // deltas relative to the previous weigh-in.
 const normaliseLogs = (rawLogs) => {
@@ -129,8 +156,19 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Super-admin-only metrics returned alongside the weight logs.
+  const [metabolismScores, setMetabolismScores] = useState({}); // date -> score
+  const [metabolismScore, setMetabolismScore] = useState(null); // latest score
+  const [fitnessGoal, setFitnessGoal] = useState(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   // Tracked in a ref (not state) so marking it doesn't retrigger this effect.
   const loadedForRef = useRef(null);
+
+  useEffect(() => {
+    const token = cookieManager.get("access_token");
+    const decoded = token ? decodeJwt(token) : null;
+    setIsSuperAdmin(decoded?.role === "super_admin");
+  }, []);
 
   useEffect(() => {
     // Lazy-load: only fetch once the Weight Tracking tab is actually opened,
@@ -147,11 +185,26 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
       .then((res) => {
         if (cancelled) return;
         setLogs(normaliseLogs(res?.data));
+        const scores = {};
+        if (Array.isArray(res?.metabolism_scores)) {
+          for (const s of res.metabolism_scores) {
+            const value = Number(s?.score);
+            if (s?.date && !Number.isNaN(value)) scores[s.date] = value;
+          }
+        }
+        setMetabolismScores(scores);
+        setMetabolismScore(
+          typeof res?.metabolism_score === "number" ? res.metabolism_score : null
+        );
+        setFitnessGoal(res?.fitness_goal ?? null);
       })
       .catch((err) => {
         if (cancelled) return;
         setError(err?.message || "Failed to load weight logs");
         setLogs([]);
+        setMetabolismScores({});
+        setMetabolismScore(null);
+        setFitnessGoal(null);
       })
       .finally(() => {
         completed = true;
@@ -223,6 +276,8 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
   // Newest first for the "Recent entries" list.
   const recentEntries = useMemo(() => [...logs].reverse(), [logs]);
 
+  const hasScores = isSuperAdmin && Object.keys(metabolismScores).length > 0;
+
   const chartData = {
     labels: rangedLogs.map((p) => p.label),
     datasets: [
@@ -248,6 +303,22 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
               borderColor: "rgba(48,139,249,0.25)",
               borderDash: [6, 4],
               borderWidth: 1.5,
+              pointRadius: 0,
+              pointHoverRadius: 0,
+              fill: false,
+            },
+          ]
+        : []),
+      // Super-admin only — metabolism score history (0–100, unitless) matched
+      // to the weigh-in dates. Drawn fully invisible (no line, no points): the
+      // score surfaces only in the shared hover tooltip.
+      ...(hasScores
+        ? [
+            {
+              label: "Metabolism Score",
+              data: rangedLogs.map((p) => metabolismScores[p.logDate] ?? null),
+              yAxisID: "y1",
+              showLine: false,
               pointRadius: 0,
               pointHoverRadius: 0,
               fill: false,
@@ -287,7 +358,10 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
         padding: 10,
         cornerRadius: 10,
         callbacks: {
-          label: (ctx) => `${ctx.dataset.label}: ${Math.round(ctx.parsed.y)} ${unit}`,
+          label: (ctx) =>
+            ctx.dataset.label === "Metabolism Score"
+              ? `Metabolism Score: ${Math.round(ctx.parsed.y)}`
+              : `${ctx.dataset.label}: ${Math.round(ctx.parsed.y)} ${unit}`,
         },
       },
     },
@@ -312,6 +386,17 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
           callback: (v) => `${v}`,
         },
       },
+      // Hidden 0–100 scale for the metabolism score (super admin only) — the
+      // score line still uses it for positioning, but no axis is rendered.
+      ...(hasScores
+        ? {
+            y1: {
+              display: false,
+              min: 0,
+              max: 100,
+            },
+          }
+        : {}),
     },
     interaction: { mode: "nearest", axis: "x", intersect: false },
   };
@@ -398,6 +483,24 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
         </div>
       ),
     },
+    // Visible to super admins only — sourced from the weight-tracking API.
+    ...(isSuperAdmin
+      ? [
+          {
+            label: "Today’s Metabolism Score",
+            value: metabolismScore != null ? Math.round(metabolismScore) : "—",
+            unit: "",
+            sub: (
+              <p className="text-[#A1A1A1] text-[10px] font-semibold tracking-[-0.2px] mt-2">
+                Goal:{" "}
+                <span className="text-[#535359]">
+                  {formatFitnessGoal(fitnessGoal) ?? "—"}
+                </span>
+              </p>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -422,7 +525,13 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
       </div>
 
       {/* Stat tiles */}
-      <div className="grid grid-cols-4 max-2xl:grid-cols-2 gap-3">
+      <div
+        className={`grid gap-3 ${
+          statTiles.length > 4
+            ? "grid-cols-5 max-2xl:grid-cols-3"
+            : "grid-cols-4 max-2xl:grid-cols-2"
+        }`}
+      >
         {statTiles.map((tile) => (
           <div
             key={tile.label}
