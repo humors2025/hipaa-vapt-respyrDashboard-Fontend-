@@ -13,7 +13,11 @@ const contentSecurityPolicy = [
 
   "font-src 'self' data:",
 
-  "connect-src 'self' https://api.respyr.ai https://respyr.in blob: data:",
+  // "connect-src 'self' https://api.respyr.ai https://respyr.in blob: data:",
+
+
+  "connect-src 'self' https://api.respyr.ai https://respyr.in https://respyr-agreements-prod-usw2.s3.us-west-2.amazonaws.com blob: data:",
+  
 
   "object-src 'none'",
 
