@@ -70,12 +70,22 @@ function fileToBase64(file) {
   });
 }
 
+// function getStrength(val) {
+//   if (!val) return 0;
+//   let score = 0;
+//   if (val.length >= 8) score++;
+//   if (/[A-Z]/.test(val) && /[a-z]/.test(val)) score++;
+//   if (/[0-9\W]/.test(val)) score++;
+//   return score;
+// }
+
+
 function getStrength(val) {
   if (!val) return 0;
   let score = 0;
-  if (val.length >= 8) score++;
+  if (val.length >= 10) score++;
   if (/[A-Z]/.test(val) && /[a-z]/.test(val)) score++;
-  if (/[0-9\W]/.test(val)) score++;
+  if (/[0-9]/.test(val) && /[^A-Za-z0-9]/.test(val)) score++;
   return score;
 }
 
@@ -181,10 +191,27 @@ function SignupForm() {
     let ok = true;
     setPwError("");
     setCfError("");
-    if (password.length < 8) {
-      setPwError("Password must be at least 8 characters.");
+    // if (password.length < 8) {
+    //   setPwError("Password must be at least 8 characters.");
+    //   ok = false;
+    // }
+
+    if (password.length < 10) {
+      setPwError("Password must be at least 10 characters.");
+      ok = false;
+    } else if (
+      !/[A-Z]/.test(password) ||
+      !/[a-z]/.test(password) ||
+      !/[0-9]/.test(password) ||
+      !/[^A-Za-z0-9]/.test(password)
+    ) {
+      setPwError(
+        "Password must include an uppercase letter, a lowercase letter, a number, and a special character."
+      );
       ok = false;
     }
+
+    
     if (!confirm) {
       setCfError("Please confirm your password.");
       ok = false;
@@ -380,7 +407,7 @@ payload.agreement_pdf_name =
                 setPassword(e.target.value);
                 if (pwError) setPwError("");
               }}
-              placeholder="Minimum 8 characters"
+              placeholder="Min 10 chars, incl. A-z, 0-9 & symbol"
               autoComplete="new-password"
               className={`${inputBase} ${
                 pwError ? "border-[#e74c3c] shadow-[0_0_0_3px_rgba(231,76,60,0.1)]" : "border-[#e1e6ed]"
