@@ -30,7 +30,7 @@ const CHECKBOX_ITEMS = [
   <>I agree to <strong>join at least one monthly video conference call</strong> (1–2 hours) with the Respyr Team to give feedback and discuss with other trainers.</>,
 ]
 
-export default function Agreement({ onAccept, onDecline }) {
+export default function Agreement({ onAccept, onDecline, userEmail }) {
   const [checks, setChecks] = useState(Array(5).fill(false))
   const [selectAll, setSelectAll] = useState(false)
   const [scrolledToBottom, setScrolledToBottom] = useState(false)
@@ -45,7 +45,7 @@ export default function Agreement({ onAccept, onDecline }) {
     const next = !selectAll
     setSelectAll(next)
     setChecks(Array(5).fill(next))
-    logClientEvent('agreement_select_all_click', { checked: next }, 'Terms and condition page')
+    logClientEvent('agreement_select_all_click', { checked: next, user_email: userEmail || undefined }, 'Terms and condition page')
   }
 
   function handleItemCheck(idx) {
@@ -112,13 +112,13 @@ export default function Agreement({ onAccept, onDecline }) {
   function handleDecline() {
     // keepalive:true in the logger keeps this request alive across the
     // immediate router.push("/") that onDecline triggers.
-    logClientEvent('agreement_decline_click', null, 'Terms and condition page')
+    logClientEvent('agreement_decline_click', { user_email: userEmail || undefined }, 'Terms and condition page')
     onDecline?.()
   }
 
   async function handleAccept() {
     if (!allChecked || generating) return
-    logClientEvent('agreement_agree_continue_click', { all_checked: allChecked }, 'Terms and condition page')
+    logClientEvent('agreement_agree_continue_click', { all_checked: allChecked, user_email: userEmail || undefined }, 'Terms and condition page')
     setGenerating(true)
     try {
       const pdf = termsRef.current ? await buildAgreementPdf(termsRef.current) : null
@@ -369,13 +369,12 @@ export default function Agreement({ onAccept, onDecline }) {
 
 
 
-
-
 // 'use client'
 
 // import { useRef, useState } from 'react'
 // import { jsPDF } from 'jspdf'
 // import { toast } from 'sonner'
+// import { logClientEvent } from '@/lib/clientLogger'
 
 // const RespyrIcon = () => (
 //   <div className="w-[38px] h-[38px] bg-[#308bf9] rounded-[15px] flex items-center justify-center flex-shrink-0">
@@ -417,6 +416,7 @@ export default function Agreement({ onAccept, onDecline }) {
 //     const next = !selectAll
 //     setSelectAll(next)
 //     setChecks(Array(5).fill(next))
+//     logClientEvent('agreement_select_all_click', { checked: next }, 'Terms and condition page')
 //   }
 
 //   function handleItemCheck(idx) {
@@ -480,8 +480,16 @@ export default function Agreement({ onAccept, onDecline }) {
 //     return new File([blob], 'device-evaluation-agreement.pdf', { type: 'application/pdf' })
 //   }
 
+//   function handleDecline() {
+//     // keepalive:true in the logger keeps this request alive across the
+//     // immediate router.push("/") that onDecline triggers.
+//     logClientEvent('agreement_decline_click', null, 'Terms and condition page')
+//     onDecline?.()
+//   }
+
 //   async function handleAccept() {
 //     if (!allChecked || generating) return
+//     logClientEvent('agreement_agree_continue_click', { all_checked: allChecked }, 'Terms and condition page')
 //     setGenerating(true)
 //     try {
 //       const pdf = termsRef.current ? await buildAgreementPdf(termsRef.current) : null
@@ -688,7 +696,7 @@ export default function Agreement({ onAccept, onDecline }) {
 
 //       <div className="flex items-center gap-3 px-7 py-4 pb-[22px] sticky bottom-0 bg-white border-t border-[#e1e6ed] z-10">
 //         <button
-//           onClick={onDecline}
+//           onClick={handleDecline}
 //           className="h-11 px-[22px] bg-white text-[#e74c3c] border-[1.5px] border-[#e74c3c]/25 rounded-[15px] text-[12px] font-semibold tracking-[-0.02em] cursor-pointer whitespace-nowrap transition-all duration-150 hover:bg-[#fff5f5] hover:border-[#e74c3c]/50"
 //         >
 //           Decline
@@ -717,3 +725,7 @@ export default function Agreement({ onAccept, onDecline }) {
 //     </div>
 //   )
 // }
+
+
+
+

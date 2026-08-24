@@ -138,12 +138,11 @@ export default function Progress({ title = "Progress", showDetails = true, showC
             gradient.addColorStop(1, "rgba(30,120,255,0)");
             return gradient;
           },
-          pointRadius: (ctx) =>
-            ctx.dataIndex === chartData.values.length - 1 ? 6 : 0,
+          pointRadius: 4,
           pointHoverRadius: 6,
           pointBackgroundColor: "#308BF9",
-          pointBorderColor: "#308BF9",
-          pointBorderWidth: 0,
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
         },
       ],
     };
@@ -157,6 +156,7 @@ export default function Progress({ title = "Progress", showDetails = true, showC
         legend: { display: false },
         tooltip: {
           enabled: true,
+          intersect: false,
           displayColors: false,
           backgroundColor: "rgba(0,0,0,0.75)",
           padding: 10,
@@ -167,13 +167,12 @@ export default function Progress({ title = "Progress", showDetails = true, showC
           },
         },
       },
+      interaction: { mode: "nearest", axis: "x", intersect: false },
       scales: {
         x: {
           grid: {
-            display: true,
-            borderDash: [4, 4],
+            display: false,
             drawBorder: false,
-            color: "#E1E6ED",
           },
           ticks: {
             color: "#8A8A8F",
@@ -194,10 +193,8 @@ export default function Progress({ title = "Progress", showDetails = true, showC
             font: { size: 11, weight: "500" },
           },
           grid: {
-            display: true,
-            borderDash: [4, 4],
+            display: false,
             drawBorder: false,
-            color: "#E1E6ED",
           },
         },
       },
