@@ -514,7 +514,7 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
     ...(isSuperAdmin
       ? [
           {
-            label: "Today’s Metabolism Score",
+            label: "Metabolism Score",
             value: metabolismScore != null ? Math.round(metabolismScore) : "—",
             unit: "",
             sub: (
@@ -716,7 +716,7 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
                 Loading weight data…
               </div>
             ) : error ? (
-              <div className="absolute inset-0 flex items-center justify-center text-[#dc2626] text-[12px] tracking-[-0.24px] text-center px-4">
+              <div className="absolute inset-0 flex items-center justify-center text-[#A1A1A1] text-[12px] tracking-[-0.24px] text-center px-4">
                 {error}
               </div>
             ) : !hasData ? (
