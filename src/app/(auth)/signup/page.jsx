@@ -1,11 +1,12 @@
-"use client";
 
+"use client";
+ 
 // Signup / accept-invite page.
 //
 // Entry: /signup?token=...
 // Invite details (name, email, role, ...) are fetched from invite-preview API.
 // UI redesigned to match the Respyr "Web Portal Invitation" modal.
-
+ 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -18,10 +19,10 @@ import {
 } from "@/services/authService";
 import Agreement from "@/components/agreement";
 import { logClientEvent } from "@/lib/clientLogger";
-
-
+ 
+ 
 /* ---------------- Icons ---------------- */
-
+ 
 const RespyrIcon = () => (
   <div className="w-[38px] h-[38px] bg-[#308bf9] rounded-[15px] flex items-center justify-center flex-shrink-0">
     <svg width="22" height="22" fill="none" viewBox="0 0 14.72 14.72">
@@ -32,36 +33,36 @@ const RespyrIcon = () => (
     </svg>
   </div>
 );
-
+ 
 const CheckIcon = ({ size = 9 }) => (
   <svg width={size} height={size} fill="none" viewBox="0 0 24 24">
     <path d="M5 12l5 5L20 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
-
+ 
 const EyeIcon = () => (
   <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
     <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" />
   </svg>
 );
-
+ 
 /* ---------------- Constants ---------------- */
-
+ 
 const ROLE_HEADINGS = {
   super_admin: "Super-Admin",
   trainer_admin: "Trainer-Admin",
   trainer: "Trainer",
   client: "Client",
 };
-
+ 
 const BAR_COLORS = { 1: "#e74c3c", 2: "#ffbf2d", 3: "#3faf58" };
 const STRENGTH_META = [
   { label: "Weak", color: "#e74c3c" },
   { label: "Fair", color: "#ffbf2d" },
   { label: "Strong", color: "#3faf58" },
 ];
-
+ 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -70,7 +71,7 @@ function fileToBase64(file) {
     reader.readAsDataURL(file);
   });
 }
-
+ 
 // function getStrength(val) {
 //   if (!val) return 0;
 //   let score = 0;
@@ -79,8 +80,8 @@ function fileToBase64(file) {
 //   if (/[0-9\W]/.test(val)) score++;
 //   return score;
 // }
-
-
+ 
+ 
 function getStrength(val) {
   if (!val) return 0;
   let score = 0;
@@ -89,12 +90,12 @@ function getStrength(val) {
   if (/[0-9]/.test(val) && /[^A-Za-z0-9]/.test(val)) score++;
   return score;
 }
-
+ 
 /* ---------------- Shared shell ---------------- */
-
+ 
 const SHELL =
   "w-full max-w-[520px] bg-white rounded-[15px] border border-[#e1e6ed] shadow-[0_10px_40px_rgba(0,0,0,0.08)] overflow-hidden";
-
+ 
 function CardHeader() {
   return (
     <div className="px-7 pt-5 pb-[18px] border-b border-[#e1e6ed] flex items-center gap-3">
@@ -106,35 +107,35 @@ function CardHeader() {
     </div>
   );
 }
-
+ 
 /* ---------------- Form ---------------- */
-
+ 
 function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-
+ 
   const token = searchParams.get("token") || "";
   const hasToken = Boolean(token);
-
+ 
   const [previewLoading, setPreviewLoading] = useState(hasToken);
   const [previewError, setPreviewError] = useState("");
   const [invite, setInvite] = useState(null);
-
+ 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
+ 
   const [pwError, setPwError] = useState("");
   const [cfError, setCfError] = useState("");
-
+ 
   // Gate: user must accept the Device Evaluation Agreement before the
   // password / signup form is shown. The signed agreement is captured as a
   // PDF (File) by the Agreement step and submitted with the invite acceptance.
   const [agreed, setAgreed] = useState(false);
   const [agreementPdf, setAgreementPdf] = useState(null);
-
+ 
   useEffect(() => {
     // Log that the Terms & Conditions screen was opened (the first screen
     // shown when the signup link is used). NO PHI: only whether a token was
@@ -144,12 +145,12 @@ function SignupForm() {
       { has_token: hasToken },
       "Terms and condition page"
     );
-
+ 
     if (!hasToken) {
       setPreviewLoading(false);
       return;
     }
-
+ 
     let cancelled = false;
     (async () => {
       try {
@@ -166,21 +167,21 @@ function SignupForm() {
         if (!cancelled) setPreviewLoading(false);
       }
     })();
-
+ 
     return () => {
       cancelled = true;
     };
   }, [token, hasToken]);
-
+ 
   const role = invite?.role || "";
   const roleLabel = ROLE_HEADINGS[role] || role || "";
   const firstName = invite?.first_name || "";
   const lastName = invite?.last_name || "";
   const fullName = invite?.name || [firstName, lastName].filter(Boolean).join(" ");
   const email = invite?.email || "";
-
+ 
   const strength = getStrength(password);
-
+ 
   // Info card is driven by real invite data. Rows only render when present,
   // so partner_code / expires_in simply disappear if your API doesn't return them.
   const phone = invite?.phone_no || "";
@@ -192,10 +193,10 @@ function SignupForm() {
     // invite?.partner_code && { label: "Partner Code", value: invite.partner_code, valueClass: "text-[#252525]" },
     invite?.expires_in && { label: "Expires In", value: invite.expires_in, valueClass: "text-[#e48326]" },
   ].filter(Boolean);
-
+ 
   const onSubmit = async (e) => {
     e.preventDefault();
-
+ 
     // Log the raw click before any validation, so abandoned/invalid attempts
     // are visible too. NO PHI: booleans only — never the password or token.
     logClientEvent(
@@ -203,12 +204,13 @@ function SignupForm() {
       {
         has_token: Boolean(token),
         has_agreement_pdf: Boolean(agreementPdf),
+        user_email: email || undefined,
       },
       "Create Password page"
     );
-
+ 
     if (!token) return toast.error("Missing invitation token.");
-
+ 
     let ok = true;
     setPwError("");
     setCfError("");
@@ -216,7 +218,7 @@ function SignupForm() {
     //   setPwError("Password must be at least 8 characters.");
     //   ok = false;
     // }
-
+ 
     if (password.length < 10) {
       setPwError("Password must be at least 10 characters.");
       ok = false;
@@ -231,7 +233,7 @@ function SignupForm() {
       );
       ok = false;
     }
-
+ 
     
     if (!confirm) {
       setCfError("Please confirm your password.");
@@ -241,7 +243,7 @@ function SignupForm() {
       ok = false;
     }
     if (!ok) return;
-
+ 
     setSubmitting(true);
     try {
       const payload = {
@@ -249,39 +251,39 @@ function SignupForm() {
         password,
         confirm_password: confirm,
       };
-
+ 
       // Attach the signed agreement PDF (base64 data URL) if it was captured.
       // if (agreementPdf) {
       //   payload.agreement_pdf = await fileToBase64(agreementPdf);
       //   payload.agreement_pdf_name = agreementPdf.name;
       // }
-
-
+ 
+ 
       if (!agreementPdf) {
   toast.error("Agreement PDF is missing. Please accept the agreement again.");
   setAgreed(false);
   return;
 }
-
+ 
 const uploadUrlRes = await createAgreementUploadUrlService({
   token,
   content_type: agreementPdf.type || "application/pdf",
   size_bytes: agreementPdf.size,
   file_name: agreementPdf.name,
 });
-
+ 
 const uploadUrlData = uploadUrlRes?.data || uploadUrlRes;
-
+ 
 await uploadAgreementPdfToS3(uploadUrlData.upload_url, agreementPdf);
-
+ 
 payload.agreement_s3_key = uploadUrlData.key;
 payload.agreement_pdf_name =
   agreementPdf.name || "device-evaluation-agreement.pdf";
-
+ 
   
-
+ 
       await acceptInviteService(payload);
-
+ 
       cookieManager.clearAuth();
       toast.success(`Welcome ${firstName || ""}! You're all set.`);
       router.push("/");
@@ -301,10 +303,10 @@ payload.agreement_pdf_name =
       setSubmitting(false);
     }
   };
-
+ 
   const inputBase =
     "w-full h-[42px] bg-white border rounded-[8px] px-3.5 pr-10 text-[12px] text-[#252525] tracking-[0.05em] outline-none transition-all duration-150 placeholder:text-[#a1a1a1] placeholder:tracking-[-0.02em] focus:border-[#308bf9] focus:shadow-[0_0_0_3px_#e9f3ff]";
-
+ 
   /* ----- Missing token state ----- */
   if (!hasToken) {
     return (
@@ -319,7 +321,7 @@ payload.agreement_pdf_name =
       </div>
     );
   }
-
+ 
   /* ----- Loading state ----- */
   if (previewLoading) {
     return (
@@ -332,7 +334,7 @@ payload.agreement_pdf_name =
       </div>
     );
   }
-
+ 
   /* ----- Preview error state ----- */
   if (previewError) {
     return (
@@ -345,18 +347,19 @@ payload.agreement_pdf_name =
       </div>
     );
   }
-
+ 
   /* ----- Agreement gate (must accept before signup form) ----- */
   if (!agreed) {
     return (
       <Agreement
+        userEmail={email}
         onAccept={(pdf) => {
           setAgreementPdf(pdf);
           setAgreed(true);
           // The password / signup form is shown next.
           logClientEvent(
             "create_password_page_open",
-            null,
+            { user_email: email || undefined },
             "Create Password page"
           );
         }}
@@ -364,12 +367,12 @@ payload.agreement_pdf_name =
       />
     );
   }
-
+ 
   /* ----- Main form ----- */
   return (
     <form onSubmit={onSubmit} className={SHELL}>
       <CardHeader />
-
+ 
       {/* Step progress */}
       <div className="flex items-center px-7 py-[14px] pb-4 bg-[#f5f7fa] border-b border-[#e1e6ed]">
         <div className="flex items-center gap-[7px] flex-shrink-0">
@@ -380,11 +383,11 @@ payload.agreement_pdf_name =
             Agreement
           </span>
         </div>
-
+ 
         <div className="flex-1 h-[2px] bg-[#e1e6ed] rounded-full mx-2.5 overflow-hidden">
           <div className="h-full w-full bg-[#3faf58] rounded-full" />
         </div>
-
+ 
         <div className="flex items-center gap-[7px] flex-shrink-0">
           <div className="w-[22px] h-[22px] rounded-full bg-[#3faf58] flex items-center justify-center">
             <CheckIcon size={9} />
@@ -394,7 +397,7 @@ payload.agreement_pdf_name =
           </span>
         </div>
       </div>
-
+ 
       {/* Body */}
       <div className="px-7 pt-[26px] pb-0">
         <div className="text-center pb-5">
@@ -417,9 +420,9 @@ payload.agreement_pdf_name =
             )}
           </div>
         </div>
-
+ 
         <div className="h-px bg-[#e1e6ed] -mx-7 mb-[22px]" />
-
+ 
         {/* Password */}
         <div className="mb-3.5">
           <label htmlFor="pw" className="block text-[11px] font-medium text-[#535359] tracking-[-0.02em] mb-1.5">
@@ -469,7 +472,7 @@ payload.agreement_pdf_name =
           </div>
           {pwError && <p className="text-[10px] text-[#e74c3c] tracking-[-0.02em] mt-1">{pwError}</p>}
         </div>
-
+ 
         {/* Confirm password */}
         <div className="mb-4">
           <label htmlFor="cf" className="block text-[11px] font-medium text-[#535359] tracking-[-0.02em] mb-1.5">
@@ -502,7 +505,7 @@ payload.agreement_pdf_name =
           </div>
           {cfError && <p className="text-[10px] text-[#e74c3c] tracking-[-0.02em] mt-1">{cfError}</p>}
         </div>
-
+ 
         {/* Info card (real invite data) */}
         {infoRows.length > 0 && (
           <div className="bg-[#f5f7fa] border border-[#e1e6ed] rounded-[10px] mb-4 overflow-hidden">
@@ -521,7 +524,7 @@ payload.agreement_pdf_name =
             ))}
           </div>
         )}
-
+ 
         {/* Submit */}
         <button
           type="submit"
@@ -540,7 +543,7 @@ payload.agreement_pdf_name =
           )}
         </button>
       </div>
-
+ 
       {/* Footer */}
       <div className="px-[22px] pt-3.5 pb-5 text-center">
         <div className="text-[11px] text-[#a1a1a1] tracking-[-0.02em]">
@@ -550,7 +553,7 @@ payload.agreement_pdf_name =
     </form>
   );
 }
-
+ 
 export default function SignupPage() {
   return (
     <div className="min-h-svh w-full flex items-center justify-center p-6 bg-[#f5f7fa]">
@@ -560,258 +563,8 @@ export default function SignupPage() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// "use client";
-
-// // Signup / accept-invite page.
-// //
-// // Entry: /signup?token=...
-// // Invite details (name, email, role) are fetched from invite-preview API.
-
-// import { Suspense, useEffect, useState } from "react";
-// import { useRouter, useSearchParams } from "next/navigation";
-// import { toast } from "sonner";
-// import Image from "next/image";
-// import { cookieManager } from "@/lib/cookies";
-// import { previewInviteService, acceptInviteService } from "@/services/authService";
-
-// const ROLE_HEADINGS = {
-//   super_admin:   "Super-Admin",
-//   trainer_admin: "Trainer-Admin",
-//   trainer:       "Trainer",
-//   client:        "Client",
-// };
-
-// function SignupForm() {
-//   const router = useRouter();
-//   const searchParams = useSearchParams();
-
-//   const token = searchParams.get("token") || "";
-//   const hasToken = Boolean(token);
-
-//   const [previewLoading, setPreviewLoading] = useState(hasToken);
-//   const [previewError, setPreviewError] = useState("");
-//   const [invite, setInvite] = useState(null);
-
-//   const [password, setPassword] = useState("");
-//   const [confirm, setConfirm] = useState("");
-//   const [showPassword, setShowPassword] = useState(false);
-//   const [showConfirm, setShowConfirm] = useState(false);
-//   const [submitting, setSubmitting] = useState(false);
-
-//   useEffect(() => {
-//     if (!hasToken) {
-//       setPreviewLoading(false);
-//       return;
-//     }
-
-//     let cancelled = false;
-//     (async () => {
-//       try {
-//         const res = await previewInviteService(token);
-//         if (cancelled) return;
-//         const data = res?.data || res;
-//         setInvite(data);
-//       } catch (err) {
-//         if (cancelled) return;
-//         const msg = err?.data?.message || err?.message || "Could not load invitation details.";
-//         setPreviewError(msg);
-//         toast.error(msg);
-//       } finally {
-//         if (!cancelled) setPreviewLoading(false);
-//       }
-//     })();
-
-//     return () => { cancelled = true; };
-//   }, [token, hasToken]);
-
-//   const role = invite?.role || "";
-//   const roleLabel = ROLE_HEADINGS[role] || "";
-//   const firstName = invite?.first_name || "";
-//   const lastName = invite?.last_name || "";
-//   const fullName = invite?.name || [firstName, lastName].filter(Boolean).join(" ");
-//   const email = invite?.email || "";
-
-//   const onSubmit = async (e) => {
-//     e.preventDefault();
-
-//     if (!token) return toast.error("Missing invitation token.");
-//     if (password.length < 8) return toast.error("Password must be at least 8 characters.");
-//     if (password !== confirm) return toast.error("Passwords don't match.");
-
-//     setSubmitting(true);
-//     try {
-//       await acceptInviteService({
-//         token,
-//         password,
-//         confirm_password: confirm,
-//       });
-
-//       cookieManager.clearAuth();
-//       toast.success(`Welcome aboard, ${firstName || ""}! You're all set.`);
-//       router.push("/");
-//     } catch (err) {
-//       const msg = err?.data?.message || err?.message || "";
-//       const lower = msg.toLowerCase();
-//       if (lower.includes("already accepted") || lower.includes("already registered") || lower.includes("already onboarded")) {
-//         toast.error("This invite has already been accepted. Please sign in instead.");
-//         router.push("/");
-//         return;
-//       } else if (lower.includes("no pending invite") || lower.includes("not found")) {
-//         toast.error("No pending invitation found for this email. Please check with the person who invited you.");
-//       } else {
-//         toast.error(msg || "Could not create your account. Please try again.");
-//       }
-//     } finally {
-//       setSubmitting(false);
-//     }
-//   };
-
-//   const fieldClass = "w-full rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2.5 text-[13px] text-[#252525] focus:outline-none focus:border-[#308BF9] transition-colors";
-//   const labelClass = "text-[#535359] text-[12px] font-semibold";
-
-//   if (!hasToken) {
-//     return (
-//       <div className="bg-white shadow-lg rounded-[12px] p-8 max-w-md w-full text-center">
-//         <h2 className="text-[20px] font-bold text-[#252525]">Invitation token missing</h2>
-//         <p className="text-[#535359] text-[13px] mt-2">
-//           Please use the signup link from your invitation email.
-//         </p>
-//       </div>
-//     );
-//   }
-
-//   if (previewLoading) {
-//     return (
-//       <div className="bg-white shadow-lg rounded-[12px] p-8 max-w-md w-full flex flex-col items-center gap-3">
-//         <div className="w-8 h-8 border-2 border-[#308BF9] border-t-transparent rounded-full animate-spin" />
-//         <p className="text-[#535359] text-[13px]">Loading invitation details…</p>
-//       </div>
-//     );
-//   }
-
-//   if (previewError) {
-//     return (
-//       <div className="bg-white shadow-lg rounded-[12px] p-8 max-w-md w-full text-center">
-//         <h2 className="text-[20px] font-bold text-[#252525]">Invitation unavailable</h2>
-//         <p className="text-[#535359] text-[13px] mt-2">{previewError}</p>
-//       </div>
-//     );
-//   }
-
-//   return (
-//     <form onSubmit={onSubmit} className="bg-white shadow-lg rounded-[12px] p-8 max-w-md w-full flex flex-col gap-5">
-//       <div>
-//         <h2 className="text-[28px] font-bold text-[#252525] tracking-[-0.5px]">
-//           Welcome to Respyr!
-//         </h2>
-//         {roleLabel && (
-//           <p className="text-[#535359] text-[13px] mt-1">
-//             You've been invited as a <span className="font-semibold text-[#308BF9]">{roleLabel}</span> on Respyr.
-//           </p>
-//         )}
-//         <p className="text-[#A1A1A1] text-[11px] mt-3">
-//           Confirm your details and set a password to complete your account.
-//         </p>
-//       </div>
-
-//       <div className="flex flex-col gap-1">
-//         <label className={labelClass}>Name</label>
-//         <input className={`${fieldClass} bg-[#F5F7FA]`} value={fullName} readOnly />
-//       </div>
-
-//       <div className="flex flex-col gap-1">
-//         <label className={labelClass}>Email</label>
-//         <input className={`${fieldClass} bg-[#F5F7FA]`} value={email} readOnly />
-//       </div>
-
-//       <div className="flex flex-col gap-1">
-//         <label className={labelClass}>Password <span className="text-red-500">*</span></label>
-//         <div className="relative">
-//           <input
-//             className={`${fieldClass} pr-10`}
-//             type={showPassword ? "text" : "password"}
-//             value={password}
-//             onChange={(e) => setPassword(e.target.value)}
-//             placeholder="At least 8 characters"
-//           />
-//           <div
-//             className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"
-//             onClick={() => setShowPassword((v) => !v)}
-//           >
-//             <Image
-//               src="/icons/hugeicons_view.svg"
-//               alt={showPassword ? "Hide password" : "Show password"}
-//               width={15}
-//               height={15}
-//               className={showPassword ? "opacity-50" : "opacity-100"}
-//             />
-//           </div>
-//         </div>
-//       </div>
-
-//       <div className="flex flex-col gap-1">
-//         <label className={labelClass}>Confirm password <span className="text-red-500">*</span></label>
-//         <div className="relative">
-//           <input
-//             className={`${fieldClass} pr-10`}
-//             type={showConfirm ? "text" : "password"}
-//             value={confirm}
-//             onChange={(e) => setConfirm(e.target.value)}
-//             placeholder="Re-enter password"
-//           />
-//           <div
-//             className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"
-//             onClick={() => setShowConfirm((v) => !v)}
-//           >
-//             <Image
-//               src="/icons/hugeicons_view.svg"
-//               alt={showConfirm ? "Hide password" : "Show password"}
-//               width={15}
-//               height={15}
-//               className={showConfirm ? "opacity-50" : "opacity-100"}
-//             />
-//           </div>
-//         </div>
-//       </div>
-
-//       <button
-//         type="submit"
-//         disabled={submitting}
-//         className="rounded-[10px] bg-[#308BF9] text-white text-[14px] font-semibold py-3 disabled:opacity-60 hover:bg-[#1a76e8] transition-colors cursor-pointer"
-//       >
-//         {submitting ? "Setting up your account..." : "Create account"}
-//       </button>
-//     </form>
-//   );
-// }
-
-// export default function SignupPage() {
-//   return (
-//     <div className="min-h-svh w-full flex items-center justify-center p-6 bg-[#F5F7FA]">
-//       <Suspense fallback={<div className="text-[#A1A1A1] text-[13px]">Loading…</div>}>
-//         <SignupForm />
-//       </Suspense>
-//     </div>
-//   );
-// }
-
-
+ 
+ 
 
 
 
@@ -842,6 +595,7 @@ export default function SignupPage() {
 //   uploadAgreementPdfToS3,
 // } from "@/services/authService";
 // import Agreement from "@/components/agreement";
+// import { logClientEvent } from "@/lib/clientLogger";
 
 
 // /* ---------------- Icons ---------------- */
@@ -960,6 +714,15 @@ export default function SignupPage() {
 //   const [agreementPdf, setAgreementPdf] = useState(null);
 
 //   useEffect(() => {
+//     // Log that the Terms & Conditions screen was opened (the first screen
+//     // shown when the signup link is used). NO PHI: only whether a token was
+//     // present in the URL — NEVER the token itself.
+//     logClientEvent(
+//       "terms_and_condition_page_open",
+//       { has_token: hasToken },
+//       "Terms and condition page"
+//     );
+
 //     if (!hasToken) {
 //       setPreviewLoading(false);
 //       return;
@@ -1010,6 +773,17 @@ export default function SignupPage() {
 
 //   const onSubmit = async (e) => {
 //     e.preventDefault();
+
+//     // Log the raw click before any validation, so abandoned/invalid attempts
+//     // are visible too. NO PHI: booleans only — never the password or token.
+//     logClientEvent(
+//       "signup_create_account_click",
+//       {
+//         has_token: Boolean(token),
+//         has_agreement_pdf: Boolean(agreementPdf),
+//       },
+//       "Create Password page"
+//     );
 
 //     if (!token) return toast.error("Missing invitation token.");
 
@@ -1157,6 +931,12 @@ export default function SignupPage() {
 //         onAccept={(pdf) => {
 //           setAgreementPdf(pdf);
 //           setAgreed(true);
+//           // The password / signup form is shown next.
+//           logClientEvent(
+//             "create_password_page_open",
+//             null,
+//             "Create Password page"
+//           );
 //         }}
 //         onDecline={() => router.push("/")}
 //       />
@@ -1369,242 +1149,3 @@ export default function SignupPage() {
 
 
 
-
-
-
-
-
-// "use client";
-
-// // Signup / accept-invite page.
-// //
-// // Entry: /signup?token=...
-// // Invite details (name, email, role) are fetched from invite-preview API.
-
-// import { Suspense, useEffect, useState } from "react";
-// import { useRouter, useSearchParams } from "next/navigation";
-// import { toast } from "sonner";
-// import Image from "next/image";
-// import { cookieManager } from "@/lib/cookies";
-// import { previewInviteService, acceptInviteService } from "@/services/authService";
-
-// const ROLE_HEADINGS = {
-//   super_admin:   "Super-Admin",
-//   trainer_admin: "Trainer-Admin",
-//   trainer:       "Trainer",
-//   client:        "Client",
-// };
-
-// function SignupForm() {
-//   const router = useRouter();
-//   const searchParams = useSearchParams();
-
-//   const token = searchParams.get("token") || "";
-//   const hasToken = Boolean(token);
-
-//   const [previewLoading, setPreviewLoading] = useState(hasToken);
-//   const [previewError, setPreviewError] = useState("");
-//   const [invite, setInvite] = useState(null);
-
-//   const [password, setPassword] = useState("");
-//   const [confirm, setConfirm] = useState("");
-//   const [showPassword, setShowPassword] = useState(false);
-//   const [showConfirm, setShowConfirm] = useState(false);
-//   const [submitting, setSubmitting] = useState(false);
-
-//   useEffect(() => {
-//     if (!hasToken) {
-//       setPreviewLoading(false);
-//       return;
-//     }
-
-//     let cancelled = false;
-//     (async () => {
-//       try {
-//         const res = await previewInviteService(token);
-//         if (cancelled) return;
-//         const data = res?.data || res;
-//         setInvite(data);
-//       } catch (err) {
-//         if (cancelled) return;
-//         const msg = err?.data?.message || err?.message || "Could not load invitation details.";
-//         setPreviewError(msg);
-//         toast.error(msg);
-//       } finally {
-//         if (!cancelled) setPreviewLoading(false);
-//       }
-//     })();
-
-//     return () => { cancelled = true; };
-//   }, [token, hasToken]);
-
-//   const role = invite?.role || "";
-//   const roleLabel = ROLE_HEADINGS[role] || "";
-//   const firstName = invite?.first_name || "";
-//   const lastName = invite?.last_name || "";
-//   const fullName = invite?.name || [firstName, lastName].filter(Boolean).join(" ");
-//   const email = invite?.email || "";
-
-//   const onSubmit = async (e) => {
-//     e.preventDefault();
-
-//     if (!token) return toast.error("Missing invitation token.");
-//     if (password.length < 8) return toast.error("Password must be at least 8 characters.");
-//     if (password !== confirm) return toast.error("Passwords don't match.");
-
-//     setSubmitting(true);
-//     try {
-//       await acceptInviteService({
-//         token,
-//         password,
-//         confirm_password: confirm,
-//       });
-
-//       cookieManager.clearAuth();
-//       toast.success(`Welcome aboard, ${firstName || ""}! You're all set.`);
-//       router.push("/");
-//     } catch (err) {
-//       const msg = err?.data?.message || err?.message || "";
-//       const lower = msg.toLowerCase();
-//       if (lower.includes("already accepted") || lower.includes("already registered") || lower.includes("already onboarded")) {
-//         toast.error("This invite has already been accepted. Please sign in instead.");
-//         router.push("/");
-//         return;
-//       } else if (lower.includes("no pending invite") || lower.includes("not found")) {
-//         toast.error("No pending invitation found for this email. Please check with the person who invited you.");
-//       } else {
-//         toast.error(msg || "Could not create your account. Please try again.");
-//       }
-//     } finally {
-//       setSubmitting(false);
-//     }
-//   };
-
-//   const fieldClass = "w-full rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2.5 text-[13px] text-[#252525] focus:outline-none focus:border-[#308BF9] transition-colors";
-//   const labelClass = "text-[#535359] text-[12px] font-semibold";
-
-//   if (!hasToken) {
-//     return (
-//       <div className="bg-white shadow-lg rounded-[12px] p-8 max-w-md w-full text-center">
-//         <h2 className="text-[20px] font-bold text-[#252525]">Invitation token missing</h2>
-//         <p className="text-[#535359] text-[13px] mt-2">
-//           Please use the signup link from your invitation email.
-//         </p>
-//       </div>
-//     );
-//   }
-
-//   if (previewLoading) {
-//     return (
-//       <div className="bg-white shadow-lg rounded-[12px] p-8 max-w-md w-full flex flex-col items-center gap-3">
-//         <div className="w-8 h-8 border-2 border-[#308BF9] border-t-transparent rounded-full animate-spin" />
-//         <p className="text-[#535359] text-[13px]">Loading invitation details…</p>
-//       </div>
-//     );
-//   }
-
-//   if (previewError) {
-//     return (
-//       <div className="bg-white shadow-lg rounded-[12px] p-8 max-w-md w-full text-center">
-//         <h2 className="text-[20px] font-bold text-[#252525]">Invitation unavailable</h2>
-//         <p className="text-[#535359] text-[13px] mt-2">{previewError}</p>
-//       </div>
-//     );
-//   }
-
-//   return (
-//     <form onSubmit={onSubmit} className="bg-white shadow-lg rounded-[12px] p-8 max-w-md w-full flex flex-col gap-5">
-//       <div>
-//         <h2 className="text-[28px] font-bold text-[#252525] tracking-[-0.5px]">
-//           Welcome to Respyr!
-//         </h2>
-//         {roleLabel && (
-//           <p className="text-[#535359] text-[13px] mt-1">
-//             You've been invited as a <span className="font-semibold text-[#308BF9]">{roleLabel}</span> on Respyr.
-//           </p>
-//         )}
-//         <p className="text-[#A1A1A1] text-[11px] mt-3">
-//           Confirm your details and set a password to complete your account.
-//         </p>
-//       </div>
-
-//       <div className="flex flex-col gap-1">
-//         <label className={labelClass}>Name</label>
-//         <input className={`${fieldClass} bg-[#F5F7FA]`} value={fullName} readOnly />
-//       </div>
-
-//       <div className="flex flex-col gap-1">
-//         <label className={labelClass}>Email</label>
-//         <input className={`${fieldClass} bg-[#F5F7FA]`} value={email} readOnly />
-//       </div>
-
-//       <div className="flex flex-col gap-1">
-//         <label className={labelClass}>Password <span className="text-red-500">*</span></label>
-//         <div className="relative">
-//           <input
-//             className={`${fieldClass} pr-10`}
-//             type={showPassword ? "text" : "password"}
-//             value={password}
-//             onChange={(e) => setPassword(e.target.value)}
-//             placeholder="At least 8 characters"
-//           />
-//           <div
-//             className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"
-//             onClick={() => setShowPassword((v) => !v)}
-//           >
-//             <Image
-//               src="/icons/hugeicons_view.svg"
-//               alt={showPassword ? "Hide password" : "Show password"}
-//               width={15}
-//               height={15}
-//               className={showPassword ? "opacity-50" : "opacity-100"}
-//             />
-//           </div>
-//         </div>
-//       </div>
-
-//       <div className="flex flex-col gap-1">
-//         <label className={labelClass}>Confirm password <span className="text-red-500">*</span></label>
-//         <div className="relative">
-//           <input
-//             className={`${fieldClass} pr-10`}
-//             type={showConfirm ? "text" : "password"}
-//             value={confirm}
-//             onChange={(e) => setConfirm(e.target.value)}
-//             placeholder="Re-enter password"
-//           />
-//           <div
-//             className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"
-//             onClick={() => setShowConfirm((v) => !v)}
-//           >
-//             <Image
-//               src="/icons/hugeicons_view.svg"
-//               alt={showConfirm ? "Hide password" : "Show password"}
-//               width={15}
-//               height={15}
-//               className={showConfirm ? "opacity-50" : "opacity-100"}
-//             />
-//           </div>
-//         </div>
-//       </div>
-
-//       <button
-//         type="submit"
-//         disabled={submitting}
-//         className="rounded-[10px] bg-[#308BF9] text-white text-[14px] font-semibold py-3 disabled:opacity-60 hover:bg-[#1a76e8] transition-colors cursor-pointer"
-//       >
-//         {submitting ? "Setting up your account..." : "Create account"}
-//       </button>
-//     </form>
-//   );
-// }
-
-// export default function SignupPage() {
-//   return (
-//     <div className="min-h-svh w-full flex items-center justify-center p-6 bg-[#F5F7FA]">
-//       <Suspense fallback={<div className="text-[#A1A1A1] text-[13px]">Loading…</div>}>
-//         <SignupForm />
-//       </Suspense>
-//     </div>
-//   );
-// }
