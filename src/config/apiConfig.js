@@ -139,7 +139,11 @@ export const API_ENDPOINTS = {
    FOOD: {
     // Internal Next.js API routes (relative — not prefixed with API_BASE_URL)
     FOODSEARCH: "/api/food/search"
-  }
+  },
 
+    LOGS: {
+    // Public endpoint (no auth) — client-side UI event logging
+    CLIENT_EVENTS: `/${API_VERSION}/dietitian/api/web/client-logs`
+  }
 
 };
