@@ -135,6 +135,9 @@ function SignupForm() {
   // PDF (File) by the Agreement step and submitted with the invite acceptance.
   const [agreed, setAgreed] = useState(false);
   const [agreementPdf, setAgreementPdf] = useState(null);
+  // Set when the user declines the agreement: shows an in-page notice
+  // (no navigation away) with the option to review the agreement again.
+  const [declined, setDeclined] = useState(false);
  
   useEffect(() => {
     // Log that the Terms & Conditions screen was opened (the first screen
@@ -154,10 +157,43 @@ function SignupForm() {
     let cancelled = false;
     (async () => {
       try {
+        // const res = await previewInviteService(token);
+        // if (cancelled) return;
+        // const data = res?.data || res;
+        // setInvite(data);
+
         const res = await previewInviteService(token);
         if (cancelled) return;
         const data = res?.data || res;
+
+        // Single-use gate: the backend returns status + can_accept from
+        // invite-preview. If this invite was already accepted (or expired /
+        // revoked), block the page instead of showing the signup form again.
+        const status = String(data?.status || "").toLowerCase();
+        if (data?.can_accept !== true) {
+          const blockedMsg =
+            status === "accepted"
+              ? "This invitation has already been used. Please sign in instead."
+              : status === "expired"
+              ? "This invitation link has expired. Please ask for a new invite."
+              : status === "revoked"
+              ? "This invitation has been revoked. Please contact the person who invited you."
+              : "This invitation link is no longer valid.";
+
+          // NO PHI: only the invite status — never the token or email.
+          logClientEvent(
+            "signup_invite_link_blocked",
+            { invite_status: status || "unknown" },
+            "Terms and condition page"
+          );
+
+          setPreviewError(blockedMsg);
+          return;
+        }
+
         setInvite(data);
+        
+
       } catch (err) {
         if (cancelled) return;
         const msg = err?.data?.message || err?.message || "Could not load invitation details.";
@@ -250,6 +286,9 @@ function SignupForm() {
         token,
         password,
         confirm_password: confirm,
+        // Alert-only hint for backend failure emails. Backend never trusts
+        // this for auth — real identity always comes from the token lookup.
+        alert_email: email || undefined,
       };
  
       // Attach the signed agreement PDF (base64 data URL) if it was captured.
@@ -348,6 +387,28 @@ payload.agreement_pdf_name =
     );
   }
  
+  /* ----- Agreement declined (stay on page, allow re-review) ----- */
+  if (declined) {
+    return (
+      <div className={SHELL}>
+        <CardHeader />
+        <div className="px-7 py-9 text-center">
+          <div className="text-[20px] font-semibold text-[#252525] tracking-[-0.02em] mb-1">Agreement declined</div>
+          <div className="text-[12px] text-[#738298] tracking-[-0.02em] mb-5">
+            You must accept the Device Evaluation Agreement to create your account.
+          </div>
+          <button
+            type="button"
+            onClick={() => setDeclined(false)}
+            className="h-[42px] px-6 bg-[#308bf9] text-white text-[12px] font-medium rounded-[8px] tracking-[-0.02em] transition-all duration-150 hover:bg-[#2679dd]"
+          >
+            Review agreement
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   /* ----- Agreement gate (must accept before signup form) ----- */
   if (!agreed) {
     return (
@@ -363,7 +424,7 @@ payload.agreement_pdf_name =
             "Create Password page"
           );
         }}
-        onDecline={() => router.push("/")}
+        onDecline={() => setDeclined(true)}
       />
     );
   }
