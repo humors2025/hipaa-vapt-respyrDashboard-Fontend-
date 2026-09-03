@@ -397,6 +397,11 @@ export default function ClientLists() {
                   <div className="min-w-0 flex-1">
                     <p className="text-[#252525] text-[15px] font-semibold leading-[126%] tracking-[-0.3px] truncate">
                       {client.client_name}
+                      {client.is_self === true && (
+                        <span className="ml-1 text-[#E53935] text-[12px] font-semibold">
+                          (Self)
+                        </span>
+                      )}
                     </p>
 
                     <div className="flex items-center max-xl:flex-wrap">

@@ -172,6 +172,7 @@ const formatLastLoggedDate = (dateString) => {
 
     return apiData.map((client) => ({
       name: client.client_name || client.name || "N/A",
+      isSelf: client.is_self === true,
       age: client.age || "N/A",
       gender: client.gender || "N/A",
 
@@ -418,6 +419,11 @@ const formatLastLoggedDate = (dateString) => {
                           <div className="flex flex-col gap-1">
                             <span className="text-[#252525] text-[12px] font-semibold leading-[126%] tracking-[-0.24px]">
                               {client.name}
+                              {client.isSelf && (
+                                <span className="ml-1 text-[#E53935] text-[10px] font-semibold">
+                                  (Self)
+                                </span>
+                              )}
                             </span>
                             <span className="font-normal text-[10px] leading-normal tracking-[-0.2px]">
                               {client.displayAge}
