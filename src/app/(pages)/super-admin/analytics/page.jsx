@@ -261,10 +261,12 @@ function buildFromGroupDetails(gd, now = new Date()) {
       // recent reading's result, distinct from the reading-frequency Rate %.
       metabolism_score: typeof c.latest_test?.metabolism_score === "number" ? c.latest_test.metabolism_score : null,
       associated_dietitian: { name: c.owner?.name || "—" },
-      // Assigned trainer straight from the backend (client.trainer). Empty when the
-      // client is coached directly by an admin with no trainer assigned.
-      trainer_code: c.trainer?.partner_code || "",
-      trainer_name: c.trainer?.name && c.trainer.name !== "NA" ? c.trainer.name : "",
+      // Assigned trainer straight from the backend (client.trainer). When no
+      // trainer is assigned (trainer.partner_code / name are null) the client is
+      // coached directly by the owning admin, so fall back to client.owner.
+      trainer_code: c.trainer?.partner_code || c.owner?.partner_code || "",
+      trainer_name: (c.trainer?.name && c.trainer.name !== "NA") ? c.trainer.name
+        : (c.owner?.name && c.owner.name !== "NA") ? c.owner.name : "",
       client: { joined_dttm: c.joined_dttm || c.created_at || null },
       test_history: { last_test_date_time: c.latest_test?.date_time || null },
     });
@@ -1709,7 +1711,7 @@ export default function AnalyticsDashboard() {
                 { key: "name", label: "Client", val: r => r.name || "—" },
                 { key: "profile_id", label: "Profile ID", val: r => r.profile_id || "—", className: "text-muted font-mono" },
                 // Assigned trainer from get_group_details (client.trainer): name on top,
-                // partner_code underneath. "—" when no trainer is assigned.
+                // partner_code underneath. Falls back to the owning admin when no trainer is assigned.
                 { key: "trainer_name", label: "Trainer", val: r => r.trainer_name || r.trainer_code || "—", render: r => (r.trainer_name || r.trainer_code) ? (
                   <div>
                     <div style={{ color: R.ts }}>{r.trainer_name || "—"}</div>
