@@ -9,10 +9,12 @@ import { useDispatch, useSelector } from "react-redux";
 import { getAdminGroups, selectAdminGroups, selectAdminGroupsRaw, selectPrimaryGroupName } from "@/store/adminGroupsSlice";
 import { getGroupDetails, selectGroupDetails, selectGroupDetailsLoading, selectGroupCounts } from "@/store/groupDetailsSlice";
 import { fetchGroupPeriodOverviewService } from "@/services/authService";
+import TrainerClientsModal from "@/components/super-admin/TrainerClientsModal";
 
 const TIMEZONES = { "America/Chicago": "Houston, TX", "Asia/Kolkata": "India (IST)" };
 const DEFAULT_TZ = "America/Chicago";
 const ACTIVE_THRESHOLD = 60;
+const ELITE_THRESHOLD = 90;
 const EXECUTIVE_TAS = ["Derek", "Evan"];
 const BLUE = "#308BF9";
 const R = {
@@ -546,6 +548,8 @@ export default function AnalyticsDashboard() {
   // Stable per-row key: trainer user_id (admins are "admin_<uid>"), falling back
   // to partner_code/email for safety.
   const trKey = (t) => t.user_id || t.partner_code || t.email || t.name;
+  // Trainer whose client list is open in the Trainer Adoption pop-up (null = closed).
+  const [clientsModalTrainer, setClientsModalTrainer] = useState(null);
   const toggleTrainerExcluded = (id) => setExcludedTrainerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   useEffect(() => {
@@ -874,9 +878,9 @@ export default function AnalyticsDashboard() {
   const adoptionRate = tTotal > 0 ? Math.round((tActive / tTotal) * 100) : 0;
   const engagementRate = cTotal > 0 ? Math.round((cActive / cTotal) * 100) : 0;
   // Trainer status buckets — a clean partition of ALL trainers so the tab
-  // counts always sum to the All count: 0-59% At Risk, 60-99% Active, 100% Elite.
-  const activeTrainers = tabTr.filter(t => t.pct >= ACTIVE_THRESHOLD && t.pct < 100);
-  const eliteTrainers = tabTr.filter(t => t.pct >= 100);
+  // counts always sum to the All count: 0-59% At Risk, 60-89% Active, 90-100% Elite.
+  const activeTrainers = tabTr.filter(t => t.pct >= ACTIVE_THRESHOLD && t.pct < ELITE_THRESHOLD);
+  const eliteTrainers = tabTr.filter(t => t.pct >= ELITE_THRESHOLD);
   const atRiskTrainers = tabTr.filter(t => t.pct < ACTIVE_THRESHOLD);
   const eliteCount = eliteTrainers.length;
   const atRiskTrainerCount = atRiskTrainers.length;
@@ -948,7 +952,9 @@ export default function AnalyticsDashboard() {
   // so the cohort's people-axis (real clients only) can exclude them.
   const selfPidSet = new Set(tabTr.map(t => t.selfProfileId).filter(Boolean));
   const allTimeClientReads = tabCl.reduce((s, c) => s + (c.readingDays || 0), 0);
+  console.log("allTimeClientReads954:-", allTimeClientReads);
   const allTimeTotalReads = allTimeClientReads;
+  console.log("allTimeTotalReads956:-", allTimeTotalReads);
   // Readings-card split as people counts — mirror the snapshot cards exactly so
   // the split totals match the Trainers/Clients cards above. Using cTotal (not the
   // sum of each trainer's total_clients) keeps admin-owned clients — the ones under
@@ -1074,10 +1080,19 @@ export default function AnalyticsDashboard() {
   };
   // Dim a checked (excluded) trainer's row so it reads as removed but stays togglable.
   const excludedRowStyle = (r) => excludedTrainerIds.has(trKey(r)) ? { opacity: 0.4, textDecoration: "line-through" } : {};
+  // Trainer name → opens the client-list pop-up for that trainer (data from
+  // TRAINERCLIENTSOVERVIEWFORSUPERADMIN, keyed by the row's partner_code).
+  const trainerNameCell = r => (
+    <button type="button" onClick={e => { e.stopPropagation(); setClientsModalTrainer(r); }}
+      title="View this trainer's clients" className="cursor-pointer hover:underline text-[#252525] hover:text-[#308BF9] transition-colors"
+      style={{ border: "none", background: "transparent", padding: 0, font: "inherit", fontWeight: 600, textAlign: "left" }}>
+      {r.name || "—"}
+    </button>
+  );
 
   const trainerCols = [
     excludeCol,
-    { key: "name", label: "Name", val: r => r.name || "—" },
+    { key: "name", label: "Name", val: r => r.name || "—", render: trainerNameCell },
     { key: "partner_code", label: "Code", val: r => r.partner_code || "—", className: "text-muted font-mono" },
     ...(activeTab === "overview" ? [{ key: "taName", label: "TA", val: r => r.taName || "—", className: "text-secondary" }] : []),
     { key: "daysSince", label: "Days", align: "center", val: r => r.daysSince ?? 0 },
@@ -1364,7 +1379,7 @@ export default function AnalyticsDashboard() {
               onMouseEnter={e => Object.assign(e.currentTarget.style, csHover)}
               onMouseLeave={e => Object.assign(e.currentTarget.style, csReset)}>
               <div className="flex items-center justify-between">
-                <span style={{ fontSize: "11px", fontWeight: 600, color: R.tm, textTransform: "uppercase", letterSpacing: "0.4px" }}>Readings</span>
+                <span style={{ fontSize: "11px", fontWeight: 600, color: R.tm, textTransform: "uppercase", letterSpacing: "0.4px" }}>CLIENTS Reading (Excluding Trainers)</span>
                 <div className="flex items-center gap-2">
                   {wkStats.reads > 0 && <span style={{ fontSize: "10px", fontWeight: 600, color: "#7C3AED", backgroundColor: "#7C3AED12", padding: "2px 6px", borderRadius: "4px" }}>{wkStats.reads} this wk</span>}
                   <Ico type="trend" />
@@ -1620,13 +1635,13 @@ export default function AnalyticsDashboard() {
                 </div>;
                 if (trainerTab === "all") return <AccTable rows={list} rowStyle={excludedRowStyle} pageSize={TRAINER_PAGE_SIZE} resetKey={`${trainerTab}|${trainerSearch}|${activeTab}`} cols={[
                   excludeCol,
-                  { key: "name", label: "Trainer", val: r => r.name || "—" },
+                  { key: "name", label: "Trainer", val: r => r.name || "—", render: trainerNameCell },
                   { key: "realClientCount", label: "Clients", align: "center", val: r => r.realClientCount ?? 0 },
                   { key: "daysSince", label: "Days", align: "center", val: r => r.daysSince ?? 0 },
                   { key: "selfTests", label: "Tests", align: "center", val: r => r.selfTests ?? 0 },
                   { key: "pct", label: "Rate", align: "right", render: r => <RateCell pct={r.pct} /> },
                   {
-                    key: "status", label: "Status", align: "right", val: r => r.pct >= 100 ? 2 : r.pct >= ACTIVE_THRESHOLD ? 1 : 0, render: r => r.pct >= 100
+                    key: "status", label: "Status", align: "right", val: r => r.pct >= ELITE_THRESHOLD ? 2 : r.pct >= ACTIVE_THRESHOLD ? 1 : 0, render: r => r.pct >= ELITE_THRESHOLD
                       ? <span style={badgeStyle(R.greenLight, R.green)}>Elite</span>
                       : r.pct >= ACTIVE_THRESHOLD
                         ? <span style={badgeStyle(R.blueLight, R.blue)}>Active</span>
@@ -1815,6 +1830,9 @@ export default function AnalyticsDashboard() {
           </div>
         </div>
 
+        {/* Trainer Adoption → client list pop-up (portal to <body>, so the card's
+            overflow:hidden / hover transform can't clip or offset it). */}
+        <TrainerClientsModal open={!!clientsModalTrainer} trainer={clientsModalTrainer} onClose={() => setClientsModalTrainer(null)} />
 
         {/* ═══ FOOTER ═══ */}
         <div className="flex items-start gap-2.5" style={{ fontSize: "11px", color: R.tm, letterSpacing: "-0.22px", padding: "10px 14px", backgroundColor: "#F8FAFC", borderRadius: "10px", border: "1px solid #EEF2F6" }}>
@@ -3238,7 +3256,7 @@ export default function AnalyticsDashboard() {
 //                   { key: "selfTests", label: "Tests", align: "center", val: r => r.selfTests ?? 0 },
 //                   { key: "pct", label: "Rate", align: "right", render: r => <RateCell pct={r.pct} /> },
 //                   {
-//                     key: "status", label: "Status", align: "right", val: r => r.pct >= 100 ? 2 : r.pct >= ACTIVE_THRESHOLD ? 1 : 0, render: r => r.pct >= 100
+//                     key: "status", label: "Status", align: "right", val: r => r.pct >= ELITE_THRESHOLD ? 2 : r.pct >= ACTIVE_THRESHOLD ? 1 : 0, render: r => r.pct >= ELITE_THRESHOLD
 //                       ? <span style={badgeStyle(R.greenLight, R.green)}>Elite</span>
 //                       : r.pct >= ACTIVE_THRESHOLD
 //                         ? <span style={badgeStyle(R.blueLight, R.blue)}>Active</span>
@@ -4569,7 +4587,7 @@ export default function AnalyticsDashboard() {
 //                   { key: "readingDays", label: "Tests", align: "center", val: r => r.readingDays ?? 0 },
 //                   { key: "pct", label: "Rate", align: "right", render: r => <RateCell pct={r.pct} /> },
 //                   {
-//                     key: "status", label: "Status", align: "right", val: r => r.pct >= 100 ? 2 : r.pct >= ACTIVE_THRESHOLD ? 1 : 0, render: r => r.pct >= 100
+//                     key: "status", label: "Status", align: "right", val: r => r.pct >= ELITE_THRESHOLD ? 2 : r.pct >= ACTIVE_THRESHOLD ? 1 : 0, render: r => r.pct >= ELITE_THRESHOLD
 //                       ? <span style={badgeStyle(R.greenLight, R.green)}>Elite</span>
 //                       : r.pct >= ACTIVE_THRESHOLD
 //                         ? <span style={badgeStyle(R.blueLight, R.blue)}>Active</span>
@@ -5646,7 +5664,7 @@ export default function AnalyticsDashboard() {
 //                   { key: "daysSince", label: "Days", align: "center", val: r => r.daysSince ?? 0 },
 //                   { key: "readingDays", label: "Tests", align: "center", val: r => r.readingDays ?? 0 },
 //                   { key: "pct", label: "Rate", align: "right", render: r => <RateCell pct={r.pct} /> },
-//                   { key: "status", label: "Status", align: "right", val: r => r.pct >= 100 ? 2 : r.pct >= ACTIVE_THRESHOLD ? 1 : 0, render: r => r.pct >= 100
+//                   { key: "status", label: "Status", align: "right", val: r => r.pct >= ELITE_THRESHOLD ? 2 : r.pct >= ACTIVE_THRESHOLD ? 1 : 0, render: r => r.pct >= ELITE_THRESHOLD
 //                     ? <span style={badgeStyle(R.greenLight, R.green)}>Elite</span>
 //                     : r.pct >= ACTIVE_THRESHOLD
 //                       ? <span style={badgeStyle(R.blueLight, R.blue)}>Active</span>
