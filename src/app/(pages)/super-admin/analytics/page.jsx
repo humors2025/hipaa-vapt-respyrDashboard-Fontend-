@@ -951,17 +951,12 @@ export default function AnalyticsDashboard() {
   // Trainer self-test profiles also surface as client rows; this set marks them
   // so the cohort's people-axis (real clients only) can exclude them.
   const selfPidSet = new Set(tabTr.map(t => t.selfProfileId).filter(Boolean));
-  const allTimeClientReads = tabCl.reduce((s, c) => s + (c.readingDays || 0), 0);
-  console.log("allTimeClientReads954:-", allTimeClientReads);
-  const allTimeTotalReads = allTimeClientReads;
-  console.log("allTimeTotalReads956:-", allTimeTotalReads);
-  // Readings-card split as people counts — mirror the snapshot cards exactly so
-  // the split totals match the Trainers/Clients cards above. Using cTotal (not the
-  // sum of each trainer's total_clients) keeps admin-owned clients — the ones under
-  // the admin's own code, not any non-self trainer — in the client count.
-  const networkTrainerCount = tTotal;
-  const networkClientCount = cTotal;
-  const networkSplitTotal = networkTrainerCount + networkClientCount;
+  // Readings-card split as READING counts (all time). Trainer reads = each trainer's
+  // own self-tests; client reads = real clients only (self-test profiles excluded so
+  // a trainer's readings are not counted twice). Trainer + client = total.
+  const allTimeTrainerReads = tabTr.reduce((s, t) => s + (t.selfTests || 0), 0);
+  const allTimeClientReads = tabCl.reduce((s, c) => selfPidSet.has(c.profile_id) ? s : s + (c.readingDays || 0), 0);
+  const allTimeTotalReads = allTimeTrainerReads + allTimeClientReads;
   // Period reads come from the API's period_overview, summed across the selected
   // range (see the aggregation effect). No frontend recomputation of the counts
   // themselves — the Reading Split shows each bucket; trainer + client = total.
@@ -1379,7 +1374,7 @@ export default function AnalyticsDashboard() {
               onMouseEnter={e => Object.assign(e.currentTarget.style, csHover)}
               onMouseLeave={e => Object.assign(e.currentTarget.style, csReset)}>
               <div className="flex items-center justify-between">
-                <span style={{ fontSize: "11px", fontWeight: 600, color: R.tm, textTransform: "uppercase", letterSpacing: "0.4px" }}>CLIENTS Reading (Excluding Trainers)</span>
+                <span style={{ fontSize: "11px", fontWeight: 600, color: R.tm, textTransform: "uppercase", letterSpacing: "0.4px" }}>Total Readings</span>
                 <div className="flex items-center gap-2">
                   {wkStats.reads > 0 && <span style={{ fontSize: "10px", fontWeight: 600, color: "#7C3AED", backgroundColor: "#7C3AED12", padding: "2px 6px", borderRadius: "4px" }}>{wkStats.reads} this wk</span>}
                   <Ico type="trend" />
@@ -1396,12 +1391,11 @@ export default function AnalyticsDashboard() {
                 </div>
               </div>
               <div className="flex flex-col gap-2 pt-3" style={{ borderTop: "1px solid #F1F5F9" }}>
-                {[["Trainers", networkTrainerCount, R.blue], ["Clients", networkClientCount, R.green]].map(([l, v, c]) => (
+                {[["Trainers Reading", allTimeTrainerReads, R.blue], ["Clients Reading", allTimeClientReads, R.green]].map(([l, v, c]) => (
                   <div key={l} className="flex items-center gap-2">
                     <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: c, flexShrink: 0 }} />
                     <span style={{ fontSize: "11px", color: R.ts, flex: 1 }}>{l}</span>
                     <span style={{ fontSize: "12px", fontWeight: 700, color: R.tp }}>{v}</span>
-                    {networkSplitTotal > 0 && <span style={{ fontSize: "10px", color: R.tm }}>({Math.round((v / networkSplitTotal) * 100)}%)</span>}
                   </div>
                 ))}
               </div>
