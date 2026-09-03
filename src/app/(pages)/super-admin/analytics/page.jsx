@@ -54,7 +54,7 @@ function rowMatches(fields, q) {
   return fields.some(f => f != null && String(f).toLowerCase().includes(needle));
 }
 const trainerSearchFields = t => [t.name, t.partner_code, t.dietician_id, t.email, t.taName];
-const clientSearchFields = c => [c.name, c.profile_id, c.email, c.trainerName, goalLabel(c.fitness_goal), c.dietitian_id];
+const clientSearchFields = c => [c.name, c.profile_id, c.email, c.trainerName, c.trainer_name, c.trainer_code, goalLabel(c.fitness_goal), c.dietitian_id];
 
 function isMaskedMatch(m, r) {
   if (!m || !r) return false;
@@ -261,6 +261,10 @@ function buildFromGroupDetails(gd, now = new Date()) {
       // recent reading's result, distinct from the reading-frequency Rate %.
       metabolism_score: typeof c.latest_test?.metabolism_score === "number" ? c.latest_test.metabolism_score : null,
       associated_dietitian: { name: c.owner?.name || "—" },
+      // Assigned trainer straight from the backend (client.trainer). Empty when the
+      // client is coached directly by an admin with no trainer assigned.
+      trainer_code: c.trainer?.partner_code || "",
+      trainer_name: c.trainer?.name && c.trainer.name !== "NA" ? c.trainer.name : "",
       client: { joined_dttm: c.joined_dttm || c.created_at || null },
       test_history: { last_test_date_time: c.latest_test?.date_time || null },
     });
@@ -1704,6 +1708,14 @@ export default function AnalyticsDashboard() {
               <AccTable rows={clientRows} pageSize={CLIENT_PAGE_SIZE} resetKey={`${clientSearch}|${activeTab}`} cols={[
                 { key: "name", label: "Client", val: r => r.name || "—" },
                 { key: "profile_id", label: "Profile ID", val: r => r.profile_id || "—", className: "text-muted font-mono" },
+                // Assigned trainer from get_group_details (client.trainer): name on top,
+                // partner_code underneath. "—" when no trainer is assigned.
+                { key: "trainer_name", label: "Trainer", val: r => r.trainer_name || r.trainer_code || "—", render: r => (r.trainer_name || r.trainer_code) ? (
+                  <div>
+                    <div style={{ color: R.ts }}>{r.trainer_name || "—"}</div>
+                    {r.trainer_code ? <div className="font-mono" style={{ fontSize: "11px", color: R.td }}>{r.trainer_code}</div> : null}
+                  </div>
+                ) : <span style={{ color: R.td }}>—</span> },
                 { key: "fitness_goal", label: "Goal", val: r => goalLabel(r.fitness_goal), render: r => <span style={{ fontSize: "11px", fontWeight: 500, padding: "3px 10px", borderRadius: R.rPill, color: goalColor(r.fitness_goal), backgroundColor: goalColor(r.fitness_goal) + "15", letterSpacing: "-0.22px" }}>{goalLabel(r.fitness_goal)}</span> },
                 { key: "daysSince", label: "Days", align: "center", val: r => r.daysSince ?? 0 },
                 { key: "readingDays", label: "Tests", align: "center", val: r => r.readingDays ?? 0 },
