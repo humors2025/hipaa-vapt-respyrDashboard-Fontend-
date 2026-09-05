@@ -505,6 +505,24 @@ export const updateDietPlanFoodService = async (payload) => {
   });
 };
 
+// add / update / delete one food inside weekly_food_json_suggestions_newtest
+// (trainer-update-weekly-food-json-newtest). Payload:
+//   { action, id, dietitian_id, profile_id, day_code, meal_type,
+//     food_index?, food?, week_start_date?, week_end_date? }
+// dietitian_id must equal the JWT's dietician_id, so it is filled from the
+// access token when the caller leaves it out.
+export const updateDietPlanFoodNewTestService = async (payload) => {
+  const body = {
+    ...payload,
+    dietitian_id: payload?.dietitian_id || getDietitianIdFromAccessToken(),
+  };
+  return apiFetcher(API_ENDPOINTS.PLAN.UPDATEDIETFOODNEWTEST, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+};
+
 
 
 export const fetchDietPlanJsonService = async (login_id, profile_id, diet_plan_id) => {
@@ -755,6 +773,35 @@ export const fetchDietAnalysisPlan = async (
   });
 };
 
+
+// Recipe-level weekly plan for DietPlanNew (get_weekly_food_json_suggestions_weeks_newtest).
+// dietitian_id comes from the access token (JWT-bound identity); super-admin
+// partner_code override applied the same way as fetchDietAnalysisPlan.
+export const fetchDietAnalysisPlanNewTest = async (
+  profileId,
+  weekStartDate,
+  weekEndDate,
+  dietitianId = null
+) => {
+  const resolvedDietitianId = dietitianId || getDietitianIdFromAccessToken();
+
+  return apiFetcher(API_ENDPOINTS.DIETANALYSIS.DIETANALYSISPLANNEWTEST, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(
+      withSuperAdminPartnerCode({
+        dietitian_id: resolvedDietitianId,
+        profile_id: profileId,
+        // week_start_date: weekStartDate,
+        // week_end_date: weekEndDate,
+         week_start_date: "2026-08-30",
+        week_end_date: "2026-09-05",
+      })
+    ),
+  });
+};
 
 export const fetchClientWeeklyDates = async (profileId, dietitianId) => {
   try {
@@ -1410,6 +1457,31 @@ export const searchFoodService = async (query, { limit = 6, dietType = "", count
   }
 
   return res.json();
+};
+
+// FitChef dish bank search (internal /api/food/fitchef → respyr.in/fitchef-dashboard/api/foods).
+// Same raw-fetch reasoning as searchFoodService: same-origin route + abortable.
+//   slot: breakfast | lunch | snack | dinner   diet: veg | vegan | non_veg | ""
+// Resolves to { results: [...], count, page, pages, query, ... } (upstream shape).
+export const searchFitChefFoodsService = async (
+  query,
+  { slot = "", diet = "", page = 0, signal } = {}
+) => {
+  const params = new URLSearchParams({ q: query });
+  if (slot) params.set("slot", slot);
+  if (diet) params.set("diet", diet);
+  if (page) params.set("page", String(page));
+
+  const res = await fetch(`${API_ENDPOINTS.FOOD.FITCHEFSEARCH}?${params.toString()}`, {
+    method: "GET",
+    signal,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error || "FitChef search failed");
+  }
+  return data;
 };
 
 

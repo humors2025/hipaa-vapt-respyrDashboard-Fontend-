@@ -41,7 +41,9 @@ export const API_ENDPOINTS = {
     DIETPLAN: `/${API_VERSION}/dietitian/api/web/update_diet_plan_json`,
     DIETPLANJSON: `/${API_VERSION}/dietitian/api/web/fetch_diet_json`,
     DELETEDIETPLAN: `/${API_VERSION}/dietitian/api/web/delete_diet_plan`,
-    UPDATEDIETFOOD: `/${API_VERSION}/dietitian/api/web/trainer-update-weekly-food-json`
+    UPDATEDIETFOOD: `/${API_VERSION}/dietitian/api/web/trainer-update-weekly-food-json`,
+    // Same add/update/delete contract, but against weekly_food_json_suggestions_newtest (DietPlanNew)
+    UPDATEDIETFOODNEWTEST: `/${API_VERSION}/dietitian/api/web/trainer-update-weekly-food-json-newtest`
   },
   CLIENTPROFILE: {
     CLIENTPROFILEDATA: `/${API_VERSION}/dietitian/api/web/get_client_data`,
@@ -77,6 +79,8 @@ export const API_ENDPOINTS = {
   },
   DIETANALYSIS: {
     DIETANALYSISPLAN: `/${API_VERSION}/dietitian/api/web/get_weekly_food_json_suggestions_weeks`,
+    // Recipe-level weekly plan (nutrition, ingredients, method, alternatives) used by DietPlanNew
+    DIETANALYSISPLANNEWTEST: `/${API_VERSION}/dietitian/api/web/get_weekly_food_json_suggestions_weeks_newtest`,
     APPROVALPLAN: `/${API_VERSION}/dietitian/api/web/food_json_suggestion_approve_plan`
   },
   MACROSANALYSIS: {
@@ -138,7 +142,9 @@ export const API_ENDPOINTS = {
 
    FOOD: {
     // Internal Next.js API routes (relative — not prefixed with API_BASE_URL)
-    FOODSEARCH: "/api/food/search"
+    FOODSEARCH: "/api/food/search",
+    // FitChef dish bank (proxied to respyr.in/fitchef-dashboard/api/foods)
+    FITCHEFSEARCH: "/api/food/fitchef"
   },
 
     LOGS: {

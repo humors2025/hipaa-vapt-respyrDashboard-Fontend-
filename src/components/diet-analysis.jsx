@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import DietPlan from "./diet-plan";
-import MacrosUpdate from "./macros-update";
-import DietPlanLargeSize from "./dietplanlargesize";
+// import DietPlan from "./diet-plan";
+// import MacrosUpdate from "./macros-update";
+// import DietPlanLargeSize from "./dietplanlargesize";
+import DietPlanNew from "./Dietplannew";
 
 export default function DietAnalysis() {
   const [isLargeScreen, setIsLargeScreen] = useState(false);
@@ -24,9 +25,10 @@ export default function DietAnalysis() {
 
   return (
     <div className="flex max-2xl:flex-col gap-5 mt-[17px] mx-[5px]">
-      <MacrosUpdate />
+      {/* <MacrosUpdate />
 
-      {isLargeScreen ? <DietPlanLargeSize /> : <DietPlan />}
+      {isLargeScreen ? <DietPlanLargeSize /> : <DietPlan />} */}
+      <DietPlanNew/>
     </div>
   );
 }

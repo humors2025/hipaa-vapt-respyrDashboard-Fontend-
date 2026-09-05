@@ -6,6 +6,10 @@ const initialState = {
   data: null,
   loading: false,
   error: null,
+  // The { profileId, weekStartDate, weekEndDate } most recently requested via
+  // getDietAnalysisPlan. Lets other views (DietPlanNew) follow the week the
+  // user picked in client-details without wiring extra props through.
+  requestedWeek: null,
 };
 
 export const getDietAnalysisPlan = createAsyncThunk(
@@ -38,6 +42,7 @@ const dietAnalysisSlice = createSlice({
       state.data = null;
       state.loading = false;
       state.error = null;
+      state.requestedWeek = null;
     },
     setWeeklyJsonData(state, action) {
       if (!state.data?.data?.food_json) return;
@@ -79,9 +84,17 @@ const dietAnalysisSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(getDietAnalysisPlan.pending, (state) => {
+      .addCase(getDietAnalysisPlan.pending, (state, action) => {
         state.loading = true;
         state.error = null;
+        const arg = action.meta?.arg;
+        state.requestedWeek = arg
+          ? {
+              profileId: arg.profileId ?? null,
+              weekStartDate: arg.weekStartDate ?? null,
+              weekEndDate: arg.weekEndDate ?? null,
+            }
+          : null;
       })
       .addCase(getDietAnalysisPlan.fulfilled, (state, action) => {
         state.loading = false;
@@ -100,5 +113,6 @@ export const { clearDietAnalysis, updateEditedDays, setWeeklyJsonData } = dietAn
 export const selectDietAnalysisData = (state) => state.dietAnalysis.data;
 export const selectDietAnalysisLoading = (state) => state.dietAnalysis.loading;
 export const selectDietAnalysisError = (state) => state.dietAnalysis.error;
+export const selectDietAnalysisRequestedWeek = (state) => state.dietAnalysis.requestedWeek;
 
 export default dietAnalysisSlice.reducer;

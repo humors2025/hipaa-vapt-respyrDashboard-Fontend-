@@ -9,7 +9,7 @@ const contentSecurityPolicy = [
 
   "style-src 'self' 'unsafe-inline'",
 
-  "img-src 'self' data: blob: https://api.respyr.ai https://humorstech.com",
+  "img-src 'self' data: blob: https://api.respyr.ai https://respyr.in https://production-us.fitchef.cloud https://humorstech.com",
 
   "font-src 'self' data:",
 
