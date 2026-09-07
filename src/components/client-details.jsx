@@ -70,6 +70,12 @@ export default function ClientDetails() {
   const [weeklyDatesLoading, setWeeklyDatesLoading] = useState(false);
   const [weeklyDatesError, setWeeklyDatesError] = useState(null);
   const [isDietAnalysisAvailable, setIsDietAnalysisAvailable] = useState(true);
+  // TEMP (testing only): keep the Weekly Diet Analysis tab clickable even when
+  // get-weekly-tab-list returns "No weekly data", so the *_newtest plan
+  // (fixed sample payload in authService) can be viewed. Set to false to restore
+  // the original gating.
+  const ALLOW_DIET_TAB_WITHOUT_WEEKS = true;
+  const dietTabDisabled = !isDietAnalysisAvailable && !ALLOW_DIET_TAB_WITHOUT_WEEKS;
   const [isLoadingWeeklyData, setIsLoadingWeeklyData] = useState(true);
   const [isPDFExporting, setIsPDFExporting] = useState(false);
 
@@ -269,7 +275,7 @@ const transformDatesToDisplay = () => {
           setIsDietAnalysisAvailable(false);
           setWeeklyDates([]);
 
-          if (activeTab === "diet") {
+          if (activeTab === "diet" && !ALLOW_DIET_TAB_WITHOUT_WEEKS) {
             setActiveTab("test");
           }
         } else if (response && response.status === true && response.data) {
@@ -298,7 +304,7 @@ const transformDatesToDisplay = () => {
           setIsDietAnalysisAvailable(false);
           setWeeklyDates([]);
 
-          if (activeTab === "diet") {
+          if (activeTab === "diet" && !ALLOW_DIET_TAB_WITHOUT_WEEKS) {
             setActiveTab("test");
           }
         } else {
@@ -378,7 +384,7 @@ const transformDatesToDisplay = () => {
   };
 
   const handleTabChange = (tab) => {
-    if (tab === "diet" && !isDietAnalysisAvailable) {
+    if (tab === "diet" && dietTabDisabled) {
       return;
     }
     setActiveTab(tab);
@@ -686,20 +692,20 @@ const transformDatesToDisplay = () => {
 
               <div
                 onClick={() => handleTabChange("diet")}
-                className={`flex items-center gap-2.5 rounded-[6px] py-[11px] px-[31px] max-xl:px-4 transition-all duration-200 ${!isDietAnalysisAvailable
+                className={`flex items-center gap-2.5 rounded-[6px] py-[11px] px-[31px] max-xl:px-4 transition-all duration-200 ${dietTabDisabled
                   ? "opacity-50 cursor-not-allowed bg-[#F5F7FA]"
                   : activeTab === "diet"
                     ? "bg-[#252525] cursor-pointer hover:bg-[#3a3a3a]"
                     : "bg-[#F5F7FA] cursor-pointer hover:bg-[#e8eaed]"
                   }`}
                 title={
-                  !isDietAnalysisAvailable
+                  dietTabDisabled
                     ? "No diet analysis data available for this client"
                     : ""
                 }
               >
                 <p
-                  className={`text-[12px] font-semibold leading-[110%] tracking-[-0.24px] ${!isDietAnalysisAvailable
+                  className={`text-[12px] font-semibold leading-[110%] tracking-[-0.24px] ${dietTabDisabled
                     ? "text-[#A1A1A1]"
                     : activeTab === "diet"
                       ? "text-white"

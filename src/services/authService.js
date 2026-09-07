@@ -774,6 +774,16 @@ export const fetchDietAnalysisPlan = async (
 };
 
 
+// TEMP (testing only): fixed payload for the *_newtest endpoint so the sample
+// week can be viewed regardless of which client / week is selected. Set to
+// null to go back to the real profileId / week / token-derived dietitian_id.
+export const NEWTEST_FIXED_PAYLOAD = {
+  dietitian_id: "RESPYRD01",
+  profile_id: "profile405",
+  week_start_date: "2026-09-06",
+  week_end_date: "2026-09-12",
+};
+
 // Recipe-level weekly plan for DietPlanNew (get_weekly_food_json_suggestions_weeks_newtest).
 // dietitian_id comes from the access token (JWT-bound identity); super-admin
 // partner_code override applied the same way as fetchDietAnalysisPlan.
@@ -785,21 +795,21 @@ export const fetchDietAnalysisPlanNewTest = async (
 ) => {
   const resolvedDietitianId = dietitianId || getDietitianIdFromAccessToken();
 
+  const payload = NEWTEST_FIXED_PAYLOAD
+    ? { ...NEWTEST_FIXED_PAYLOAD }
+    : {
+        dietitian_id: resolvedDietitianId,
+        profile_id: profileId,
+        week_start_date: weekStartDate,
+        week_end_date: weekEndDate,
+      };
+
   return apiFetcher(API_ENDPOINTS.DIETANALYSIS.DIETANALYSISPLANNEWTEST, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(
-      withSuperAdminPartnerCode({
-        dietitian_id: resolvedDietitianId,
-        profile_id: profileId,
-        // week_start_date: weekStartDate,
-        // week_end_date: weekEndDate,
-         week_start_date: "2026-08-30",
-        week_end_date: "2026-09-05",
-      })
-    ),
+    body: JSON.stringify(withSuperAdminPartnerCode(payload)),
   });
 };
 
@@ -1465,25 +1475,59 @@ export const searchFoodService = async (query, { limit = 6, dietType = "", count
 // Resolves to { results: [...], count, page, pages, query, ... } (upstream shape).
 export const searchFitChefFoodsService = async (
   query,
-  { slot = "", diet = "", page = 0, signal } = {}
+  {
+    slot = "",
+    diet = "",
+    page = 0,
+    pageSize = 60,
+    signal,
+  } = {}
 ) => {
-  const params = new URLSearchParams({ q: query });
-  if (slot) params.set("slot", slot);
-  if (diet) params.set("diet", diet);
-  if (page) params.set("page", String(page));
+  const params = new URLSearchParams();
 
-  const res = await fetch(`${API_ENDPOINTS.FOOD.FITCHEFSEARCH}?${params.toString()}`, {
-    method: "GET",
+  params.set("q", String(query || "").trim());
+
+  if (slot) {
+    params.set("slot", slot);
+  }
+
+  if (diet) {
+    params.set("diet", diet);
+  }
+
+  if (page !== undefined && page !== null) {
+    params.set("page", String(page));
+  }
+
+  if (pageSize) {
+    params.set("page_size", String(pageSize));
+  }
+
+  return apiFetcher(
+    `${API_ENDPOINTS.FOOD.FITCHEFSEARCH}?${params.toString()}`,
+    {
+      method: "GET",
+      signal,
+    }
+  );
+};
+
+// Prices a shopping list through FitChef (internal Next.js proxy, so no bearer
+// token). `days` is [{ day, meals: [{ title, slot, ingredients: [{ name, unit,
+// units, grams }] }] }]; the reply is the aisle list with Kroger shelf prices.
+export const priceShoppingListService = async (days, { signal } = {}) => {
+  const res = await fetch(API_ENDPOINTS.FOOD.FITCHEFSHOPPING, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ days }),
     signal,
   });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data?.error || "FitChef search failed");
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data || data.error) {
+    throw new Error(data?.error || `Shopping pricing failed (${res.status})`);
   }
   return data;
 };
-
 
 
 export const fetchDownstreamUsersService = async (actorUserId) => {

@@ -50,7 +50,8 @@ export async function apiFetcher(endpoint, options = {}) {
 
   credentials: "include",
 
-  signal: controller?.signal,
+  // signal: controller?.signal,
+  signal: controller?.signal || fetchOptions.signal,
 
   headers: {
     ...(isFormData ? {} : { "Content-Type": "application/json" }),

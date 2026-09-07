@@ -144,7 +144,9 @@ export const API_ENDPOINTS = {
     // Internal Next.js API routes (relative — not prefixed with API_BASE_URL)
     FOODSEARCH: "/api/food/search",
     // FitChef dish bank (proxied to respyr.in/fitchef-dashboard/api/foods)
-    FITCHEFSEARCH: "/api/food/fitchef"
+     FITCHEFSEARCH: `/${API_VERSION}/dietitian/api/web/search-foods`,
+    // FitChef shopping-list pricer (internal Next.js proxy to respyr.in/fitchef-dashboard/api/shopping)
+    FITCHEFSHOPPING: "/api/food/shopping",
   },
 
     LOGS: {
