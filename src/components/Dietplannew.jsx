@@ -252,6 +252,22 @@ function fitchefDietFromProfile(raw) {
   return "";
 }
 
+/**
+ * FitChef / API diet tag ("nonveg", "non_veg", "veg", "vegan", "Non-Veg") →
+ * display label ("Non-Veg", "Veg", "Vegan"). Unknown values pass through.
+ */
+function dietLabel(raw) {
+  // Taxonomy entries sometimes arrive as objects ({ name } / { label } / { slug }).
+  const v = raw && typeof raw === "object" ? raw.name ?? raw.label ?? raw.slug ?? raw.value ?? "" : raw;
+  const s = String(v || "").trim();
+  if (!s) return "";
+  const k = s.toLowerCase().replace(/[\s_-]/g, "");
+  if (k === "nonveg" || k === "nonvegetarian") return "Non-Veg";
+  if (k === "vegan") return "Vegan";
+  if (k === "veg" || k === "vegetarian") return "Veg";
+  return s;
+}
+
 /** One FitChef search hit → FoodItem (same shape the plan uses, so swapping in is lossless). */
 // function fromFitChefResult(r, id) {
 //   const method = typeof r?.method === "string" ? r.method.split(/\r?\n/).map((s) => s.trim()).filter(Boolean) : [];
@@ -321,9 +337,14 @@ function fromFitChefResult(r, id) {
       r?.base_text ||
       "1 serving",
 
-    prep_minutes: null,
+    // FitChef has no prep time; estimate one from the method so the card's
+    // "10 MIN · NON-VEG · BREAKFAST" line is complete for swapped-in dishes too.
+    prep_minutes: estimatePrepMinutes(method),
 
-    diet_type: r?.diet || "",
+    diet_type: dietLabel(r?.diet),
+
+    // FitChef meal-type label when the hit carries one; the card falls back to the slot.
+    meal_type: dietLabel(r?.meal_type ?? r?.mealType ?? r?.type_of_food?.[0] ?? ""),
 
     kcal_base:
       Number.isFinite(Number(r?.kcal))
@@ -584,6 +605,29 @@ function parseStoredPortion(text) {
 }
 
 /** One API meal (or one of its `alternatives`) → FoodItem. */
+/**
+ * Stored id of a food row, whichever key the API used for it. Returns null for
+ * rows that have none (older plans saved before ids were written).
+ */
+function readFoodId(meal) {
+  const raw = meal?.id ?? meal?.food_id ?? meal?.foodId ?? meal?.custom_id ?? meal?.customId ?? null;
+  const s = raw === null || raw === undefined ? "" : String(raw).trim();
+  return s ? s : null;
+}
+
+/** New id for a dish built with Make my meal, same shape the API uses ("custom-" + 10 hex chars). */
+function newCustomFoodId() {
+  let hex = "";
+  try {
+    const bytes = new Uint8Array(5);
+    (globalThis.crypto || window.crypto).getRandomValues(bytes);
+    hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    hex = Math.random().toString(16).slice(2, 12).padEnd(10, "0");
+  }
+  return `custom-${hex}`;
+}
+
 function toFoodItem(meal, id) {
   const n = meal?.nutrition || {};
   const recipe = meal?.recipe || {};
@@ -592,7 +636,22 @@ function toFoodItem(meal, id) {
   const alternativeItems = Array.isArray(meal?.alternatives)
     ? meal.alternatives.map((alt, i) => toFoodItem(alt, `${id}-alt${i}`))
     : [];
-  const dietTags = [...(recipe.diet || []), ...(recipe.type_of_food || [])].filter(Boolean);
+  // Diet ("Veg" / "Non-Veg") from whichever key the row carries it in.
+  const dietRaw = [recipe.diet, recipe.diet_type, recipe.recipe_diet, meal?.diet_type, meal?.diet]
+    .flatMap((v) => (Array.isArray(v) ? v : v ? String(v).split(",") : []));
+  const dietSeen = new Set();
+  const dietTags = dietRaw.map(dietLabel).filter((t) => {
+    const k = t.toLowerCase();
+    if (!t || dietSeen.has(k)) return false;
+    dietSeen.add(k);
+    return true;
+  });
+  // Recipe's own meal-type label ("Snack (Evening)"); the card shows it in
+  // place of the plain slot name when present.
+  const mealTypeRaw = [recipe.type_of_food, recipe.recipe_meal_type, meal?.meal_type, meal?.mealType]
+    .flatMap((v) => (Array.isArray(v) ? v : v ? [v] : []))
+    .map(dietLabel)
+    .find(Boolean);
   const stored = parseStoredPortion(meal?.portion_with_metric);
   const serv = stored.servings;
   // Stored nutrition is for `serv` servings; the FoodItem keeps per-1-serving values.
@@ -600,12 +659,17 @@ function toFoodItem(meal, id) {
 
   return {
     id,
+    // Stable id of the row as stored by the API (e.g. "custom-9fe60d7f39" for a
+    // dish built with Make my meal). `id` above is only the position-based key
+    // used on screen; this one is shown on the card and round-trips on Save.
+    foodId: readFoodId(meal),
     name: meal?.name || "Untitled meal",
     icon: "🍽️",
     image: recipe.image || null,
     portion: stored.portion || (people > 0 ? `serves ${people}` : "1 serving"),
     prep_minutes: Number.isFinite(prep) && prep > 0 ? prep : null,
     diet_type: dietTags.join(", "),
+    meal_type: mealTypeRaw || "",
     kcal_base: Number.isFinite(Number(n.kcals)) ? base(n.kcals) : null,
     protein_g: base(n.protein),
     carbs_g: base(n.carbohydrate ?? n.carbs),
@@ -691,6 +755,11 @@ function lacksRecipeDetail(item) {
   );
 }
 
+/** Live row whose API record carried no diet tag (so the card shows only "5 MIN"). */
+function lacksDiet(item) {
+  return item && !item.removed && !item.diet_type;
+}
+
 function normName(s) {
   return String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
 }
@@ -705,7 +774,9 @@ async function fetchFitChefDetails(plan, signal) {
   (plan?.days || []).forEach((day, dayIdx) => {
     for (const slot of SLOTS) {
       for (const item of day.meals?.[slot] || []) {
-        if (lacksRecipeDetail(item)) targets.push({ dayIdx, slot, id: item.id, name: item.name });
+        // Bare rows need their whole detail; rows the API stored without a
+        // diet tag (empty `recipe.diet`) only need "Veg" / "Non-Veg" back.
+        if (lacksRecipeDetail(item) || lacksDiet(item)) targets.push({ dayIdx, slot, id: item.id, name: item.name });
       }
     }
   });
@@ -743,8 +814,16 @@ function applyFitChefDetails(plan, patches) {
   for (const p of patches) {
     const list = next.days?.[p.dayIdx]?.meals?.[p.slot];
     const row = list?.find((f) => f.id === p.id);
-    if (!row || !lacksRecipeDetail(row)) continue;
+    if (!row) continue;
     const d = p.detail;
+    // Stored row id: keep what the API returned, else what we remembered.
+    if (!row.foodId && d.foodId) row.foodId = d.foodId;
+    if (!row.meal_type && d.meal_type) row.meal_type = d.meal_type;
+    if (!lacksRecipeDetail(row)) {
+      // Row already has its recipe; only the missing diet tag is filled in.
+      if (lacksDiet(row) && d.diet_type) row.diet_type = d.diet_type;
+      continue;
+    }
     row.image = row.image || d.image;
     row.prep_minutes = row.prep_minutes ?? d.prep_minutes;
     row.diet_type = row.diet_type || d.diet_type;
@@ -781,9 +860,11 @@ function collectRecipeDetail(plan, cache) {
       for (const item of day.meals?.[slot] || []) {
         if (!item || item.removed || lacksRecipeDetail(item)) continue;
         map.set(detailKey(day.day_code, slot, item.name), {
+          foodId: item.foodId || null,
           image: item.image || null,
           prep_minutes: item.prep_minutes ?? null,
           diet_type: item.diet_type || "",
+          meal_type: item.meal_type || "",
           ingredients: item.ingredients || [],
           method_steps: item.method_steps || [],
           tips: item.tips || [],
@@ -806,7 +887,8 @@ function applyDetailCache(plan, cache) {
   (plan.days || []).forEach((day, dayIdx) => {
     for (const slot of SLOTS) {
       for (const item of day.meals?.[slot] || []) {
-        if (!lacksRecipeDetail(item)) continue;
+        // Rows that came back bare, or came back without their stored id.
+        if (!lacksRecipeDetail(item) && item.foodId) continue;
         const detail = cache.get(detailKey(day.day_code, slot, item.name));
         if (detail) patches.push({ dayIdx, slot, id: item.id, detail });
       }
@@ -918,6 +1000,96 @@ function shoppingPayload(days, explode = false) {
   });
   return { days: out, meals: sent };
 }
+
+
+function mkRowsPayload(rows) {
+  return rows.map((r, i) => {
+    const ingredients =
+      Array.isArray(r.contains) && r.contains.length > 0
+        ? r.contains.map((c) => ({
+            name: c.name,
+            unit: c.unit || (c.grams != null ? "g" : ""),
+            units: round2(num(c.qty) * r.qty),
+            ...(c.grams != null ? { grams: round2(num(c.grams) * r.qty) } : {}),
+          }))
+        : [
+            {
+              name: r.name,
+              unit: "g",
+              units: round2(num(r.grams) * r.qty) || 1,
+              ...(num(r.grams) > 0 ? { grams: round2(num(r.grams) * r.qty) } : {}),
+            },
+          ];
+    return { day: i + 1, meals: [{ title: r.name, slot: "meal", ingredients }] };
+  });
+}
+
+
+
+function useRowPricing(rows, zip) {
+  const [byKey, setByKey] = useState({});
+  const [pricing, setPricing] = useState(false);
+
+  useEffect(() => {
+    if (!rows.length) { setByKey({}); return undefined; }
+    const ctrl = new AbortController();
+    const t = setTimeout(async () => {
+      setPricing(true);
+      try {
+        const days = mkRowsPayload(rows);
+        const res = await priceShoppingListService(days, { signal: ctrl.signal, zip});
+
+        // How much of this ingredient a given row actually sent — needed to
+        // split a combined price proportionally instead of double-counting it.
+        const qtyOf = (rowNo, key) => {
+          const line = (days[rowNo - 1]?.meals?.[0]?.ingredients || []).find(
+            (ing) => normName(ing.name) === key,
+          );
+          if (!line) return 0;
+          return num(line.grams) || num(line.units) || 0;
+        };
+
+        const next = {};
+        (res?.aisles || []).forEach((a) => {
+          (a.items || []).forEach((it) => {
+            const key = normName(it?.name);
+            const price = Number(it?.price);
+            const rowNos = (it.days || []).map(Number).filter(Number.isFinite);
+            if (!key || rowNos.length === 0) return;
+
+            const weights = rowNos.map((n) => qtyOf(n, key));
+            const totalW = weights.reduce((s, w) => s + w, 0);
+
+            rowNos.forEach((rowNo, idx) => {
+              const row = rows[rowNo - 1];
+              if (!row) return;
+              const share = Number.isFinite(price)
+                ? totalW > 0
+                  ? round2((price * weights[idx]) / totalW)
+                  : round2(price / rowNos.length)
+                : null;
+              const prev = next[row.key];
+              next[row.key] = {
+                price: share === null ? (prev?.price ?? null) : round2((prev?.price || 0) + share),
+                approx: Boolean(it.approx) || Boolean(prev?.approx),
+                note: it.price_note || prev?.note || "",
+              };
+            });
+          });
+        });
+        if (!ctrl.signal.aborted) setByKey(next);
+      } catch (err) {
+        if (!ctrl.signal.aborted) console.warn("[MakeMyMeal] pricing failed:", err?.message || err);
+      } finally {
+        if (!ctrl.signal.aborted) setPricing(false);
+      }
+    }, 400);
+    return () => { clearTimeout(t); ctrl.abort(); };
+  }, [rows, zip]);
+
+  return { byKey, pricing };
+}
+
 
 /**
  * Two pricer replies → what buildLocalShopping() needs to show prices:
@@ -1179,7 +1351,18 @@ export function normalizeWeeklyPlan(response) {
   return {
     days,
     shopping: normalizeShopping(foodJson.shopping || data?.shopping),
-    meta: {
+    // meta: {
+    //   id: data?.id ?? null,
+    //   dietitian_id: data?.dietitian_id ?? null,
+    //   profile_id: data?.profile_id ?? null,
+    //   week_start_date: data?.week_start_date ?? null,
+    //   week_end_date: data?.week_end_date ?? null,
+    //   week_range: data?.week_range ?? null,
+    //   status_value: data?.status_value ?? null,
+    // },
+
+
+        meta: {
       id: data?.id ?? null,
       dietitian_id: data?.dietitian_id ?? null,
       profile_id: data?.profile_id ?? null,
@@ -1187,6 +1370,10 @@ export function normalizeWeeklyPlan(response) {
       week_end_date: data?.week_end_date ?? null,
       week_range: data?.week_range ?? null,
       status_value: data?.status_value ?? null,
+      // The zip the plan was generated/priced against (fitchef_generate.py's
+      // &zip=), so live re-pricing (Make My Meal, Shopping List) can match it
+      // instead of falling back to the pricer's default region.
+      zip: foodJson?._request?.zip || foodJson?.shopping?.week?.zip || null,
     },
   };
 }
@@ -1209,16 +1396,19 @@ function stepsToHtml(steps) {
  * and ingredients after Save → reload. toFoodItem() reads these keys back.
  * Ingredient quantities are per 1 serving (the card multiplies by servings).
  */
-function toApiRecipeDetail(item) {
+function toApiRecipeDetail(item, slot) {
   const people = String(item.portion || "").match(/serves\s+(\d+)/i)?.[1];
+  const mealType = SLOT_META[slot]?.label;
   return {
+    // Stored with the row so the card can show it and later edits keep it.
+    ...(item.foodId ? { id: item.foodId } : {}),
     name: item.name,
     recipe: {
       image: item.image || "",
       post_content: stepsToHtml(item.method_steps),
       recipe_tip: stepsToHtml(item.tips),
-      diet: item.diet_type ? [item.diet_type] : [],
-      type_of_food: [],
+      diet: item.diet_type && item.diet_type !== "custom" ? [item.diet_type] : [],
+      type_of_food: item.meal_type ? [item.meal_type] : mealType ? [mealType] : [],
       recipe_allergy: [],
       recipe_meal_type: [],
       recipe_amount_of_people: people ? [people] : ["1"],
@@ -1310,7 +1500,7 @@ function toApiFood(item, slot) {
     portion_with_metric: portion,
     category: item.diet_type || SLOT_META[slot]?.label || slot,
     // Recipe detail, read-format shape, so the row survives reload with its method.
-    ...toApiRecipeDetail(item),
+    ...toApiRecipeDetail(item, slot),
   };
 }
 
@@ -1623,28 +1813,40 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
    * `food_json.shopping` is priced when the plan is generated, so a dish added
    * or swapped from Search has no price there until the backend rebuilds it.
    * While the dialog is open, the plan as it is on screen (saved or not) is
-   * priced through FitChef; the server list stays up as the placeholder. */
+   * priced through FitChef. Until that reply lands the dialog shows a loading
+   * state — never the stale saved list or an unpriced local one — so the user
+   * only ever sees what the server returned. If pricing fails (or there is
+   * nothing to price) the key is still recorded with `shopping: null`, which
+   * lets the dialog fall back to the saved/local list and stops re-fetching. */
   const [liveShopping, setLiveShopping] = useState(null); // { key, shopping }
   const [pricing, setPricing] = useState(false);
+  const shoppingKey = useMemo(() => JSON.stringify(shoppingPayload(days).days), [days]);
+  const shoppingLoading = shoppingOpen && liveShopping?.key !== shoppingKey;
   useEffect(() => {
     if (!shoppingOpen || !plan) return undefined;
     const weekPayload = shoppingPayload(days);
     const key = JSON.stringify(weekPayload.days);
     if (liveShopping?.key === key) return undefined;
-    if (weekPayload.meals.every((m) => m.ingredients.length === 0)) return undefined; // nothing to price
+    if (weekPayload.meals.every((m) => m.ingredients.length === 0)) {
+      setLiveShopping({ key, shopping: null }); // nothing to price
+      return undefined;
+    }
     const ctrl = new AbortController();
     setPricing(true);
     (async () => {
       try {
         const mealPayload = shoppingPayload(days, true);
+         const zip = plan?.meta?.zip;
         const [weekRes, mealRes] = await Promise.all([
-          priceShoppingListService(weekPayload.days, { signal: ctrl.signal }),
-          priceShoppingListService(mealPayload.days, { signal: ctrl.signal }),
+          priceShoppingListService(weekPayload.days, { signal: ctrl.signal, zip  }),
+          priceShoppingListService(mealPayload.days, { signal: ctrl.signal, zip  }),
         ]);
         if (ctrl.signal.aborted) return;
         setLiveShopping({ key, shopping: buildLocalShopping(days, pricingFromFitChef(weekRes, mealRes, mealPayload.meals)) });
       } catch (err) {
-        if (!ctrl.signal.aborted) console.warn("[DietPlanNew] shopping pricing failed:", err?.message || err);
+        if (ctrl.signal.aborted) return;
+        console.warn("[DietPlanNew] shopping pricing failed:", err?.message || err);
+        setLiveShopping({ key, shopping: null });
       } finally {
         if (!ctrl.signal.aborted) setPricing(false);
       }
@@ -1852,8 +2054,10 @@ const ingredients = rows.flatMap((r) =>
 
 
     const typedSteps = textToSteps(mealBuilder.method);
+    const customId = newCustomFoodId();
     const custom = {
-      id: `custom-${Date.now()}`,
+      id: customId,
+      foodId: customId,
       name: mealBuilder.name || rows.map((r) => r.name).join(", "),
       icon: "🍲",
       image: rows.find((r) => r.image)?.image || null,
@@ -2141,6 +2345,7 @@ const ingredients = rows.flatMap((r) =>
                 key={f.id}
                 index={i}
                 food={f}
+                slot={slot}
                 onStepPortion={(delta) => stepPortion(f.id, delta)}
                 onDelete={() => deleteFood(f.id)}
                 onOpenSwaps={() => setSwapState({ mode: "alts", foodId: f.id })}
@@ -2207,6 +2412,7 @@ const ingredients = rows.flatMap((r) =>
           target={mealBuilder.target}
           slot={slot}
           defaultDiet={clientDiet}
+           zip={plan?.meta?.zip}
           onChange={setMealBuilder}
           onClose={() => setMealBuilder(null)}
           onSave={saveCustomMeal}
@@ -2216,10 +2422,11 @@ const ingredients = rows.flatMap((r) =>
       {/* --------------------------------------------------- shopping list */}
       {shoppingOpen && (
         <ShoppingListDialog
-          shopping={liveShopping?.shopping || plan.shopping || buildLocalShopping(days)}
-          fallbackItems={shoppingList()}
+          shopping={shoppingLoading ? null : liveShopping?.shopping || plan.shopping || buildLocalShopping(days)}
+          fallbackItems={shoppingLoading ? [] : shoppingList()}
           dirty={dirty && !liveShopping?.shopping}
           pricing={pricing}
+          loading={shoppingLoading}
           onClose={() => setShoppingOpen(false)}
         />
       )}
@@ -2383,10 +2590,29 @@ function MacrosPanel({ totals, targets, dayIndex = 0 }) {
 
 /* ============================================================ FoodCard */
 
-function FoodCard({ food: f, index, onStepPortion, onDelete, onOpenSwaps, onSearchSwap, onMakeMeal, onShowMeasurements }) {
+function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, onSearchSwap, onMakeMeal, onShowMeasurements }) {
   const [showMethod, setShowMethod] = useState(false);
   const s = scaledFood(f);
   const serv = f.servings || 1;
+  // "10 MIN · NON-VEG · BREAKFAST": prep time, diet tag(s), then the slot the
+  // row sits in. Older rows may still carry the slot inside diet_type, so
+  // repeats are dropped case-insensitively.
+  const headerTags = [];
+  const seen = new Set();
+  for (const raw of [
+    f.prep_minutes ? `${f.prep_minutes} min` : null,
+    ...String(f.diet_type === "custom" ? "" : f.diet_type || "").split(","),
+    // Recipe's own meal-type label ("Snack (Evening)") when the row has one, else the slot.
+    f.meal_type || SLOT_META[slot]?.label,
+  ]) {
+    const tag = String(raw || "").trim();
+    const key = tag.toLowerCase();
+    if (!tag || seen.has(key)) continue;
+    seen.add(key);
+    headerTags.push(tag);
+  }
+  // Stored row id (e.g. "custom-9fe60d7f39"), shown last like the older plan screen does.
+  if (f.foodId) headerTags.push(`ID ${f.foodId}`);
 
   if (f.removed) {
     return (
@@ -2431,7 +2657,7 @@ function FoodCard({ food: f, index, onStepPortion, onDelete, onOpenSwaps, onSear
 
         <div className="mt-2.5 border-t border-neutral-100 pt-2.5">
           <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-400">
-            {[f.prep_minutes ? `${f.prep_minutes} min` : null, f.diet_type].filter(Boolean).join(" · ")}
+            {headerTags.join(" · ")}
           </div>
 
           <div className="flex items-start gap-3">
@@ -3063,7 +3289,7 @@ function macroShares(p, c, f) {
  *     something is added, then follows what is being built
  *   - nothing matches → AI lookup, then manual macros as the last resort
  */
-function MakeMealDialog({ state, totals, target, slot, defaultDiet = "", onChange, onClose, onSave }) {
+function MakeMealDialog({ state, totals, target, slot, defaultDiet = "", zip, onChange, onClose, onSave }) {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState([]);
   const [meta, setMeta] = useState({ count: 0, bank: 0, inSlot: 0, page: 0, pages: 0 });
@@ -3081,6 +3307,14 @@ function MakeMealDialog({ state, totals, target, slot, defaultDiet = "", onChang
   const fitchefSlot = FITCHEF_SLOT[slot] || "";
   const slotLabel = SLOT_META[slot]?.label || slot || "meal";
   const hasRows = state.rows.length > 0;
+
+  const { byKey: rowPrices, pricing: pricingRows } = useRowPricing(state.rows, zip);
+const totalPrice = useMemo(() => {
+  const vals = state.rows.map((r) => rowPrices[r.key]?.price).filter((p) => Number.isFinite(p));
+  return vals.length ? round2(vals.reduce((s, p) => s + p, 0)) : null;
+}, [state.rows, rowPrices]);
+
+
   const targetKcal = target?.kcal || 0;
 
   useEffect(() => {
@@ -3397,7 +3631,18 @@ function MakeMealDialog({ state, totals, target, slot, defaultDiet = "", onChang
       </div>
 
       {/* ------------------------------------------------ what is in the meal */}
-      <div className="flex-none border-b border-neutral-100 px-5 py-3">
+       <div className="flex-none border-b border-neutral-100 px-5 py-3">
+        {hasRows && (
+          <div className="mb-1 flex items-center justify-end gap-2 text-xs">
+            {pricingRows && <span className="text-neutral-400">pricing…</span>}
+            {totalPrice !== null && (
+              <span className="font-semibold text-neutral-700">
+                {money(totalPrice)}
+                <span className="text-neutral-400">*</span>
+              </span>
+            )}
+          </div>
+        )}
         {!hasRows ? (
           <div className="text-sm text-neutral-400">Nothing added yet.</div>
         ) : (
@@ -3424,6 +3669,13 @@ function MakeMealDialog({ state, totals, target, slot, defaultDiet = "", onChang
                       </div>
                     )}
                   </div>
+
+                  <PriceTag
+                    price={rowPrices[r.key]?.price ?? null}
+                    approx={rowPrices[r.key]?.approx}
+                    note={rowPrices[r.key]?.note}
+                    className="shrink-0 text-sm"
+                  />
                   <StepBtn label="−" title={atMin ? "Remove" : "Less"} onClick={() => (atMin ? removeRow(r.key) : setQty(r.key, r.qty - 0.25))} />
                   <StepBtn label="+" title="More" disabled={r.qty + 0.25 > 20} onClick={() => setQty(r.key, r.qty + 0.25)} />
                 </div>
@@ -3431,6 +3683,10 @@ function MakeMealDialog({ state, totals, target, slot, defaultDiet = "", onChang
             })}
           </div>
         )}
+        <div className="mt-2.5 text-sm text-neutral-600">
+          This meal <b className="text-neutral-900">{fmt1(totals.p)}</b>g protein · <b className="text-neutral-900">{fmt1(totals.c)}</b>g carbs ·{" "}
+          <b className="text-neutral-900">{fmt1(totals.f)}</b>g fat · {Math.round(totals.kcal)} kcal
+        </div>
       </div>
 
       {/* ------------------------------------------------ add a food */}
@@ -3800,7 +4056,7 @@ function ShoppingMeal({ meal: m }) {
   );
 }
 
-function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, pricing = false, onClose }) {
+function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, pricing = false, loading = false, onClose }) {
   const hasApiList = Boolean(shopping);
   const hasByDay = Boolean(shopping?.byDay?.length);
   const [view, setView] = useState("week"); // "week" | "day"
@@ -3828,9 +4084,11 @@ function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, prici
     }
   }
 
-  const subtitle = hasApiList
-    ? `${week.itemCount} item${week.itemCount === 1 ? "" : "s"}${week.days ? ` · ${week.days} days` : ""}`
-    : "Aggregated across the whole plan";
+  const subtitle = loading
+    ? "Fetching prices for the plan as it is on screen…"
+    : hasApiList
+      ? `${week.itemCount} item${week.itemCount === 1 ? "" : "s"}${week.days ? ` · ${week.days} days` : ""}`
+      : "Aggregated across the whole plan";
 
   return (
     <ModalShell title="Shopping list" subtitle={subtitle} onClose={onClose} widthClass="max-w-[600px]">
@@ -3872,8 +4130,16 @@ function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, prici
       )}
 
       <div className="max-h-[440px] overflow-y-auto">
+        {/* ------------------------------------------------- loading */}
+        {loading && (
+          <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-neutral-500">
+            <span className="h-6 w-6 animate-spin rounded-full border-2 border-neutral-200 border-t-blue-600" aria-hidden="true" />
+            <span>Building your shopping list…</span>
+          </div>
+        )}
+
         {/* ---------------------------------------------- local fallback */}
-        {!hasApiList && (
+        {!loading && !hasApiList && (
           <ul className="divide-y divide-neutral-100 px-5">
             {fallbackItems.length === 0 && <li className="py-8 text-center text-sm text-neutral-400">No ingredients yet.</li>}
             {fallbackItems.map((it, i) => (
@@ -3980,7 +4246,8 @@ function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, prici
           <button
             type="button"
             onClick={copyList}
-            className="rounded-lg border border-neutral-200 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-900 hover:bg-neutral-50"
+            disabled={loading}
+            className="rounded-lg border border-neutral-200 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-900 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {copied ? "Copied" : "Copy as text"}
           </button>
@@ -3989,7 +4256,8 @@ function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, prici
             onClick={() => {
               if (!printShoppingList(listText())) copyList();
             }}
-            className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500"
+            disabled={loading}
+            className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Print
           </button>

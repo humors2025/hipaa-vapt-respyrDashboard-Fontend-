@@ -1515,11 +1515,11 @@ export const searchFitChefFoodsService = async (
 // Prices a shopping list through FitChef (internal Next.js proxy, so no bearer
 // token). `days` is [{ day, meals: [{ title, slot, ingredients: [{ name, unit,
 // units, grams }] }] }]; the reply is the aisle list with Kroger shelf prices.
-export const priceShoppingListService = async (days, { signal } = {}) => {
+export const priceShoppingListService = async (days, { signal, zip  } = {}) => {
   const res = await fetch(API_ENDPOINTS.FOOD.FITCHEFSHOPPING, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ days }),
+    body: JSON.stringify({ days, ...(zip ? { zip } : {}) }),
     signal,
   });
   const data = await res.json().catch(() => null);
