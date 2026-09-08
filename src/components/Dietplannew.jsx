@@ -93,7 +93,27 @@ const SLOT_META = {
   dinner: { label: "Dinner", time: "08:00 – 09:00 PM" },
 };
 
-const MACRO_COLORS = { protein: "#ef4444", fats: "#3b82f6", carbs: "#f59e0b", fibre: "#22c55e" };
+// Same palette as MacrosUpdate / DietPlan (Carbs, Fats, Protein, Fibre).
+const MACRO_COLORS = { protein: "#E76F51", fats: "#3A86FF", carbs: "#F4A261", fibre: "#2A9D8F" };
+
+/* Shared UI tokens (mirrors macros-update.jsx / diet-plan.jsx) */
+const UI = {
+  title: "text-[#252525] text-[15px] xl:text-[17px] 2xl:text-[18px] font-semibold leading-normal tracking-[-0.3px]",
+  subtitle: "text-[#738298] text-[12px] xl:text-[13px] 2xl:text-[14px] font-medium leading-normal tracking-[-0.24px]",
+  sectionLabel: "text-[#738298] text-[12px] font-semibold uppercase",
+  body: "text-[12px] xl:text-[13px] 2xl:text-[14px] leading-normal tracking-[-0.24px]",
+  small: "text-[10px] xl:text-[11px] 2xl:text-[12px] leading-normal tracking-[-0.2px]",
+  foodName: "text-[#252525] text-[12px] xl:text-[14px] 2xl:text-[15px] font-semibold leading-[126%] tracking-[-0.24px]",
+  btnPrimary:
+    "px-4 py-2 rounded-[8px] bg-[#308BF9] text-white text-[12px] xl:text-[13px] font-semibold leading-normal tracking-[-0.24px] cursor-pointer hover:bg-[#2678D9] disabled:opacity-50 disabled:cursor-not-allowed transition-colors",
+  btnSecondary:
+    "px-4 py-2 rounded-[8px] border border-[#E1E6ED] bg-white text-[#535359] text-[12px] xl:text-[13px] font-semibold leading-normal tracking-[-0.24px] cursor-pointer hover:bg-[#F5F7FA] disabled:opacity-50 disabled:cursor-not-allowed transition-colors",
+  btnDanger:
+    "px-4 py-2 rounded-[8px] border border-[#E76F51] bg-white text-[#E76F51] text-[12px] xl:text-[13px] font-semibold leading-normal tracking-[-0.24px] cursor-pointer hover:bg-[#E76F511A] disabled:opacity-50 disabled:cursor-not-allowed disabled:border-[#E1E6ED] disabled:text-[#A1A1A1] disabled:hover:bg-white transition-colors",
+  input:
+    "w-full rounded-[8px] border border-[#E1E6ED] bg-white px-3 py-2.5 text-[#252525] text-[12px] xl:text-[13px] 2xl:text-[14px] leading-normal tracking-[-0.24px] outline-none placeholder:text-[#A1A1A1] focus:border-[#308BF9] focus:ring-2 focus:ring-[#EEF4FE]",
+  chip: "px-2.5 py-[5px] rounded-[5px] text-[10px] xl:text-[11px] 2xl:text-[12px] font-semibold leading-[110%] tracking-[-0.2px]",
+};
 
 /** A tiny per-100g macro table, used only by the "Make my meal" calculator. */
 /* ---------------------------------------------------------- Make my meal */
@@ -149,6 +169,57 @@ function suggestMethodSteps(rows, mealName) {
   if (raw.length) steps.push(`Add the ${list(raw.map(lower))} as they are.`);
   steps.push(`Plate everything together${mealName ? ` as ${mealName}` : ""} and serve.`);
   return steps;
+}
+
+/**
+ * Method for a Make-my-meal dish built from `rows`. One dish keeps its own
+ * method. Several dishes get every dish's own steps, each prefixed with the
+ * dish name so the card reads "Scrambled Eggs: Whisk…", then "Spinach Salad:
+ * Toss…". Dishes without a method fall back to the generated basic steps.
+ */
+function combinedMethodSteps(rows, mealName) {
+  const list = (rows || []).filter((r) => r && r.name);
+  if (list.length === 0) return [];
+  const noPlating = (arr) => arr.filter((s) => !/^Plate everything together/i.test(s));
+  if (list.length === 1) return list[0].method?.length ? list[0].method : noPlating(suggestMethodSteps(list, mealName));
+
+  const steps = [];
+  for (const r of list) {
+    let own = (Array.isArray(r.method) ? r.method : []).map((s) => String(s || "").trim()).filter(Boolean);
+    // A dish with no method of its own still gets a section: basic steps for
+    // just that dish, minus the plating line that is added once at the end.
+    if (own.length === 0) own = suggestMethodSteps([r], "").filter((s) => !/^Plate everything together/i.test(s));
+    for (const s of own) steps.push(`${r.name}: ${s}`);
+  }
+  return steps;
+}
+
+/**
+ * Splits a stored method into per-dish sections when it was built by
+ * combinedMethodSteps(): "[Dish name]: step". Returns [{ name, steps }] with
+ * the un-prefixed closing line(s) in a final nameless section, or null when
+ * the steps are an ordinary single recipe (fewer than two dish prefixes).
+ */
+function groupMethodSteps(steps) {
+  const list = (Array.isArray(steps) ? steps : []).map((s) => String(s || "").trim()).filter(Boolean);
+  if (list.length < 2) return null;
+  const groups = [];
+  const names = new Set();
+  for (const s of list) {
+    const m = s.match(/^([^:]{2,80}?):\s+(\S.*)$/);
+    const name = m ? m[1].trim() : "";
+    const text = m ? m[2].trim() : s;
+    if (name) names.add(name.toLowerCase());
+    const last = groups[groups.length - 1];
+    if (last && last.name.toLowerCase() === name.toLowerCase()) last.steps.push(text);
+    else groups.push({ name, steps: [text] });
+  }
+  if (names.size < 2) return null;
+  // Only a combined method has every step prefixed, apart from the closing line(s).
+  const unnamed = groups.filter((g) => !g.name);
+  if (unnamed.length > 1 || (unnamed.length === 1 && groups[groups.length - 1].name)) return null;
+  // Meals saved earlier ended with a generic plating line; it is not shown any more.
+  return groups.filter((g) => g.name || g.steps.some((s) => !/^Plate everything together/i.test(s)));
 }
 
 function sumMealRows(rows) {
@@ -666,6 +737,8 @@ function toFoodItem(meal, id) {
     name: meal?.name || "Untitled meal",
     icon: "🍽️",
     image: recipe.image || null,
+    // Every food's picture for a Make-my-meal dish (the card shows a collage).
+    images: Array.isArray(recipe.images) ? recipe.images.map((u) => String(u || "").trim()).filter(Boolean) : [],
     portion: stored.portion || (people > 0 ? `serves ${people}` : "1 serving"),
     prep_minutes: Number.isFinite(prep) && prep > 0 ? prep : null,
     diet_type: dietTags.join(", "),
@@ -825,6 +898,7 @@ function applyFitChefDetails(plan, patches) {
       continue;
     }
     row.image = row.image || d.image;
+    if (!(row.images || []).length && (d.images || []).length) row.images = d.images;
     row.prep_minutes = row.prep_minutes ?? d.prep_minutes;
     row.diet_type = row.diet_type || d.diet_type;
     row.ingredients = d.ingredients;
@@ -862,6 +936,7 @@ function collectRecipeDetail(plan, cache) {
         map.set(detailKey(day.day_code, slot, item.name), {
           foodId: item.foodId || null,
           image: item.image || null,
+          images: item.images || [],
           prep_minutes: item.prep_minutes ?? null,
           diet_type: item.diet_type || "",
           meal_type: item.meal_type || "",
@@ -1405,6 +1480,8 @@ function toApiRecipeDetail(item, slot) {
     name: item.name,
     recipe: {
       image: item.image || "",
+      // All food pictures of a Make-my-meal dish, so the collage survives reload.
+      ...((item.images || []).length > 1 ? { images: item.images } : {}),
       post_content: stepsToHtml(item.method_steps),
       recipe_tip: stepsToHtml(item.tips),
       diet: item.diet_type && item.diet_type !== "custom" ? [item.diet_type] : [],
@@ -1615,9 +1692,9 @@ function deltaLabel(value, target) {
   if (!target) return null;
   const diff = value - target;
   const pct = Math.abs(diff / target) * 100;
-  if (Math.abs(diff) < 1 || pct < 2) return { text: "on target", cls: "text-emerald-600", up: null };
+  if (Math.abs(diff) < 1 || pct < 2) return { text: "on target", cls: "text-[#2A9D8F]", up: null };
   const up = diff > 0;
-  return { text: `${Math.abs(Math.round(diff))}g ${up ? "over" : "short"}`, cls: up ? "text-amber-600" : "text-blue-600", up };
+  return { text: `${Math.abs(Math.round(diff))}g ${up ? "over" : "short"}`, cls: up ? "text-[#F4A261]" : "text-[#308BF9]", up };
 }
 
 /**
@@ -1628,9 +1705,9 @@ function gapLabel(value, target) {
   if (!target) return null;
   const diff = value - target;
   const pct = Math.abs(diff / target) * 100;
-  if (Math.abs(diff) < 1 || pct < 2) return { text: "just right", cls: "text-emerald-600", up: null };
+  if (Math.abs(diff) < 1 || pct < 2) return { text: "just right", cls: "text-[#2A9D8F]", up: null };
   const up = diff > 0;
-  return { text: `${Math.abs(Math.round(diff))}g ${up ? "too much" : "more needed"}`, cls: up ? "text-amber-600" : "text-blue-600", up };
+  return { text: `${Math.abs(Math.round(diff))}g ${up ? "too much" : "more needed"}`, cls: up ? "text-[#F4A261]" : "text-[#308BF9]", up };
 }
 
 /** "piece" ↔ "pieces", "ounces" ↔ "ounce" — only for plain single-word units. */
@@ -1673,6 +1750,7 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   const [swapQuery, setSwapQuery] = useState("");
   const [mealBuilder, setMealBuilder] = useState(null); // { name, rows: [{ingredient, grams}] }
   const [shoppingOpen, setShoppingOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false); // "Reset week" confirmation popup
   // Client's diet preference → default diet filter for the FitChef swap search.
   const [clientDiet, setClientDiet] = useState("");
   // Client's prescribed macros (get_macro_summary_by_date → final_macro_summary).
@@ -2055,12 +2133,16 @@ const ingredients = rows.flatMap((r) =>
 
     const typedSteps = textToSteps(mealBuilder.method);
     const customId = newCustomFoodId();
+    const customImages = Array.from(new Set(rows.map((r) => r.image).filter(Boolean)));
     const custom = {
       id: customId,
       foodId: customId,
       name: mealBuilder.name || rows.map((r) => r.name).join(", "),
       icon: "🍲",
-      image: rows.find((r) => r.image)?.image || null,
+      // First picture stays the main one (small avatar, shopping list); the
+      // card's large thumbnail shows every food's picture as a collage.
+      image: customImages[0] || null,
+      images: customImages,
       portion: single ? (num(single.qty) === 1 ? single.portion : `${fmtQty(single.qty)} × ${single.portion}`) : "custom",
       prep_minutes: null,
       diet_type: "custom",
@@ -2071,13 +2153,10 @@ const ingredients = rows.flatMap((r) =>
       fiber_g: round(totals.fiber),
       servings: 1,
       ingredients,
-      // Typed steps win; a single dish keeps its own method; otherwise a basic
-      // method is generated so the card always has one.
-      method_steps: typedSteps.length
-        ? typedSteps
-        : single?.method?.length
-          ? single.method
-          : suggestMethodSteps(rows, mealBuilder.name),
+      // Typed steps win; otherwise every dish's own method is kept (prefixed
+      // with the dish name when there are several), with generated steps only
+      // for dishes that have none — so the card always has a Method.
+      method_steps: typedSteps.length ? typedSteps : combinedMethodSteps(rows, mealBuilder.name),
       tips: textToSteps(mealBuilder.tip),
       alternatives: 0,
       alternativeItems: [],
@@ -2180,14 +2259,46 @@ const ingredients = rows.flatMap((r) =>
     onUndo?.();
   }
 
+  /**
+   * "Reset week": throws away every unsaved change on the whole week — foods
+   * added from "Search a swap", swapped-in alternatives, "Make my meal" rows,
+   * portion steps and deletions — and puts the plan back to what was last
+   * loaded / saved. Nothing is sent to the server; only local state changes.
+   * Any open swap / meal-builder dialog is closed so a half-finished pick
+   * cannot land on the freshly reset plan.
+   */
+  function resetWeek() {
+    if (!original || saving) return;
+    if (!dirty) {
+      flash("Nothing to reset — no unsaved changes");
+      return;
+    }
+    setResetOpen(true);
+  }
+
+  /** Runs once the "Reset week" popup is confirmed. */
+  function performReset() {
+    setResetOpen(false);
+    if (!original || saving || !dirty) return;
+    setPlan(structuredClone(original));
+    setSwapState(null);
+    setSwapQuery("");
+    setMealBuilder(null);
+    setDirty(false);
+    flash("Week reset to the last saved plan");
+    onUndo?.();
+  }
+
 
   /* ---------------------------------------------- loading / empty states */
   if (loading) {
     return (
-      <div className="mx-auto flex w-full max-w-[1400px] items-center justify-center p-4 md:p-6">
-        <div className="flex h-[360px] w-full flex-col items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-neutral-100">
-          <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-blue-500" />
-          <p className="mt-4 text-sm text-neutral-500">Loading diet plan{weekRange ? ` for ${weekRange}` : ""}…</p>
+      <div id="diet-plan-container" className="w-full border border-[#E1E6ED] rounded-[15px] pt-[15px] pb-2.5 px-2.5 bg-white">
+        <div className="flex h-[360px] xl:h-[400px] 2xl:h-[440px] w-full flex-col items-center justify-center rounded-[15px] border-4 border-[#F5F7FA]">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#E1E6ED] border-t-[#308BF9]" />
+          <p className="mt-4 text-[#738298] text-[13px] xl:text-[14px] 2xl:text-[15px] font-medium">
+            Loading diet plan{weekRange ? ` for ${weekRange}` : ""}…
+          </p>
         </div>
       </div>
     );
@@ -2196,18 +2307,15 @@ const ingredients = rows.flatMap((r) =>
   if (!plan || !day) {
     const isError = loadError && !loadError.noData;
     return (
-      <div className="mx-auto w-full max-w-[1400px] p-4 md:p-6">
-        <div className="flex h-[360px] w-full flex-col items-center justify-center rounded-2xl bg-white px-6 text-center shadow-sm ring-1 ring-neutral-100">
+      <div id="diet-plan-container" className="w-full border border-[#E1E6ED] rounded-[15px] pt-[15px] pb-2.5 px-2.5 bg-white">
+        <div className="flex h-[360px] xl:h-[400px] 2xl:h-[440px] w-full flex-col items-center justify-center rounded-[15px] border-4 border-[#F5F7FA] px-6 text-center">
           <div className="text-3xl">{isError ? "⚠️" : "🍽️"}</div>
-          <p className={cn("mt-3 text-sm font-semibold", isError ? "text-red-600" : "text-neutral-700")}>
+          <p className={cn("mt-3 text-[13px] xl:text-[14px] 2xl:text-[15px] font-medium", isError ? "text-[#E76F51]" : "text-[#738298]")}>
             {loadError?.message || "No diet plan found for this week."}
           </p>
-          {weekRange && <p className="mt-1 text-xs text-neutral-400">{weekRange}</p>}
+          {weekRange && <p className={cn("mt-1 text-[#A1A1A1]", UI.small)}>{weekRange}</p>}
           {profileId && weekStart && weekEnd && (
-            <button
-              onClick={() => setReloadKey((k) => k + 1)}
-              className="mt-4 rounded-lg border border-neutral-200 bg-white px-3.5 py-1.5 text-sm font-semibold text-neutral-900 hover:bg-neutral-50"
-            >
+            <button onClick={() => setReloadKey((k) => k + 1)} className={cn("mt-4", UI.btnSecondary)}>
               {isError ? "Try again" : "Refresh"}
             </button>
           )}
@@ -2217,35 +2325,55 @@ const ingredients = rows.flatMap((r) =>
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] p-4 md:p-6">
-      {/* ---------------------------------------------------- client header */}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-xl font-bold text-neutral-900">{clientName}</div>
-          <div className="text-sm text-neutral-500">
-            {[clientGoal, weekRange].filter(Boolean).join(" · ")}
-            {plan.meta?.status_value === 1 && (
-              <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                Approved
-              </span>
+    <div className="flex max-2xl:flex-col gap-5 w-full min-w-0">
+      {/* ------------------------------------------------- macros panel */}
+      <MacrosPanel totals={dayTotals} targets={day.targets} dayIndex={dayIdx} />
+
+      {/* --------------------------------------------------- plan panel */}
+      <div
+        id="diet-plan-container"
+        className="w-full min-w-0 flex-1 border border-[#E1E6ED] rounded-[15px] pt-[15px] pb-2.5 px-2.5 bg-white"
+      >
+        {/* ---------------------------------------------------- client header */}
+        <div className="flex items-center justify-between gap-4 flex-wrap px-2.5">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 flex-wrap py-[5px]">
+              <p className={UI.title}>{clientName}</p>
+              {plan.meta?.status_value === 1 && (
+                <span className="px-2.5 py-[5px] rounded-[5px] bg-[#2A9D8F1A] text-[#2A9D8F] text-[10px] xl:text-[11px] 2xl:text-[12px] font-semibold leading-[110%] tracking-[-0.2px]">
+                  Approved
+                </span>
+              )}
+              {dirty && (
+                <span className="px-2.5 py-[5px] rounded-[5px] bg-[#F4A2611A] text-[#F4A261] text-[10px] xl:text-[11px] 2xl:text-[12px] font-semibold leading-[110%] tracking-[-0.2px]">
+                  Unsaved changes
+                </span>
+              )}
+            </div>
+            {[clientGoal, weekRange].filter(Boolean).length > 0 && (
+              <p className={UI.subtitle}>{[clientGoal, weekRange].filter(Boolean).join(" · ")}</p>
             )}
           </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              onClick={resetWeek}
+              disabled={!dirty || saving}
+              title={dirty ? "Discard all unsaved changes to this week" : "No unsaved changes to reset"}
+              className={UI.btnDanger}
+            >
+              Reset week
+            </button>
+            <button onClick={() => setShoppingOpen(true)} className={UI.btnSecondary}>
+              Shopping list
+            </button>
+            <button className={UI.btnPrimary}>Approve week</button>
+          </div>
         </div>
-        {dirty && (
-          <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
-            Unsaved changes
-          </span>
-        )}
-      </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
-        {/* ------------------------------------------------- macros panel */}
-        <MacrosPanel totals={dayTotals} targets={day.targets} dayIndex={dayIdx} />
-
-        {/* --------------------------------------------------- plan panel */}
-        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-neutral-100">
-          {/* day tabs — the whole pill carries on-target/over/under state, same as the python dashboard */}
-          <div className="flex flex-wrap items-center gap-1 border-b border-neutral-100 pb-3">
+        {/* day tabs — the whole pill carries on-target/over/under state, same as the python dashboard */}
+        <div className="flex items-center justify-between gap-3 flex-wrap px-2.5 mt-[15px]">
+          <div className="border border-[#E1E6ED] rounded-[10px] flex overflow-x-auto scroll-hide">
             {days.map((d, i) => {
               const t = sumMeals(d.meals);
               const targetKcal = num(d.targets?.kcal);
@@ -2254,7 +2382,7 @@ const ingredients = rows.flatMap((r) =>
               const status = ratio === null ? "none" : ratio > 1.08 ? "over" : ratio < 0.92 ? "under" : "ok";
               const active = i === dayIdx;
               return (
-                <button
+                <div
                   key={`${d.label}-${i}`}
                   onClick={() => {
                     setDayIdx(i);
@@ -2262,123 +2390,149 @@ const ingredients = rows.flatMap((r) =>
                   }}
                   title={targetKcal ? `${Math.round(t.kcal)} of ${Math.round(targetKcal)} kcal` : `${Math.round(t.kcal)} kcal`}
                   className={cn(
-                    "min-h-[36px] min-w-[38px] rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors",
-                    !active && status === "none" && "bg-neutral-100 text-neutral-700 hover:bg-neutral-200",
-                    active && status === "none" && "bg-neutral-900 text-white",
-                    !active && status === "ok" && "bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
-                    !active && status === "over" && "bg-amber-50 text-amber-700 hover:bg-amber-100",
-                    !active && status === "under" && "bg-blue-50 text-blue-700 hover:bg-blue-100",
-                    active && status === "ok" && "bg-emerald-600 text-white",
-                    active && status === "over" && "bg-amber-600 text-white",
-                    active && status === "under" && "bg-blue-600 text-white",
+                    "px-4 py-2.5 cursor-pointer shrink-0 transition-colors",
+                    !active && status === "none" && "bg-white hover:bg-[#F5F7FA]",
+                    active && status === "none" && "bg-[#308BF9]",
+                    !active && status === "ok" && "bg-[#2A9D8F1A] hover:bg-[#2A9D8F33]",
+                    !active && status === "over" && "bg-[#F4A2611A] hover:bg-[#F4A26133]",
+                    !active && status === "under" && "bg-[#308BF91A] hover:bg-[#308BF933]",
+                    active && status === "ok" && "bg-[#2A9D8F]",
+                    active && status === "over" && "bg-[#F4A261]",
+                    active && status === "under" && "bg-[#308BF9]",
                   )}
                 >
-                  {d.label}
-                </button>
+                  <p
+                    className={cn(
+                      "text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-[110%] tracking-[-0.24px] whitespace-nowrap",
+                      active && "text-white",
+                      !active && status === "none" && "text-[#A1A1A1]",
+                      !active && status === "ok" && "text-[#2A9D8F]",
+                      !active && status === "over" && "text-[#F4A261]",
+                      !active && status === "under" && "text-[#308BF9]",
+                    )}
+                  >
+                    {d.label}
+                  </p>
+                </div>
               );
             })}
-            <div className="ml-auto flex gap-2">
-              <button
-                onClick={() => setShoppingOpen(true)}
-                className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-900 hover:bg-neutral-50"
-              >
-                Shopping list
-              </button>
-              <button className="rounded-lg bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-neutral-800">
-                Approve week
-              </button>
-            </div>
-            <div className="mt-1.5 flex w-full flex-wrap items-center gap-3 text-xs text-neutral-500">
-              <span className="flex items-center gap-1.5">
-                <i className="inline-block h-2 w-2 rounded-sm bg-emerald-600" />
-                on target
-              </span>
-              <span className="flex items-center gap-1.5">
-                <i className="inline-block h-2 w-2 rounded-sm bg-amber-600" />
-                over
-              </span>
-              <span className="flex items-center gap-1.5">
-                <i className="inline-block h-2 w-2 rounded-sm bg-blue-600" />
-                short
-              </span>
-              <span className="w-full text-neutral-600 sm:ml-auto sm:w-auto sm:text-right">
-                by calories · hover a day for its numbers
-              </span>
-            </div>
           </div>
 
-          {/* meal tabs */}
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {SLOTS.map((s, i) => (
-              <button
-                key={s}
-                onClick={() => setMealIdx(i)}
-                className={cn(
-                  "rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors",
-                  i === mealIdx ? "bg-blue-50 text-blue-700" : "text-neutral-500 hover:bg-neutral-100",
-                )}
-                title={SLOT_META[s].time}
-              >
-                {SLOT_META[s].label}
-              </button>
-            ))}
-          </div>
-
-          {/* food cards */}
-          <div className="mt-2">
-            {items.length === 0 && (
-              <div className="flex flex-wrap items-center justify-center gap-1.5 py-10">
-                <ActionBtn
-                  primary
-                  onClick={() => {
-                    setSwapQuery("");
-                    setSwapState({ mode: "search", foodId: null });
-                  }}
-                >
-                  Search a swap
-                </ActionBtn>
-                <ActionBtn onClick={() => openMealBuilder(null)}>Make my meal</ActionBtn>
-              </div>
-            )}
-            {items.map((f, i) => (
-              <FoodCard
-                key={f.id}
-                index={i}
-                food={f}
-                slot={slot}
-                onStepPortion={(delta) => stepPortion(f.id, delta)}
-                onDelete={() => deleteFood(f.id)}
-                onOpenSwaps={() => setSwapState({ mode: "alts", foodId: f.id })}
-                onSearchSwap={() => {
-                  setSwapQuery("");
-                  setSwapState({ mode: "search", foodId: f.id });
-                }}
-                onMakeMeal={() => openMealBuilder(f.id)}
-                onShowMeasurements={() => setMeasureOpen(true)}
-              />
-            ))}
-          </div>
-        </section>
-      </div>
-
-      {/* --------------------------------------------------------- save bar */}
-      {dirty && (
-        <div className="fixed inset-x-0 bottom-0 z-40 flex justify-center pb-4">
-          <div className="flex items-center gap-3 rounded-full bg-neutral-900 px-5 py-2.5 text-sm text-white shadow-lg">
-            <span>{saving ? "Saving your changes…" : "You have unsaved changes to this plan."}</span>
-            <button onClick={undo} disabled={saving} className="rounded-full bg-white/10 px-3 py-1 font-semibold hover:bg-white/20 disabled:opacity-50">
-              Undo
-            </button>
-            <button onClick={save} disabled={saving} className="rounded-full bg-blue-600 px-3 py-1 font-semibold hover:bg-blue-500 disabled:opacity-60">
-              {saving ? "Saving…" : "Save"}
-            </button>
+          <div className={cn("flex flex-wrap items-center gap-3 text-[#738298]", UI.small)}>
+            <span className="flex items-center gap-1.5">
+              <i className="inline-block h-[6px] w-[6px] rounded-full bg-[#2A9D8F]" />
+              on target
+            </span>
+            <span className="flex items-center gap-1.5">
+              <i className="inline-block h-[6px] w-[6px] rounded-full bg-[#F4A261]" />
+              over
+            </span>
+            <span className="flex items-center gap-1.5">
+              <i className="inline-block h-[6px] w-[6px] rounded-full bg-[#308BF9]" />
+              short
+            </span>
+            <span className="text-[#535359]">by calories · hover a day for its numbers</span>
           </div>
         </div>
-      )}
+
+        <div>
+          <div className="flex max-2xl:flex-col gap-[3px] mt-[15px]">
+            {/* meal tabs */}
+            <div className="flex flex-col max-2xl:flex-row max-2xl:overflow-x-auto scroll-hide gap-[15px] px-[15px] pt-[15px] max-2xl:pb-[15px] 2xl:pb-[54px] rounded-[15px] border-4 border-[#F5F7FA] min-w-[180px] xl:min-w-[200px] 2xl:min-w-[220px] h-fit">
+              {SLOTS.map((s, i) => {
+                const isActive = i === mealIdx;
+                return (
+                  <div
+                    key={s}
+                    onClick={() => setMealIdx(i)}
+                    title={SLOT_META[s].time}
+                    className={cn(
+                      "flex flex-col gap-2.5 py-2.5 pl-[15px] pr-2.5 w-full max-2xl:w-auto max-2xl:shrink-0 max-2xl:whitespace-nowrap cursor-pointer",
+                      isActive && "bg-[#308BF9] rounded-[10px]",
+                      !isActive && i !== 0 && "border-t max-2xl:border-t-0 max-2xl:border-l border-[#E1E6ED]",
+                    )}
+                  >
+                    <p
+                      className={cn(
+                        "text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-[110%] tracking-[-0.48px]",
+                        isActive ? "text-white" : "text-[#252525]",
+                      )}
+                    >
+                      {SLOT_META[s].label}
+                    </p>
+                    <p
+                      className={cn(
+                        "text-[10px] xl:text-[11px] 2xl:text-[12px] font-normal leading-normal tracking-[-0.2px]",
+                        isActive ? "text-white" : "text-[#252525]",
+                      )}
+                    >
+                      {SLOT_META[s].time}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* food cards */}
+            <div className="pt-5 pb-[15px] pl-[15px] pr-2.5 border-4 border-[#F5F7FA] rounded-[15px] flex-1 min-w-0 max-2xl:flex-none min-h-[360px] xl:min-h-[400px] 2xl:min-h-[440px] flex flex-col">
+              {items.length === 0 && (
+                <div className="flex-1 flex flex-wrap items-center justify-center gap-2.5 py-10">
+                  <ActionBtn
+                    primary
+                    onClick={() => {
+                      setSwapQuery("");
+                      setSwapState({ mode: "search", foodId: null });
+                    }}
+                  >
+                    Search a swap
+                  </ActionBtn>
+                  <ActionBtn onClick={() => openMealBuilder(null)}>Make my meal</ActionBtn>
+                </div>
+              )}
+              {items.length > 0 && (
+                <div className="flex flex-col gap-5">
+                  {items.map((f, i) => (
+                    <FoodCard
+                      key={f.id}
+                      index={i}
+                      food={f}
+                      slot={slot}
+                      onStepPortion={(delta) => stepPortion(f.id, delta)}
+                      onDelete={() => deleteFood(f.id)}
+                      onOpenSwaps={() => setSwapState({ mode: "alts", foodId: f.id })}
+                      onSearchSwap={() => {
+                        setSwapQuery("");
+                        setSwapState({ mode: "search", foodId: f.id });
+                      }}
+                      onMakeMeal={() => openMealBuilder(f.id)}
+                      onShowMeasurements={() => setMeasureOpen(true)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* --------------------------------------------------------- save bar */}
+          {dirty && (
+            <div className="sticky bottom-4 z-40 mt-2.5 flex items-center gap-2 px-3 py-2.5 rounded-[10px] border border-[#308BF9] bg-[#EEF4FE] shadow-[0px_4px_10px_rgba(0,0,0,0.08)]">
+              <p className="text-[12px] xl:text-[13px] font-medium text-[#252525] flex-1">
+                {saving ? "Saving your changes…" : "You have unsaved changes to this plan."}
+              </p>
+              <button onClick={undo} disabled={saving} className={UI.btnSecondary}>
+                Undo
+              </button>
+              <button onClick={save} disabled={saving} className={cn(UI.btnPrimary, "px-5")}>
+                {saving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* ------------------------------------------------------------ toast */}
       {toast && (
-        <div className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-neutral-900/95 px-4 py-2 text-sm text-white shadow-lg">
+        <div className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-[10px] bg-[#252525]/95 px-4 py-2.5 text-[12px] xl:text-[13px] font-medium text-white shadow-[0px_4px_10px_rgba(0,0,0,0.12)]">
           {toast}
         </div>
       )}
@@ -2416,6 +2570,17 @@ const ingredients = rows.flatMap((r) =>
           onChange={setMealBuilder}
           onClose={() => setMealBuilder(null)}
           onSave={saveCustomMeal}
+        />
+      )}
+
+      {/* ------------------------------------------------ reset week confirm */}
+      {resetOpen && (
+        <ConfirmPopup
+          title="Reset this week?"
+          message="All unsaved changes (added, swapped and custom meals) will be discarded."
+          confirmLabel="Reset week"
+          onClose={() => setResetOpen(false)}
+          onConfirm={performReset}
         />
       )}
 
@@ -2520,70 +2685,86 @@ function MacrosPanel({ totals, targets, dayIndex = 0 }) {
     `total calories (Protein/Carbs ×4 kcal/g, Fat ×9) — the same formula the plan was built with.`;
 
   return (
-    <section className="h-fit rounded-2xl bg-neutral-50 p-5 ring-1 ring-neutral-100">
-      <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500">Diet Plan Macros</h3>
+    <section
+      id="macros-update-container"
+      className="w-[356px] max-2xl:w-full max-2xl:shrink-0 shrink-0 h-fit pt-5 pr-1 pb-5 bg-[#F5F7FA] rounded-[15px]"
+    >
+      <div className="flex items-center justify-between px-[18px] pr-[10px]">
+        <p className={UI.sectionLabel}>Diet Plan Macros</p>
+      </div>
 
-      <div className="relative mx-auto mt-4 h-[220px] w-[220px]">
-        <svg viewBox="0 0 240 240" className="h-full w-full -rotate-90">
-          <circle cx="120" cy="120" r={R} fill="transparent" stroke="#eceef1" strokeWidth="20" />
-          {segs.map((s) => (
-            <circle
-              key={s.key}
-              cx="120"
-              cy="120"
-              r={R}
-              fill="transparent"
-              stroke={s.color}
-              strokeWidth="20"
-              strokeDasharray={s.dash}
-              strokeDashoffset={s.dashOffset}
-              className="transition-all duration-500"
-            />
+      <div className="flex justify-center items-center py-5">
+        <div className="relative w-[200px] h-[200px]">
+          <svg viewBox="0 0 240 240" className="h-full w-full -rotate-90">
+            <circle cx="120" cy="120" r={R} fill="transparent" stroke="#E1E6ED" strokeWidth="20" />
+            {segs.map((s) => (
+              <circle
+                key={s.key}
+                cx="120"
+                cy="120"
+                r={R}
+                fill="transparent"
+                stroke={s.color}
+                strokeWidth="20"
+                strokeDasharray={s.dash}
+                strokeDashoffset={s.dashOffset}
+                className="transition-all duration-500"
+              />
+            ))}
+          </svg>
+          {bubbles.map((b) => (
+            <div
+              key={b.key}
+              className="absolute -translate-x-1/2 -translate-y-1/2 min-w-[47px] h-[24px] px-2 whitespace-nowrap rounded-full bg-white shadow-[0px_4px_10px_rgba(0,0,0,0.12)] flex items-center justify-center"
+              style={{ top: `${b.top}%`, left: `${b.left}%` }}
+            >
+              <p className="text-[#252525] text-[12px] font-semibold">{b.pct}%</p>
+            </div>
           ))}
-        </svg>
-        {bubbles.map((b) => (
-          <div
-            key={b.key}
-            className="absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full bg-white px-2.5 py-1 text-xs font-bold text-neutral-900 shadow-md"
-            style={{ top: `${b.top}%`, left: `${b.left}%` }}
-          >
-            {b.pct}%
+          <div className="absolute inset-0 flex flex-col gap-[2px] items-center justify-center text-center pointer-events-none">
+            <p className="text-[#535359] text-[10px] font-semibold leading-[110%] tracking-[-0.2px] capitalize">Calories</p>
+            <p className="text-[#252525] text-[40px] font-normal leading-normal tracking-[-0.8px] tabular-nums">{cal}</p>
+            <p className="text-[#535359] text-[10px] font-normal leading-[110%] tracking-[-0.2px]">
+              {targetKcal ? `of ${targetKcal} kcal` : "kcal"}
+            </p>
           </div>
-        ))}
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-          <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Calories</span>
-          <span className="text-3xl font-bold leading-none tabular-nums text-neutral-900">{cal}</span>
-          <span className="text-xs text-neutral-400">{targetKcal ? `of ${targetKcal} kcal` : "kcal"}</span>
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-4 gap-2">
-        {legend.map((l) => {
-          const delta = l.target ? deltaLabel(l.g, l.target) : null;
-          return (
-            <div key={l.label} className="min-w-0">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-neutral-500">
-                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: l.color }} />
-                {l.label}
-              </div>
-              <div className="text-lg font-bold tabular-nums text-neutral-900">{Math.round(l.g)}g</div>
-              {l.target ? <div className="text-xs text-neutral-400">of {Math.round(l.target)}g</div> : null}
-              {delta && (
-                <div className={cn("mt-0.5 flex items-center gap-1 text-xs font-semibold", delta.cls)}>
-                  {delta.up !== null && (
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                      {delta.up ? <polyline points="18 15 12 9 6 15" /> : <polyline points="6 9 12 15 18 9" />}
-                    </svg>
-                  )}
-                  {delta.text}
+      <div className="flex flex-col gap-2.5">
+        <div className="flex max-2xl:justify-center">
+          {legend.map((l) => {
+            const delta = l.target ? deltaLabel(l.g, l.target) : null;
+            return (
+              <div key={l.label} className="flex flex-col gap-2.5 w-[87px] items-center min-w-0">
+                <div className="flex gap-[5px] items-center">
+                  <div className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: l.color }}></div>
+                  <p className="text-[#252525] text-[10px] font-semibold capitalize">{l.label}</p>
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
 
-      <div className="mt-4 border-t border-neutral-200 pt-3 text-xs leading-relaxed text-neutral-500">{narrative}</div>
+                <div className="flex flex-col items-center justify-center">
+                  <p className="text-[#252525] text-[15px] font-semibold tabular-nums">{Math.round(l.g)}g</p>
+                  {l.target ? <p className="text-[#738298] text-[10px] font-normal">of {Math.round(l.target)}g</p> : null}
+                  {delta && (
+                    <div className={cn("flex items-center gap-[3px] py-[2.5px] text-[10px] font-semibold", delta.cls)}>
+                      {delta.up !== null && (
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                          {delta.up ? <polyline points="18 15 12 9 6 15" /> : <polyline points="6 9 12 15 18 9" />}
+                        </svg>
+                      )}
+                      {delta.text}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="pl-[18px] pr-[10px]">
+          <p className="text-[#738298] text-[12px] leading-[130%]">{narrative}</p>
+        </div>
+      </div>
     </section>
   );
 }
@@ -2592,6 +2773,8 @@ function MacrosPanel({ totals, targets, dayIndex = 0 }) {
 
 function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, onSearchSwap, onMakeMeal, onShowMeasurements }) {
   const [showMethod, setShowMethod] = useState(false);
+  // Per-dish sections for a Make-my-meal dish; null for an ordinary recipe.
+  const methodGroups = useMemo(() => groupMethodSteps(f.method_steps), [f.method_steps]);
   const s = scaledFood(f);
   const serv = f.servings || 1;
   // "10 MIN · NON-VEG · BREAKFAST": prep time, diet tag(s), then the slot the
@@ -2616,16 +2799,20 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
 
   if (f.removed) {
     return (
-      <article className="flex gap-3 border-b border-neutral-100 py-4 opacity-70 last:border-b-0">
-        <div className="w-5 shrink-0 pt-2 text-right text-sm font-semibold text-neutral-400 tabular-nums">{index + 1}</div>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-lg">○</div>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm italic text-neutral-400">{f.name} (removed)</div>
-          <div className="mt-2 rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-500">
-            This meal was removed. Use {f.alternatives > 0 ? <><b>{f.alternatives} swaps</b>, </> : null}
-            <b>Search a swap</b> or <b>Make my meal</b> to fill the slot.
+      <article className="flex gap-[5px] opacity-70 pb-5 border-b border-[#E1E6ED] last:border-b-0 last:pb-0">
+        <div className="flex my-[3px] items-start shrink-0">
+          <div className="flex h-6 w-6 xl:h-7 xl:w-7 2xl:h-[30px] 2xl:w-[30px] items-center justify-center rounded-full bg-[#F5F7FA] text-[#A1A1A1] text-[14px]">○</div>
+          <p className="px-[9px] pt-[3px] pb-0.5 text-[#A1A1A1] text-[15px] xl:text-[16px] 2xl:text-[18px] font-bold leading-[126%] tracking-[-0.3px] tabular-nums">
+            {index + 1}
+          </p>
+        </div>
+        <div className="min-w-0 flex-1 flex flex-col gap-2.5">
+          <p className={cn(UI.foodName, "italic text-[#A1A1A1]")}>{f.name} (removed)</p>
+          <div className={cn("rounded-[10px] border border-dashed border-[#E1E6ED] bg-[#F5F7FA] px-3 py-2.5 text-[#738298]", UI.body)}>
+            This meal was removed. Use {f.alternatives > 0 ? <><b className="font-semibold text-[#252525]">{f.alternatives} swaps</b>, </> : null}
+            <b className="font-semibold text-[#252525]">Search a swap</b> or <b className="font-semibold text-[#252525]">Make my meal</b> to fill the slot.
           </div>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {f.alternatives > 0 && <ActionBtn onClick={onOpenSwaps}>{f.alternatives} swaps</ActionBtn>}
             <ActionBtn primary onClick={onSearchSwap}>
               Search a swap
@@ -2638,39 +2825,50 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
   }
 
   return (
-    <article className="flex gap-3 border-b border-neutral-100 py-4 last:border-b-0">
-      <div className="w-5 shrink-0 pt-2 text-right text-sm font-semibold text-neutral-400 tabular-nums">{index + 1}</div>
-      <FoodThumb food={f} className="h-9 w-9 rounded-full bg-amber-50 text-lg" />
+    <article className="flex gap-[5px] pb-5 border-b border-[#E1E6ED] last:border-b-0 last:pb-0">
+      <div className="flex my-[3px] items-start shrink-0">
+        <FoodThumb food={f} className="h-6 w-6 xl:h-7 xl:w-7 2xl:h-[30px] 2xl:w-[30px] rounded-full bg-[#F4A2611A] text-[14px]" />
+        <p className="px-[9px] pt-[3px] pb-0.5 text-[#252525] text-[15px] xl:text-[16px] 2xl:text-[18px] font-bold leading-[126%] tracking-[-0.3px] tabular-nums">
+          {index + 1}
+        </p>
+      </div>
 
       <div className="min-w-0 flex-1">
-        <div className="text-[15px] font-semibold leading-snug text-neutral-900">{f.name}</div>
-        <div className="mt-0.5 text-sm text-neutral-500">
-          <span className="font-bold tabular-nums text-neutral-900">{s.kcal}kcal</span> <span>{f.portion}</span>
+        <div className="flex flex-col gap-1">
+          <p className={UI.foodName}>{f.name}</p>
+          <div className="flex flex-wrap items-center gap-[5px]">
+            <p className={cn("text-[#252525] font-normal", UI.small)}>
+              <span className="font-semibold tabular-nums">{s.kcal}kcal</span>
+            </p>
+            {f.portion && <p className={cn("text-[#252525] font-normal", UI.small)}>{f.portion}</p>}
+          </div>
         </div>
 
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-2.5 flex flex-wrap gap-1">
           <Chip k="P" v={s.protein_g} />
           <Chip k="C" v={s.carbs_g} />
           <Chip k="F" v={s.fat_g} />
           <Chip k="Fib" v={s.fiber_g} />
         </div>
 
-        <div className="mt-2.5 border-t border-neutral-100 pt-2.5">
-          <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-400">
-            {headerTags.join(" · ")}
-          </div>
+        <div className="mt-2.5 border-t border-[#E1E6ED] pt-2.5">
+          <p className={cn("mb-1.5 text-[#738298] font-semibold uppercase", UI.small)}>{headerTags.join(" · ")}</p>
 
           <div className="flex items-start gap-3">
-            <FoodThumb food={f} className="h-[76px] w-[76px] rounded-lg border border-neutral-200 bg-neutral-50 text-3xl" />
+            <FoodThumb
+              food={f}
+              collage
+              className="h-[76px] w-[76px] rounded-[10px] border border-[#E1E6ED] bg-[#F5F7FA] text-3xl"
+            />
 
             <div className="min-w-0 flex-1">
-              <div className="mb-1 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-neutral-400">servings</span>
+              <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                <span className={cn("text-[#738298] font-semibold uppercase", UI.small)}>servings</span>
                 <StepBtn label="−" disabled={serv - 0.25 < 0.25} onClick={() => onStepPortion(-1)} />
-                <span className="min-w-[56px] text-center font-mono text-sm font-semibold tabular-nums">{serv}</span>
+                <span className={cn("min-w-[56px] text-center text-[#252525] font-semibold tabular-nums", UI.body)}>{serv}</span>
                 <StepBtn label="+" disabled={serv + 0.25 > 6} onClick={() => onStepPortion(1)} />
                 {serv !== 1 && (
-                  <span className="text-xs font-semibold text-blue-600">
+                  <span className={cn("text-[#308BF9] font-semibold", UI.small)}>
                     {s.kcal} kcal · P{Math.round(s.protein_g)} · C{Math.round(s.carbs_g)} · F{Math.round(s.fat_g)}
                   </span>
                 )}
@@ -2681,9 +2879,12 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
                   {f.ingredients.map((ing, i) => {
                     const m = unitMetric(ing.unit);
                     return (
-                      <span key={i} className="rounded-md border border-neutral-200 bg-neutral-50 px-[7px] py-[2px] text-xs text-neutral-500">
-                        {ing.name} <b className="font-semibold text-neutral-900">{fmtQty(ing.qty * serv)}</b> {ing.unit}
-                        {m && <span className="ml-1 text-neutral-400">({m.per} {m.unit} each)</span>}
+                      <span
+                        key={i}
+                        className={cn("rounded-[5px] border border-[#E1E6ED] bg-[#F5F7FA] px-2 py-[3px] text-[#738298] font-normal", UI.small)}
+                      >
+                        {ing.name} <b className="font-semibold text-[#252525]">{fmtQty(ing.qty * serv)}</b> {ing.unit}
+                        {m && <span className="ml-1 text-[#A1A1A1]">({m.per} {m.unit} each)</span>}
                       </span>
                     );
                   })}
@@ -2692,7 +2893,7 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
                     onClick={onShowMeasurements}
                     title="Measurements"
                     aria-label="Show measurements"
-                    className="flex h-5 w-5 items-center justify-center rounded-full border border-neutral-300 text-[11px] font-bold text-neutral-500 hover:border-blue-400 hover:text-blue-600"
+                    className="flex h-4 w-4 xl:h-[18px] xl:w-[18px] items-center justify-center rounded-full border border-[#A1A1A1] text-[10px] font-bold text-[#738298] cursor-pointer hover:border-[#308BF9] hover:text-[#308BF9] transition-colors"
                   >
                     i
                   </button>
@@ -2703,21 +2904,39 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
                 <>
                   <button
                     onClick={() => setShowMethod((v) => !v)}
-                    className="mt-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-500 hover:text-blue-600"
+                    className={cn("mt-2 text-[#308BF9] font-semibold uppercase cursor-pointer hover:text-[#2678D9]", UI.small)}
                   >
                     {showMethod ? "Hide method" : "Method"}
                   </button>
                   {showMethod && (
                     <>
-                      <ol className="mt-1 list-decimal pl-[18px] text-sm text-neutral-500">
-                        {f.method_steps.map((step, i) => (
-                          <li key={i} className="mb-1">
-                            {step}
-                          </li>
-                        ))}
-                      </ol>
+                      {methodGroups ? (
+                        // Make-my-meal dish: one section per food, each with its own numbered steps.
+                        <div className="mt-1.5 space-y-2">
+                          {methodGroups.map((g, gi) => (
+                            <div key={`${gi}-${g.name}`}>
+                              {g.name && <p className={cn("mb-0.5 text-[#252525] font-semibold", UI.body)}>{g.name}</p>}
+                              <ol className={cn("list-decimal pl-[18px] text-[#738298]", UI.body)}>
+                                {g.steps.map((step, i) => (
+                                  <li key={i} className="mb-1">
+                                    {step}
+                                  </li>
+                                ))}
+                              </ol>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <ol className={cn("mt-1.5 list-decimal pl-[18px] text-[#738298]", UI.body)}>
+                          {f.method_steps.map((step, i) => (
+                            <li key={i} className="mb-1">
+                              {step}
+                            </li>
+                          ))}
+                        </ol>
+                      )}
                       {f.tips?.length > 0 && (
-                        <div className="mt-1.5 rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+                        <div className={cn("mt-1.5 rounded-[5px] bg-[#F4A2611A] px-2.5 py-[5px] text-[#F4A261]", UI.small)}>
                           <b className="mr-1 font-semibold">Tip:</b>
                           {f.tips.join(" ")}
                         </div>
@@ -2729,7 +2948,7 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
             </div>
           </div>
 
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
             {f.alternatives > 0 && <ActionBtn onClick={onOpenSwaps}>{f.alternatives} swaps</ActionBtn>}
             <ActionBtn primary onClick={onSearchSwap}>
               Search a swap
@@ -2737,7 +2956,7 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
             <ActionBtn onClick={onMakeMeal}>Make my meal</ActionBtn>
             <button
               onClick={onDelete}
-              className="ml-auto rounded-lg px-[11px] py-[5px] text-sm font-semibold text-neutral-400 hover:bg-red-50 hover:text-red-600"
+              className="ml-auto px-[11px] py-1 rounded-[4px] text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-normal tracking-[-0.24px] text-[#A1A1A1] cursor-pointer hover:bg-[#E76F511A] hover:text-[#E76F51] transition-colors"
             >
               Delete
             </button>
@@ -2749,8 +2968,37 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
 }
 
 /** Recipe image when the API provides one, emoji fallback otherwise. */
-function FoodThumb({ food: f, className }) {
+/**
+ * Food picture. With `collage`, a Make-my-meal dish that carries several food
+ * pictures shows all of them in a two-column grid (the box keeps its width and
+ * grows in height); otherwise the single picture, else the emoji icon.
+ */
+function FoodThumb({ food: f, className, collage = false }) {
   const [broken, setBroken] = useState(false);
+  const [brokenTiles, setBrokenTiles] = useState(() => new Set());
+  const tiles = collage ? (f.images || []).filter((u) => u && !brokenTiles.has(u)) : [];
+
+  if (tiles.length > 1) {
+    return (
+      <div
+        className={cn("grid shrink-0 grid-cols-2 gap-0.5 overflow-hidden", className)}
+        style={{ height: "auto" }}
+        title={`${tiles.length} foods`}
+      >
+        {tiles.map((src, i) => (
+          <img
+            key={`${i}-${src}`}
+            src={src}
+            alt={`${f.name} ${i + 1}`}
+            loading="lazy"
+            onError={() => setBrokenTiles((prev) => new Set(prev).add(src))}
+            className={cn("aspect-square w-full object-cover", tiles.length % 2 === 1 && i === tiles.length - 1 && "col-span-2 aspect-[2/1]")}
+          />
+        ))}
+      </div>
+    );
+  }
+
   const showImage = f.image && !broken;
   return (
     <div className={cn("flex shrink-0 items-center justify-center overflow-hidden", className)}>
@@ -2763,10 +3011,14 @@ function FoodThumb({ food: f, className }) {
   );
 }
 
+// Macro chip colours follow the MacrosUpdate legend: P → protein, C → carbs, F → fats, Fib → fibre.
+const CHIP_COLOR = { P: MACRO_COLORS.protein, C: MACRO_COLORS.carbs, F: MACRO_COLORS.fats, Fib: MACRO_COLORS.fibre };
+
 function Chip({ k, v }) {
+  const color = CHIP_COLOR[k] || MACRO_COLORS.carbs;
   return (
-    <span className="rounded-md bg-amber-50 px-2.5 py-[5px] text-sm font-semibold tabular-nums text-amber-800">
-      <b className="mr-0.5 text-[10px] uppercase tracking-wide opacity-80">{k}</b> {Math.round(v)}g
+    <span className={cn(UI.chip, "tabular-nums")} style={{ color, background: `${color}1A` }}>
+      <b className="mr-0.5 font-semibold uppercase">{k}</b> {Math.round(v)}g
     </span>
   );
 }
@@ -2778,7 +3030,7 @@ function StepBtn({ label, onClick, disabled, title }) {
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="flex h-[26px] w-[26px] items-center justify-center rounded-md border border-neutral-200 bg-white text-sm text-neutral-900 hover:border-blue-400 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+      className="flex h-[26px] w-[26px] items-center justify-center rounded-[6px] border border-[#E1E6ED] bg-white text-[#252525] text-[13px] font-semibold cursor-pointer hover:border-[#308BF9] hover:bg-[#EEF4FE] disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
     >
       {label}
     </button>
@@ -2790,8 +3042,10 @@ function ActionBtn({ children, onClick, primary }) {
     <button
       onClick={onClick}
       className={cn(
-        "rounded-lg border px-[11px] py-[5px] text-sm font-medium transition",
-        primary ? "border-blue-600 bg-blue-600 text-white hover:bg-blue-500" : "border-neutral-200 bg-white text-neutral-900 hover:border-blue-400 hover:text-blue-600",
+        "flex items-center justify-center px-[11px] py-1.5 rounded-[4px] border text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-normal tracking-[-0.24px] cursor-pointer transition-colors",
+        primary
+          ? "border-[#308BF9] bg-[#308BF9] text-white hover:bg-[#2678D9] hover:border-[#2678D9]"
+          : "border-[#E1E6ED] bg-white text-[#308BF9] hover:bg-[#EEF4FE]",
       )}
     >
       {children}
@@ -2922,13 +3176,13 @@ function SwapDialog({ mode, alternatives = [], replacing = "", dayKcal = 0, slot
       tall
     >
       {isSearch && (
-        <div className="flex-none border-b border-neutral-100 px-5 py-3.5">
+        <div className="flex-none border-b border-[#E1E6ED] px-5 py-3.5">
           <input
             autoFocus
             value={query}
             onChange={(e) => onQuery(e.target.value)}
             placeholder="Search — chicken, oats, salmon…"
-            className="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-base outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            className={UI.input}
           />
           <div className="mt-2.5 flex items-center gap-1.5">
             {/* <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-neutral-400">Diet</span> */}
@@ -2945,25 +3199,20 @@ function SwapDialog({ mode, alternatives = [], replacing = "", dayKcal = 0, slot
                 {d.label}
               </button>
             ))} */}
-            {loading && <span className="ml-auto text-xs text-neutral-400">Searching…</span>}
+            {loading && <span className={cn("ml-auto text-[#738298]", UI.small)}>Searching…</span>}
           </div>
         </div>
       )}
-      <ul className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+      <ul className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scroll-hide">
         {emptyText && (
-          <li className={cn("px-5 py-8 text-center text-sm", error && isSearch ? "text-red-600" : "text-neutral-400")}>{emptyText}</li>
+          <li className={cn("px-5 py-8 text-center font-medium", UI.body, error && isSearch ? "text-[#E76F51]" : "text-[#738298]")}>{emptyText}</li>
         )}
         {results.map((r) => (
           <SwapRow key={r.id} r={r} isSearch={isSearch} onPick={() => onPick(r.raw)} />
         ))}
         {hasMore && (
-          <li className="border-t border-neutral-50 px-5 py-3 text-center">
-            <button
-              type="button"
-              disabled={loadingMore}
-              onClick={() => runSearch(meta.page + 1)}
-              className="rounded-lg border border-neutral-200 bg-white px-3.5 py-1.5 text-sm font-semibold text-neutral-900 hover:bg-neutral-50 disabled:opacity-50"
-            >
+          <li className="border-t border-[#F5F7FA] px-5 py-3 text-center">
+            <button type="button" disabled={loadingMore} onClick={() => runSearch(meta.page + 1)} className={UI.btnSecondary}>
               {loadingMore ? "Loading…" : `Load more (page ${meta.page + 2} of ${meta.pages})`}
             </button>
           </li>
@@ -2993,25 +3242,28 @@ function SwapRow({ r, isSearch, onPick }) {
   const [showMethod, setShowMethod] = useState(false);
   const hasRecipe = r.ingredients.length > 0 || r.method_steps.length > 0;
   return (
-    <li className="border-t border-neutral-50 px-5 py-[11px] first:border-t-0 hover:bg-neutral-50">
+    <li className="border-t border-[#F5F7FA] px-5 py-3 first:border-t-0 hover:bg-[#F5F7FA] transition-colors">
       <div className="flex items-start gap-3">
-        <FoodThumb food={r} className="h-11 w-11 rounded-lg bg-neutral-100 text-xl" />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm text-neutral-900">
-            {r.name} 
+        <FoodThumb food={r} className="h-11 w-11 rounded-[10px] border border-[#E1E6ED] bg-[#F5F7FA] text-xl" />
+        <div className="min-w-0 flex-1 flex flex-col gap-1">
+          <p className={UI.foodName}>
+            {r.name}
             {/* <span className="ml-2 rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-400">{r.source}</span> */}
             {r.offSlot && (
-              <span className="ml-1.5 rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700" title="Usually served in a different meal">
+              <span
+                className="ml-1.5 inline-block px-2 py-[3px] rounded-[5px] bg-[#F4A2611A] text-[#F4A261] text-[10px] xl:text-[11px] font-semibold leading-[110%] tracking-[-0.2px] align-middle"
+                title="Usually served in a different meal"
+              >
                 other slot
               </span>
             )}
-          </div>
-          <small className="block font-mono text-xs text-neutral-400">
+          </p>
+          <small className={cn("block text-[#252525] font-normal tabular-nums", UI.small)}>
             {r.kcal} kcal · P{r.protein_g} C{r.carbs_g} F{r.fat_g}
           </small>
-          {isSearch && r.portion ? <small className="block text-xs text-neutral-500">{r.portion}</small> : null}
+          {isSearch && r.portion ? <small className={cn("block text-[#738298] font-normal", UI.small)}>{r.portion}</small> : null}
           {(r.prep_minutes || r.dayPct != null) && (
-            <small className="block text-xs text-neutral-500">
+            <small className={cn("block text-[#738298] font-normal", UI.small)}>
               {[
                 r.prep_minutes ? `${r.prep_estimated ? "~" : ""}${r.prep_minutes} min` : null,
                 r.dayPct != null ? `day ${r.dayPct}%` : null,
@@ -3024,23 +3276,23 @@ function SwapRow({ r, isSearch, onPick }) {
             <button
               type="button"
               onClick={() => setShowMethod((v) => !v)}
-              className="mt-1 text-xs font-semibold text-blue-600 hover:text-blue-500"
+              className={cn("mt-0.5 self-start text-[#308BF9] font-semibold cursor-pointer hover:text-[#2678D9]", UI.small)}
             >
               {showMethod ? "▾ Hide method" : "▸ Method"}
             </button>
           )}
         </div>
-        <button onClick={onPick} className="shrink-0 rounded-lg bg-blue-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-blue-500">
+        <button onClick={onPick} className={cn("shrink-0", UI.btnPrimary)}>
           {isSearch ? "Add" : "Swap"}
         </button>
       </div>
 
       {showMethod && hasRecipe && (
-        <div className="ml-14 mt-2 rounded-lg border border-neutral-100 bg-neutral-50/60 px-4 py-3">
+        <div className="ml-14 mt-2.5 rounded-[10px] border border-[#E1E6ED] bg-white px-4 py-3">
           {r.ingredients.length > 0 && (
             <>
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Ingredients</div>
-              <ul className="mt-1 list-disc pl-[18px] text-sm text-neutral-700">
+              <p className={cn("text-[#738298] font-semibold uppercase", UI.small)}>Ingredients</p>
+              <ul className={cn("mt-1 list-disc pl-[18px] text-[#252525]", UI.body)}>
                 {r.ingredients.map((ing, i) => (
                   <li key={i} className="mb-0.5">
                     {fmtQty(ing.qty)} {ing.unit} {ing.name}
@@ -3051,10 +3303,8 @@ function SwapRow({ r, isSearch, onPick }) {
           )}
           {r.method_steps.length > 0 && (
             <>
-              <div className={cn("text-[11px] font-semibold uppercase tracking-wide text-neutral-400", r.ingredients.length > 0 && "mt-2.5")}>
-                Method
-              </div>
-              <ol className="mt-1 list-decimal pl-[18px] text-sm text-neutral-700">
+              <p className={cn("text-[#738298] font-semibold uppercase", UI.small, r.ingredients.length > 0 && "mt-2.5")}>Method</p>
+              <ol className={cn("mt-1 list-decimal pl-[18px] text-[#252525]", UI.body)}>
                 {r.method_steps.map((step, i) => (
                   <li key={i} className="mb-1">
                     {step}
@@ -3064,7 +3314,7 @@ function SwapRow({ r, isSearch, onPick }) {
             </>
           )}
           {r.tips.length > 0 && (
-            <div className="mt-2 rounded-md border-l-2 border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-500">
+            <div className={cn("mt-2 rounded-[5px] border-l-2 border-[#F4A261] bg-[#F4A2611A] px-3 py-2 text-[#738298]", UI.small)}>
               {r.tips.join(" ")}
             </div>
           )}
@@ -3114,20 +3364,20 @@ function MeasurementsDialog({ days, onClose }) {
     .map((k) => ({ key: k, ...UNIT_METRIC[k] }));
   const counted = [...new Set([...MEASURE_COUNTED, ...[...used].filter((k) => !UNIT_METRIC[k])])].sort();
 
-  const heading = "px-5 pb-2 pt-4 text-[11px] font-semibold uppercase tracking-wide text-neutral-400";
-  const note = "bg-amber-50/70 px-5 py-3 text-[13px] leading-relaxed text-neutral-600";
+  const heading = cn("px-5 pb-2 pt-4 text-[#738298] font-semibold uppercase", UI.small);
+  const note = cn("bg-[#F4A2611A] px-5 py-3 leading-[130%] text-[#535359]", UI.body);
 
   return (
     <ModalShell title="Measurements" subtitle="what each unit means in this plan" onClose={onClose} widthClass="max-w-[760px]" tall>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto scroll-hide">
         <div className={note}>US customary — a cup is 237 ml here, not the 250 ml of a metric cup</div>
 
         <div className={heading}>Volume and weight</div>
         <ul>
           {weighed.map((u) => (
-            <li key={u.key} className="flex items-baseline justify-between border-t border-neutral-100 px-5 py-2.5 text-sm">
-              <span className="font-semibold text-neutral-900">1 {u.key}</span>
-              <span className="tabular-nums text-neutral-500">
+            <li key={u.key} className={cn("flex items-baseline justify-between border-t border-[#F5F7FA] px-5 py-2.5", UI.body)}>
+              <span className="font-semibold text-[#252525]">1 {u.key}</span>
+              <span className="tabular-nums text-[#738298]">
                 {u.per} {u.unit}
               </span>
             </li>
@@ -3135,12 +3385,12 @@ function MeasurementsDialog({ days, onClose }) {
         </ul>
 
         <div className={heading}>Counted, not weighed</div>
-        <div className="px-5 pb-2 text-sm text-neutral-600">{counted.join(" · ")}</div>
+        <div className={cn("px-5 pb-2 text-[#535359]", UI.body)}>{counted.join(" · ")}</div>
 
         <div className={heading}>Where these come from</div>
         <div className={cn(note, "mb-4")}>
           <div>
-            the <code className="rounded bg-neutral-100 px-1 text-[12px]">hash</code> on every FitChef meal restates its ingredients in metric beside the human list; dividing one by the other gives each
+            the <code className="rounded-[4px] bg-[#F5F7FA] px-1 text-[11px] xl:text-[12px] text-[#252525]">hash</code> on every FitChef meal restates its ingredients in metric beside the human list; dividing one by the other gives each
             constant
           </div>
           <div>every conversion came out exact across ~2,400 ingredient lines, not an average</div>
@@ -3287,7 +3537,7 @@ function macroShares(p, c, f) {
  *     the meal being replaced; typing narrows it
  *   - "+" adds a dish as a row; the chart at the top shows the target until
  *     something is added, then follows what is being built
- *   - nothing matches → AI lookup, then manual macros as the last resort
+ *   - nothing matches → "Not in the dish bank." (no AI / free-text add)
  */
 function MakeMealDialog({ state, totals, target, slot, defaultDiet = "", zip, onChange, onClose, onSave }) {
   const [query, setQuery] = useState("");
@@ -3295,8 +3545,6 @@ function MakeMealDialog({ state, totals, target, slot, defaultDiet = "", zip, on
   const [meta, setMeta] = useState({ count: 0, bank: 0, inSlot: 0, page: 0, pages: 0 });
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiFailed, setAiFailed] = useState(false);
   const [manual, setManual] = useState(null); // null | { ...EMPTY_MANUAL }
   const abortRef = useRef(null);
   const inputRef = useRef(null);
@@ -3377,7 +3625,6 @@ const totalPrice = useMemo(() => {
 
   function addRow(row) {
     onChange({ ...state, rows: [...state.rows, { ...row, key: rowKey(row.fitchefKey || row.name) }] });
-    setAiFailed(false);
     setManual(null);
   }
 
@@ -3419,28 +3666,6 @@ const totalPrice = useMemo(() => {
     addRow({ ...s.row, qty: s.qty });
   }
 
-  /** "Add a food" the bank does not know: AI works out the macros. */
-  async function addViaAi() {
-    if (!trimmed || aiLoading) return;
-    setAiLoading(true);
-    setAiFailed(false);
-    try {
-      const res = await fetch("/api/food/lookup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ food_name: trimmed, country: "usa" }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data?.error) throw new Error(data?.error || "lookup failed");
-      addRow(toMealRow({ ...data, food_name: data.food_name || trimmed, macro_source: data.macro_source || "ai_lookup" }));
-      setQuery("");
-    } catch {
-      setAiFailed(true);
-    } finally {
-      setAiLoading(false);
-    }
-  }
-
   function addManual() {
     if (!manual?.food_name?.trim()) return;
     addRow(
@@ -3462,7 +3687,6 @@ const totalPrice = useMemo(() => {
     if (e.key !== "Enter") return;
     e.preventDefault();
     if (fitted.length > 0) addRow(fitted[0]);
-    else if (effectiveQuery && !searching) addViaAi();
   }
 
   const showNoHits = !searching && Boolean(effectiveQuery) && hits.length === 0 && !manual && !searchError;
@@ -3491,37 +3715,37 @@ const totalPrice = useMemo(() => {
           suggestions panel or a long meal never pushes the add-food box, the
           dish bank or the Save button out of the modal. The dish bank's
           infinite scroll listens on this body. */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto" onScroll={onListScroll}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scroll-hide" onScroll={onListScroll}>
       {/* ------------------------------------------------ name */}
       <div className="flex-none px-5 pt-4">
         <input
           value={state.name}
           onChange={(e) => onChange({ ...state, name: e.target.value })}
           placeholder="Named from what you add — or type your own"
-          className="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-[15px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          className={UI.input}
         />
       </div>
 
       {/* ------------------------------------------------ target / build chart */}
-      <div className="flex-none border-b border-neutral-100 px-5 pb-3 pt-4">
-        <div className="flex items-center gap-5">
+      <div className="flex-none border-b border-[#E1E6ED] px-5 pb-3 pt-4">
+        <div className="flex items-center gap-5 rounded-[15px] bg-[#F5F7FA] px-4 py-4">
           <BuilderDonut p={shown.p} c={shown.c} f={shown.f} kcal={chartKcal} />
           <div className="min-w-0 flex-1">
           <div className="grid grid-cols-3 gap-4">
             {columns.map((col) => {
               const delta = hasRows && col.target ? gapLabel(col.g, col.target) : null;
               return (
-                <div key={col.label} className="min-w-0">
-                  <div className="flex items-center gap-1.5 text-[12.5px] text-neutral-600">
-                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: col.color }} />
-                    {col.label}
+                <div key={col.label} className="min-w-0 flex flex-col gap-1">
+                  <div className="flex items-center gap-[5px]">
+                    <span className="h-[6px] w-[6px] shrink-0 rounded-full" style={{ background: col.color }} />
+                    <p className="text-[#252525] text-[10px] font-semibold capitalize">{col.label}</p>
                   </div>
-                  <div className="mt-0.5 text-lg font-bold leading-tight tabular-nums text-neutral-900">{Math.round(col.g)}g</div>
-                  <div className="text-xs text-neutral-400">{col.pct}% of calories</div>
+                  <p className="text-[#252525] text-[15px] font-semibold leading-tight tabular-nums">{Math.round(col.g)}g</p>
+                  <p className="text-[#738298] text-[10px] font-normal">{col.pct}% of calories</p>
                   {!hasRows && target ? (
-                    <div className="text-xs font-semibold text-neutral-300">to match</div>
+                    <p className="text-[#A1A1A1] text-[10px] font-semibold">to match</p>
                   ) : delta ? (
-                    <div className={cn("text-xs font-semibold", delta.cls)}>{delta.text}</div>
+                    <p className={cn("text-[10px] font-semibold", delta.cls)}>{delta.text}</p>
                   ) : null}
                 </div>
               );
@@ -3542,44 +3766,37 @@ const totalPrice = useMemo(() => {
                       ? "Hide the suggestions"
                       : "Dishes from the bank that close what this meal is still missing."
                 }
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[13px] font-semibold transition-colors",
-                  showSuggestions ? "bg-neutral-500 text-white hover:bg-neutral-600" : "bg-neutral-900 text-white hover:bg-neutral-800",
-                )}
+                className={cn("inline-flex items-center gap-1.5", showSuggestions ? UI.btnSecondary : UI.btnPrimary)}
               >
                 {showSuggestions ? "✕ Hide suggestions" : "✨ Close the gap for me"}
               </button>
               {showSuggestions && !onTarget && (
                 <div className="mt-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">
+                    <span className={UI.sectionLabel}>
                       {suggestions.length > 0 ? `${suggestions.length} way${suggestions.length === 1 ? "" : "s"} to close it` : "Nothing closes it"}
                     </span>
-                    <button type="button" onClick={() => setShowSuggestions(false)} className="text-neutral-400 hover:text-neutral-700" title="Hide">
+                    <button type="button" onClick={() => setShowSuggestions(false)} className="text-[#A1A1A1] hover:text-[#252525] cursor-pointer" title="Hide">
                       ✕
                     </button>
                   </div>
                   {suggestions.length === 0 ? (
-                    <div className="mt-2 text-sm text-neutral-500">Nothing in the pool closes this gap on its own.</div>
+                    <p className={cn("mt-2 text-[#738298]", UI.body)}>Nothing in the pool closes this gap on its own.</p>
                   ) : (
-                    <div className="mt-2 max-h-[400px] space-y-2 overflow-y-auto pr-1">
+                    <div className="mt-2 max-h-[400px] space-y-2 overflow-y-auto pr-1 scroll-hide">
                       {suggestions.map((s) => (
-                        <div key={s.row.key} className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white px-3 py-2.5">
+                        <div key={s.row.key} className="flex items-center gap-3 rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2.5">
                           <ScoreRing score={s.score} />
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-[15px] font-semibold text-neutral-900">{s.row.name}</div>
-                            <div className="mt-0.5 text-xs text-neutral-500">
+                          <div className="min-w-0 flex-1 flex flex-col gap-1">
+                            <p className={cn("truncate", UI.foodName)}>{s.row.name}</p>
+                            <p className={cn("text-[#738298] font-normal", UI.small)}>
                               {s.portionText} · {Math.round(s.kcal)} kcal ·{" "}
                               <span className="font-semibold" style={{ color: MACRO_COLORS.protein }}>+{fmt1(s.p)}P</span>{" "}
                               <span className="font-semibold" style={{ color: MACRO_COLORS.fats }}>+{fmt1(s.f)}F</span>{" "}
                               <span className="font-semibold" style={{ color: MACRO_COLORS.carbs }}>+{fmt1(s.c)}C</span>
-                            </div>
+                            </p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => addSuggestion(s)}
-                            className="shrink-0 rounded-lg bg-neutral-900 px-4 py-1.5 text-sm font-semibold text-white hover:bg-neutral-800"
-                          >
+                          <button type="button" onClick={() => addSuggestion(s)} className={cn("shrink-0", UI.btnPrimary)}>
                             Add
                           </button>
                         </div>
@@ -3592,7 +3809,7 @@ const totalPrice = useMemo(() => {
           )}
           </div>
         </div>
-        <div className="mt-2 text-right text-xs text-neutral-400">
+        <p className={cn("mt-2.5 text-right text-[#738298] font-normal", UI.small)}>
           {(() => {
             const slotName = slotLabel.toLowerCase();
             const isGap = state.targetKind === "gap";
@@ -3606,7 +3823,7 @@ const totalPrice = useMemo(() => {
             if (!target) {
               return (
                 <>
-                  This one is <b className="text-neutral-700">{now} kcal</b>.
+                  This one is <b className="font-semibold text-[#252525]">{now} kcal</b>.
                 </>
               );
             }
@@ -3616,37 +3833,37 @@ const totalPrice = useMemo(() => {
             return (
               <>
                 {isGap ? "The day still needs " : `The ${slotName} you are replacing was `}
-                <b className="text-neutral-700">{was} kcal</b>. This one is <b className="text-neutral-700">{now}</b> —{" "}
+                <b className="font-semibold text-[#252525]">{was} kcal</b>. This one is <b className="font-semibold text-[#252525]">{now}</b> —{" "}
                 {same ? (
-                  <span className="font-semibold text-emerald-600">about the same.</span>
+                  <span className="font-semibold text-[#2A9D8F]">about the same.</span>
                 ) : (
-                  <span className={cn("font-semibold", diff > 0 ? "text-amber-600" : "text-blue-600")}>
+                  <span className={cn("font-semibold", diff > 0 ? "text-[#F4A261]" : "text-[#308BF9]")}>
                     {Math.abs(diff)} kcal {diff > 0 ? "too much" : "short"}.
                   </span>
                 )}
               </>
             );
           })()}
-        </div>
+        </p>
       </div>
 
       {/* ------------------------------------------------ what is in the meal */}
-       <div className="flex-none border-b border-neutral-100 px-5 py-3">
+       <div className="flex-none border-b border-[#E1E6ED] px-5 py-3">
         {hasRows && (
-          <div className="mb-1 flex items-center justify-end gap-2 text-xs">
-            {pricingRows && <span className="text-neutral-400">pricing…</span>}
+          <div className={cn("mb-1 flex items-center justify-end gap-2", UI.small)}>
+            {pricingRows && <span className="text-[#A1A1A1]">pricing…</span>}
             {totalPrice !== null && (
-              <span className="font-semibold text-neutral-700">
+              <span className="font-semibold text-[#252525]">
                 {money(totalPrice)}
-                <span className="text-neutral-400">*</span>
+                <span className="text-[#A1A1A1]">*</span>
               </span>
             )}
           </div>
         )}
         {!hasRows ? (
-          <div className="text-sm text-neutral-400">Nothing added yet.</div>
+          <p className={cn("text-[#A1A1A1]", UI.body)}>Nothing added yet.</p>
         ) : (
-          <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
+          <div className="max-h-44 space-y-1 overflow-y-auto pr-1 scroll-hide">
             {state.rows.map((r) => {
               // "1 piece" → "2 pieces" as qty changes; non-bank rows show "1½ × 1 cup".
               const portionText = r.portionQty
@@ -3657,16 +3874,19 @@ const totalPrice = useMemo(() => {
               const contains = Array.isArray(r.contains) ? r.contains.filter((i) => i?.name) : [];
               const atMin = r.qty - 0.25 < 0.25;
               return (
-                <div key={r.key} className="flex items-center gap-3 py-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[15px] font-semibold text-neutral-900">{r.name}</div>
-                    <div className="mt-0.5 text-xs text-neutral-400" title={`${Math.round(r.kcal * r.qty)} kcal · P${Math.round(r.p * r.qty)} C${Math.round(r.c * r.qty)} F${Math.round(r.f * r.qty)}`}>
+                <div key={r.key} className="flex items-center gap-3 py-2 border-b border-[#F5F7FA] last:border-b-0">
+                  <div className="min-w-0 flex-1 flex flex-col gap-1">
+                    <p className={cn("truncate", UI.foodName)}>{r.name}</p>
+                    <p
+                      className={cn("text-[#738298] font-normal", UI.small)}
+                      title={`${Math.round(r.kcal * r.qty)} kcal · P${Math.round(r.p * r.qty)} C${Math.round(r.c * r.qty)} F${Math.round(r.f * r.qty)}`}
+                    >
                       {portionText}
-                    </div>
+                    </p>
                     {contains.length > 0 && (
-                      <div className="mt-0.5 truncate text-xs font-semibold text-neutral-400">
+                      <p className={cn("truncate text-[#A1A1A1] font-semibold", UI.small)}>
                         {contains.map((i) => `${fmtQty(num(i.qty) * r.qty)} ${pluralUnit(i.unit, num(i.qty) * r.qty)} ${i.name}`.replace(/\s+/g, " ").trim()).join(", ")}
-                      </div>
+                      </p>
                     )}
                   </div>
 
@@ -3674,7 +3894,7 @@ const totalPrice = useMemo(() => {
                     price={rowPrices[r.key]?.price ?? null}
                     approx={rowPrices[r.key]?.approx}
                     note={rowPrices[r.key]?.note}
-                    className="shrink-0 text-sm"
+                    className={cn("shrink-0", UI.body)}
                   />
                   <StepBtn label="−" title={atMin ? "Remove" : "Less"} onClick={() => (atMin ? removeRow(r.key) : setQty(r.key, r.qty - 0.25))} />
                   <StepBtn label="+" title="More" disabled={r.qty + 0.25 > 20} onClick={() => setQty(r.key, r.qty + 0.25)} />
@@ -3683,10 +3903,10 @@ const totalPrice = useMemo(() => {
             })}
           </div>
         )}
-        <div className="mt-2.5 text-sm text-neutral-600">
-          This meal <b className="text-neutral-900">{fmt1(totals.p)}</b>g protein · <b className="text-neutral-900">{fmt1(totals.c)}</b>g carbs ·{" "}
-          <b className="text-neutral-900">{fmt1(totals.f)}</b>g fat · {Math.round(totals.kcal)} kcal
-        </div>
+        <p className={cn("mt-2.5 text-[#535359]", UI.body)}>
+          This meal <b className="font-semibold text-[#252525]">{fmt1(totals.p)}</b>g protein · <b className="font-semibold text-[#252525]">{fmt1(totals.c)}</b>g carbs ·{" "}
+          <b className="font-semibold text-[#252525]">{fmt1(totals.f)}</b>g fat · {Math.round(totals.kcal)} kcal
+        </p>
       </div>
 
       {/* ------------------------------------------------ add a food */}
@@ -3697,55 +3917,39 @@ const totalPrice = useMemo(() => {
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
-              setAiFailed(false);
               setManual(null);
             }}
             onKeyDown={onKeyDown}
             placeholder="Add a food — chicken, rice, oats…"
-            className="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-[15px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            className={UI.input}
           />
-          {searching && <span className="absolute right-3 top-3 text-xs text-neutral-400">Searching…</span>}
+          {searching && <span className={cn("absolute right-3 top-3 text-[#A1A1A1]", UI.small)}>Searching…</span>}
         </div>
 
-        {searchError && <div className="mt-2 text-xs text-red-600">{searchError}</div>}
+        {searchError && <p className={cn("mt-2 text-[#E76F51]", UI.small)}>{searchError}</p>}
 
-        {/* nothing in the bank → AI add, then manual as last resort */}
+        {/* nothing in the bank → just say so; only dish-bank foods can be added */}
         {showNoHits && (
-          <div className="mt-2 rounded-lg border border-dashed border-neutral-200 px-3 py-3 text-center">
-            <div className="text-xs text-neutral-500">Not in the dish bank.</div>
-            <button
-              onClick={addViaAi}
-              disabled={aiLoading}
-              className="mt-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
-            >
-              {aiLoading ? "AI is calculating macros…" : `Add "${trimmed}" — AI will calculate macros`}
-            </button>
-            {aiFailed && (
-              <div className="mt-2 text-xs">
-                <span className="text-red-600">AI lookup failed for this food. </span>
-                <button onClick={() => setManual({ ...EMPTY_MANUAL, food_name: trimmed })} className="font-semibold text-blue-600 hover:underline">
-                  Enter macros manually
-                </button>
-              </div>
-            )}
+          <div className="mt-2 rounded-[10px] border border-dashed border-[#E1E6ED] bg-[#F5F7FA] px-3 py-3 text-center">
+            <p className={cn("text-[#738298]", UI.small)}>Not in the dish bank.</p>
           </div>
         )}
 
         {manual && (
-          <div className="mt-2 rounded-lg border border-neutral-200 p-3">
-            <div className="mb-2 text-xs font-semibold text-neutral-700">Manual entry — values for one portion</div>
+          <div className="mt-2 rounded-[10px] border border-[#E1E6ED] p-3">
+            <p className={cn("mb-2 text-[#252525] font-semibold", UI.small)}>Manual entry — values for one portion</p>
             <div className="grid grid-cols-2 gap-2">
               <input
                 value={manual.food_name}
                 onChange={(e) => setManual({ ...manual, food_name: e.target.value })}
                 placeholder="Food name"
-                className="rounded-lg border border-neutral-200 px-2 py-1.5 text-sm"
+                className={cn(UI.input, "px-2 py-1.5")}
               />
               <input
                 value={manual.portion_with_metric}
                 onChange={(e) => setManual({ ...manual, portion_with_metric: e.target.value })}
                 placeholder="Portion — e.g. 1 cup (240 g)"
-                className="rounded-lg border border-neutral-200 px-2 py-1.5 text-sm"
+                className={cn(UI.input, "px-2 py-1.5")}
               />
             </div>
             <div className="mt-2 grid grid-cols-5 gap-2">
@@ -3756,27 +3960,23 @@ const totalPrice = useMemo(() => {
                 ["fat_g", "Fat"],
                 ["fiber_g", "Fiber"],
               ].map(([k, label]) => (
-                <label key={k} className="text-[10px] font-semibold uppercase text-neutral-400">
+                <label key={k} className="text-[10px] font-semibold uppercase text-[#738298]">
                   {label}
                   <input
                     type="number"
                     step="any"
                     value={manual[k]}
                     onChange={(e) => setManual({ ...manual, [k]: e.target.value })}
-                    className="mt-0.5 w-full rounded-lg border border-neutral-200 px-2 py-1.5 text-sm tabular-nums text-neutral-900"
+                    className={cn(UI.input, "mt-0.5 px-2 py-1.5 tabular-nums")}
                   />
                 </label>
               ))}
             </div>
             <div className="mt-2 flex justify-end gap-2">
-              <button onClick={() => setManual(null)} className="rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-semibold">
+              <button onClick={() => setManual(null)} className={UI.btnSecondary}>
                 Cancel
               </button>
-              <button
-                onClick={addManual}
-                disabled={!manual.food_name.trim()}
-                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-              >
+              <button onClick={addManual} disabled={!manual.food_name.trim()} className={UI.btnPrimary}>
                 Add to meal
               </button>
             </div>
@@ -3785,7 +3985,7 @@ const totalPrice = useMemo(() => {
       </div>
 
       {/* ------------------------------------------------ dish bank */}
-      <div className="flex-none border-y border-neutral-100 bg-neutral-50 px-5 py-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
+      <div className={cn("flex-none border-y border-[#E1E6ED] bg-[#F5F7FA] px-5 py-2", UI.sectionLabel)}>
         {meta.count > 0
           ? `${meta.count} of ${meta.bank || meta.count} foods${meta.inSlot > 0 ? ` · ${meta.inSlot} for ${slotLabel}, rest below` : ""}`
           : searching
@@ -3796,34 +3996,34 @@ const totalPrice = useMemo(() => {
         {fitted.map((row, i) => (
           <div key={`${row.fitchefKey || row.name}-${i}`}>
             {i === firstOffSlot && i > 0 && (
-              <div className="border-b border-neutral-100 bg-neutral-50 px-5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
+              <div className={cn("border-b border-[#E1E6ED] bg-[#F5F7FA] px-5 py-1.5", UI.sectionLabel)}>
                 Usually served at other meals
               </div>
             )}
-            <div className="flex items-start gap-3 border-b border-neutral-100 px-5 py-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50">
+            <div className="flex items-start gap-3 border-b border-[#F5F7FA] px-5 py-3 hover:bg-[#F5F7FA] transition-colors">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-[#E1E6ED] bg-[#F5F7FA]">
                 {row.image ? <img src={row.image} alt="" loading="lazy" className="h-full w-full object-cover" /> : null}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-[15px] font-semibold leading-snug text-neutral-900">{row.name}</div>
-                <div className="mt-0.5 text-xs text-neutral-500">
+              <div className="min-w-0 flex-1 flex flex-col gap-1">
+                <p className={UI.foodName}>{row.name}</p>
+                <p className={cn("text-[#738298] font-normal", UI.small)}>
                   {row.fitted ? (
                     <>
-                      {row.baseText} → <b className="font-semibold text-neutral-700">{row.portion}</b> here
+                      {row.baseText} → <b className="font-semibold text-[#252525]">{row.portion}</b> here
                     </>
                   ) : (
                     row.portion
                   )}
                   {" · "}
-                  <b className="font-semibold text-neutral-700">{fmt1(row.p)}</b>P <b className="font-semibold text-neutral-700">{fmt1(row.c)}</b>C{" "}
-                  <b className="font-semibold text-neutral-700">{fmt1(row.f)}</b>F · {Math.round(row.kcal)} kcal
+                  <b className="font-semibold text-[#252525]">{fmt1(row.p)}</b>P <b className="font-semibold text-[#252525]">{fmt1(row.c)}</b>C{" "}
+                  <b className="font-semibold text-[#252525]">{fmt1(row.f)}</b>F · {Math.round(row.kcal)} kcal
                   {row.gi !== null ? ` · GI ${row.gi}` : ""}
                   {row.diet ? ` · ${row.diet}` : ""}
-                </div>
+                </p>
                 {row.contains.length > 0 && (
-                  <div className="mt-1.5 flex flex-wrap gap-1">
+                  <div className="mt-0.5 flex flex-wrap gap-1">
                     {row.contains.map((ing, j) => (
-                      <span key={j} className="rounded-md bg-neutral-100 px-1.5 py-[2px] text-[11px] text-neutral-600">
+                      <span key={j} className={cn("rounded-[5px] bg-[#F5F7FA] border border-[#E1E6ED] px-2 py-[3px] text-[#738298] font-normal", UI.small)}>
                         {fmtQty(ing.qty)} {ing.unit} {ing.name}
                       </span>
                     ))}
@@ -3834,7 +4034,7 @@ const totalPrice = useMemo(() => {
                 type="button"
                 onClick={() => addRow(row)}
                 title="Add to this meal"
-                className="mt-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-lg leading-none text-neutral-400 hover:bg-blue-50 hover:text-blue-600"
+                className="mt-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border border-[#E1E6ED] bg-white text-[16px] leading-none text-[#308BF9] cursor-pointer hover:bg-[#EEF4FE] hover:border-[#308BF9] transition-colors"
               >
                 +
               </button>
@@ -3842,12 +4042,12 @@ const totalPrice = useMemo(() => {
           </div>
         ))}
         {!searching && fitted.length === 0 && !showNoHits && !searchError && (
-          <div className="px-5 py-8 text-center text-sm text-neutral-400">No dishes to show.</div>
+          <p className={cn("px-5 py-8 text-center text-[#738298] font-medium", UI.body)}>No dishes to show.</p>
         )}
-        {searching && fitted.length > 0 && <div className="px-5 py-3 text-center text-xs text-neutral-400">Loading more…</div>}
+        {searching && fitted.length > 0 && <p className={cn("px-5 py-3 text-center text-[#A1A1A1]", UI.small)}>Loading more…</p>}
         {!searching && hasMore && (
           <div className="px-5 py-3 text-center">
-            <button onClick={() => fetchPage(meta.page + 1, true)} className="text-xs font-semibold text-blue-600 hover:underline">
+            <button onClick={() => fetchPage(meta.page + 1, true)} className={cn("text-[#308BF9] font-semibold cursor-pointer hover:underline", UI.small)}>
               Load more
             </button>
           </div>
@@ -3857,12 +4057,8 @@ const totalPrice = useMemo(() => {
       </div>
 
       {/* ------------------------------------------------ save */}
-      <div className="flex-none border-t border-neutral-100 px-5 py-3">
-        <button
-          onClick={onSave}
-          disabled={!hasRows}
-          className="w-full rounded-lg bg-blue-600 py-2.5 text-[15px] font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
-        >
+      <div className="flex-none border-t border-[#E1E6ED] px-5 py-3">
+        <button onClick={onSave} disabled={!hasRows} className={cn(UI.btnPrimary, "w-full py-2.5 text-[13px] xl:text-[14px] 2xl:text-[15px]")}>
           Save into the plan
         </button>
       </div>
@@ -3873,13 +4069,13 @@ const totalPrice = useMemo(() => {
 /** 0–100 "how much of the gap this closes" ring for a suggestion: green ≥ 90, blue ≥ 75, amber below. */
 function ScoreRing({ score }) {
   const s = Math.max(0, Math.min(100, num(score)));
-  const color = s >= 90 ? "#059669" : s >= 75 ? "#2563eb" : "#d97706";
+  const color = s >= 90 ? "#2A9D8F" : s >= 75 ? "#308BF9" : "#F4A261";
   const R = 15;
   const CIRC = 2 * Math.PI * R;
   return (
     <div className="relative h-10 w-10 shrink-0">
       <svg viewBox="0 0 40 40" className="h-full w-full -rotate-90">
-        <circle cx="20" cy="20" r={R} fill="transparent" stroke="#e5e7eb" strokeWidth="3" />
+        <circle cx="20" cy="20" r={R} fill="transparent" stroke="#E1E6ED" strokeWidth="3" />
         <circle cx="20" cy="20" r={R} fill="transparent" stroke={color} strokeWidth="3" strokeLinecap="round" strokeDasharray={`${(s / 100) * CIRC} ${CIRC}`} />
       </svg>
       <span className="absolute inset-0 flex items-center justify-center text-[12px] font-bold tabular-nums" style={{ color }}>
@@ -3913,17 +4109,17 @@ function BuilderDonut({ p, c, f, kcal }) {
   });
 
   return (
-    <div className="relative h-[84px] w-[84px] shrink-0">
+    <div className="relative h-[100px] w-[100px] shrink-0">
       <svg viewBox="0 0 84 84" className="h-full w-full -rotate-90">
-        <circle cx="42" cy="42" r={R} fill="transparent" stroke="#eceef1" strokeWidth="8" />
+        <circle cx="42" cy="42" r={R} fill="transparent" stroke="#E1E6ED" strokeWidth="8" />
         {segs.map((s) => (
           <circle key={s.key} cx="42" cy="42" r={R} fill="transparent" stroke={s.color} strokeWidth="8" strokeDasharray={s.dash} strokeDashoffset={s.dashOffset} />
         ))}
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-        <span className="text-[9px] font-medium text-neutral-400">Calories</span>
-        <span className="mt-0.5 text-[19px] font-bold tabular-nums text-neutral-900">{Math.round(num(kcal))}</span>
-        <span className="mt-0.5 text-[9px] font-medium text-neutral-400">Kcal</span>
+      <div className="absolute inset-0 flex flex-col gap-[2px] items-center justify-center leading-none pointer-events-none">
+        <span className="text-[#535359] text-[9px] font-semibold leading-[110%] tracking-[-0.2px] capitalize">Calories</span>
+        <span className="text-[#252525] text-[20px] font-normal leading-none tracking-[-0.4px] tabular-nums">{Math.round(num(kcal))}</span>
+        <span className="text-[#535359] text-[9px] font-normal leading-[110%] tracking-[-0.2px]">Kcal</span>
       </div>
     </div>
   );
@@ -3939,12 +4135,12 @@ function money(n) {
 function PriceTag({ price, approx, note, className }) {
   const text = money(price);
   if (text === null) {
-    return <span className={cn("text-neutral-300", className)} title="Could not be priced">—</span>;
+    return <span className={cn("text-[#A1A1A1]", className)} title="Could not be priced">—</span>;
   }
   return (
-    <span className={cn("tabular-nums text-neutral-700", className)} title={note || undefined}>
+    <span className={cn("tabular-nums font-semibold text-[#252525]", className)} title={note || undefined}>
       {text}
-      {approx ? <span className="text-neutral-400">*</span> : null}
+      {approx ? <span className="text-[#A1A1A1]">*</span> : null}
     </span>
   );
 }
@@ -4018,36 +4214,36 @@ function ShoppingMeal({ meal: m }) {
   const [open, setOpen] = useState(false);
   const steps = m.steps || [];
   return (
-    <section className="border-t border-neutral-100">
+    <section className="border-t border-[#E1E6ED]">
       <div className="flex items-baseline gap-2 px-4 pt-2.5 pb-1">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">{SLOT_META[m.slot]?.label || m.slot}</span>
-        <span className="min-w-0 flex-1 truncate text-xs text-neutral-400">{m.title}</span>
-        {m.minutes ? <span className="shrink-0 text-xs text-neutral-400">{m.minutes} min</span> : null}
+        <span className={UI.sectionLabel}>{SLOT_META[m.slot]?.label || m.slot}</span>
+        <span className={cn("min-w-0 flex-1 truncate text-[#738298]", UI.small)}>{m.title}</span>
+        {m.minutes ? <span className={cn("shrink-0 text-[#A1A1A1]", UI.small)}>{m.minutes} min</span> : null}
       </div>
-      <ul className="divide-y divide-neutral-50">
+      <ul className="divide-y divide-[#F5F7FA]">
         {m.items.map((it, i) => (
-          <li key={`${i}-${it.name}`} className="flex items-center gap-4 px-4 py-2.5 text-sm">
-            <span className="w-[150px] shrink-0 font-semibold tabular-nums text-neutral-900">{it.text}</span>
-            <span className="min-w-0 flex-1 truncate text-neutral-800">{it.name}</span>
-            <PriceTag price={it.price} approx={it.approx} note={it.priceNote} className="shrink-0 text-sm" />
+          <li key={`${i}-${it.name}`} className={cn("flex items-center gap-4 px-4 py-2.5", UI.body)}>
+            <span className="w-[150px] shrink-0 font-semibold tabular-nums text-[#252525]">{it.text}</span>
+            <span className="min-w-0 flex-1 truncate text-[#535359]">{it.name}</span>
+            <PriceTag price={it.price} approx={it.approx} note={it.priceNote} className={cn("shrink-0", UI.body)} />
           </li>
         ))}
       </ul>
       {steps.length > 0 && (
         <div className="px-4 pb-3 pt-1">
-          <button type="button" onClick={() => setOpen((v) => !v)} className="text-xs font-semibold text-blue-600 hover:text-blue-500">
+          <button type="button" onClick={() => setOpen((v) => !v)} className={cn("text-[#308BF9] font-semibold cursor-pointer hover:text-[#2678D9]", UI.small)}>
             {open ? "▾" : "▸"} Method · {steps.length} step{steps.length === 1 ? "" : "s"}
           </button>
           {open && (
-            <div className="mt-2 rounded-lg border border-neutral-100 bg-neutral-50/60 px-4 py-3">
-              <ol className="list-decimal pl-[18px] text-sm text-neutral-700">
+            <div className="mt-2 rounded-[10px] border border-[#E1E6ED] bg-[#F5F7FA] px-4 py-3">
+              <ol className={cn("list-decimal pl-[18px] text-[#252525]", UI.body)}>
                 {steps.map((s, i) => (
                   <li key={i} className="mb-1">
                     {s}
                   </li>
                 ))}
               </ol>
-              {m.tip && <div className="mt-2 rounded-md border-l-2 border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-500">{m.tip}</div>}
+              {m.tip && <div className={cn("mt-2 rounded-[5px] border-l-2 border-[#F4A261] bg-white px-3 py-2 text-[#738298]", UI.small)}>{m.tip}</div>}
             </div>
           )}
         </div>
@@ -4094,58 +4290,62 @@ function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, prici
     <ModalShell title="Shopping list" subtitle={subtitle} onClose={onClose} widthClass="max-w-[600px]">
       {hasApiList && (
         <div className="flex items-center gap-2 px-5 pt-4 pb-2">
-          <button
-            type="button"
-            onClick={() => setView("week")}
-            className={cn(
-              "rounded-full px-4 py-1.5 text-[13px] font-semibold transition-colors",
-              view === "week" ? "bg-neutral-900 text-white" : "border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50",
-            )}
-          >
-            By aisle
-          </button>
-          {hasByDay && (
-            <button
-              type="button"
-              onClick={() => setView("day")}
-              className={cn(
-                "rounded-full px-4 py-1.5 text-[13px] font-semibold transition-colors",
-                view === "day" ? "bg-neutral-900 text-white" : "border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50",
-              )}
+          <div className="border border-[#E1E6ED] rounded-[10px] flex overflow-hidden">
+            <div
+              onClick={() => setView("week")}
+              className={cn("px-4 py-2.5 cursor-pointer transition-colors", view === "week" ? "bg-[#308BF9]" : "bg-white hover:bg-[#F5F7FA]")}
             >
-              By day
-            </button>
-          )}
+              <p className={cn("text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-[110%] tracking-[-0.24px]", view === "week" ? "text-white" : "text-[#A1A1A1]")}>
+                By aisle
+              </p>
+            </div>
+            {hasByDay && (
+              <div
+                onClick={() => setView("day")}
+                className={cn("px-4 py-2.5 cursor-pointer transition-colors", view === "day" ? "bg-[#308BF9]" : "bg-white hover:bg-[#F5F7FA]")}
+              >
+                <p className={cn("text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-[110%] tracking-[-0.24px]", view === "day" ? "text-white" : "text-[#A1A1A1]")}>
+                  By day
+                </p>
+              </div>
+            )}
+          </div>
           {pricing && (
-            <span className="ml-auto rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-200" title="Fetching shelf prices for the plan as it is on screen.">
+            <span
+              className="ml-auto px-2.5 py-[5px] rounded-[5px] bg-[#308BF91A] text-[#308BF9] text-[10px] xl:text-[11px] 2xl:text-[12px] font-semibold leading-[110%] tracking-[-0.2px]"
+              title="Fetching shelf prices for the plan as it is on screen."
+            >
               Pricing…
             </span>
           )}
           {!pricing && dirty && (
-            <span className="ml-auto rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200" title="This list is generated from the saved plan. Save to refresh it.">
+            <span
+              className="ml-auto px-2.5 py-[5px] rounded-[5px] bg-[#F4A2611A] text-[#F4A261] text-[10px] xl:text-[11px] 2xl:text-[12px] font-semibold leading-[110%] tracking-[-0.2px]"
+              title="This list is generated from the saved plan. Save to refresh it."
+            >
               Reflects saved plan
             </span>
           )}
         </div>
       )}
 
-      <div className="max-h-[440px] overflow-y-auto">
+      <div className="max-h-[440px] overflow-y-auto scroll-hide">
         {/* ------------------------------------------------- loading */}
         {loading && (
-          <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-neutral-500">
-            <span className="h-6 w-6 animate-spin rounded-full border-2 border-neutral-200 border-t-blue-600" aria-hidden="true" />
+          <div className={cn("flex flex-col items-center justify-center gap-3 py-16 text-[#738298] font-medium", UI.body)}>
+            <span className="h-6 w-6 animate-spin rounded-full border-2 border-[#E1E6ED] border-t-[#308BF9]" aria-hidden="true" />
             <span>Building your shopping list…</span>
           </div>
         )}
 
         {/* ---------------------------------------------- local fallback */}
         {!loading && !hasApiList && (
-          <ul className="divide-y divide-neutral-100 px-5">
-            {fallbackItems.length === 0 && <li className="py-8 text-center text-sm text-neutral-400">No ingredients yet.</li>}
+          <ul className="divide-y divide-[#F5F7FA] px-5">
+            {fallbackItems.length === 0 && <li className={cn("py-8 text-center text-[#738298] font-medium", UI.body)}>No ingredients yet.</li>}
             {fallbackItems.map((it, i) => (
-              <li key={`${i}-${it.name}-${it.unit}`} className="flex items-center justify-between py-2.5 text-sm">
-                <span className="text-neutral-900">{it.name}</span>
-                <span className="font-mono tabular-nums text-neutral-500">
+              <li key={`${i}-${it.name}-${it.unit}`} className={cn("flex items-center justify-between py-2.5", UI.body)}>
+                <span className="text-[#252525]">{it.name}</span>
+                <span className="tabular-nums font-semibold text-[#738298]">
                   {it.qty} {it.unit}
                 </span>
               </li>
@@ -4156,39 +4356,39 @@ function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, prici
         {/* ------------------------------------------------- week / aisles */}
         {hasApiList && view === "week" && (
           <div className="px-5 pb-4 pt-2">
-            <div className="flex items-center justify-between rounded-xl bg-neutral-900 px-5 py-4 text-white">
-              <span className="text-sm font-medium">Estimated total</span>
+            <div className="flex items-center justify-between rounded-[15px] bg-[#F5F7FA] px-5 py-4">
+              <span className={cn("text-[#738298] font-semibold uppercase", UI.small)}>Estimated total</span>
               <span className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold tabular-nums">
+                <span className="text-[#252525] text-[22px] xl:text-[24px] font-semibold tracking-[-0.48px] tabular-nums">
                   {week.total !== null ? money(week.total) : "—"}
-                  {week.total !== null && <span className="text-neutral-400">*</span>}
+                  {week.total !== null && <span className="text-[#A1A1A1]">*</span>}
                 </span>
                 {week.unpriced > 0 && (
-                  <span className="text-xs text-neutral-400">
+                  <span className={cn("text-[#738298]", UI.small)}>
                     {week.total === null ? "not priced yet" : `${week.unpriced} item${week.unpriced === 1 ? "" : "s"} not priced`}
                   </span>
                 )}
               </span>
             </div>
 
-            <div className="mt-3 divide-y divide-neutral-100 rounded-xl border border-neutral-100">
+            <div className="mt-3 divide-y divide-[#E1E6ED] rounded-[15px] border border-[#E1E6ED] overflow-hidden">
               {week.aisles.map((a) => (
                 <section key={a.aisle}>
                   <div className="flex items-center gap-2 px-4 pt-3.5 pb-1.5">
                     <span className="text-base leading-none">{aisleIcon(a.aisle)}</span>
-                    <span className="text-sm font-bold text-neutral-900">{a.aisle}</span>
-                    <span className="ml-auto rounded-md bg-neutral-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-neutral-500">{a.items.length}</span>
+                    <span className={cn("text-[#252525] font-semibold", UI.body)}>{a.aisle}</span>
+                    <span className={cn("ml-auto rounded-[5px] bg-[#F5F7FA] px-2 py-[3px] font-semibold tabular-nums text-[#738298]", UI.small)}>{a.items.length}</span>
                   </div>
-                  <ul className="divide-y divide-neutral-50">
+                  <ul className="divide-y divide-[#F5F7FA]">
                     {a.items.map((it, i) => {
                       const hint = [it.days.length > 0 ? `Days ${it.days.join(", ")}` : null, it.meals ? `${it.meals} meal${it.meals === 1 ? "" : "s"}` : null]
                         .filter(Boolean)
                         .join(" · ");
                       return (
-                        <li key={`${i}-${it.name}`} className="flex items-center gap-4 px-4 py-2.5 text-sm" title={hint || undefined}>
-                          <span className="w-[150px] shrink-0 font-semibold tabular-nums text-neutral-900">{it.text}</span>
-                          <span className="min-w-0 flex-1 truncate text-neutral-800">{it.name}</span>
-                          <PriceTag price={it.price} approx={it.approx} note={it.priceNote} className="shrink-0 text-sm" />
+                        <li key={`${i}-${it.name}`} className={cn("flex items-center gap-4 px-4 py-2.5", UI.body)} title={hint || undefined}>
+                          <span className="w-[150px] shrink-0 font-semibold tabular-nums text-[#252525]">{it.text}</span>
+                          <span className="min-w-0 flex-1 truncate text-[#535359]">{it.name}</span>
+                          <PriceTag price={it.price} approx={it.approx} note={it.priceNote} className={cn("shrink-0", UI.body)} />
                         </li>
                       );
                     })}
@@ -4203,27 +4403,31 @@ function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, prici
         {hasApiList && view === "day" && selectedDay && (
           <div className="px-5 pb-4 pt-2">
             {/* segmented day picker */}
-            <div className="flex rounded-xl bg-neutral-100 p-1">
-              {shopping.byDay.map((d) => (
-                <button
-                  key={d.day}
-                  type="button"
-                  onClick={() => setDayNo(d.day)}
-                  className={cn(
-                    "flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors",
-                    d.day === selectedDay.day ? "bg-white text-neutral-900 shadow-sm ring-1 ring-neutral-200" : "text-neutral-500 hover:text-neutral-800",
-                  )}
-                >
-                  D{d.day}
-                </button>
-              ))}
+            <div className="border border-[#E1E6ED] rounded-[10px] flex overflow-hidden">
+              {shopping.byDay.map((d) => {
+                const isActive = d.day === selectedDay.day;
+                return (
+                  <div
+                    key={d.day}
+                    onClick={() => setDayNo(d.day)}
+                    className={cn("flex-1 px-4 py-2.5 text-center cursor-pointer transition-colors", isActive ? "bg-[#308BF9]" : "bg-white hover:bg-[#F5F7FA]")}
+                  >
+                    <p className={cn("text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-[110%] tracking-[-0.24px]", isActive ? "text-white" : "text-[#A1A1A1]")}>
+                      D{d.day}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
 
-            <div className="mt-3 rounded-xl border border-neutral-100">
+            <div className="mt-3 rounded-[15px] border border-[#E1E6ED] overflow-hidden">
               <div className="flex items-center gap-2 px-4 pt-3.5 pb-2">
                 <span className="text-base leading-none">📅</span>
-                <span className="text-sm font-bold text-neutral-900">Day {selectedDay.day}</span>
-                <span className="ml-auto rounded-md bg-neutral-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-neutral-500" title={dayTotal > 0 ? `Day total ${money(dayTotal)}*` : undefined}>
+                <span className={cn("text-[#252525] font-semibold", UI.body)}>Day {selectedDay.day}</span>
+                <span
+                  className={cn("ml-auto rounded-[5px] bg-[#F5F7FA] px-2 py-[3px] font-semibold tabular-nums text-[#738298]", UI.small)}
+                  title={dayTotal > 0 ? `Day total ${money(dayTotal)}*` : undefined}
+                >
                   {selectedDay.meals.reduce((n, m) => n + m.items.length, 0)}
                 </span>
               </div>
@@ -4235,20 +4439,15 @@ function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, prici
         )}
       </div>
 
-      <div className="border-t border-neutral-100 px-5 py-3.5">
+      <div className="border-t border-[#E1E6ED] px-5 py-3.5">
         {hasApiList && (week.priced > 0 && week.unpriced ? true : Boolean(week.disclaimer)) && (
-          <p className="mb-3 text-[11px] leading-snug text-neutral-400">
+          <p className={cn("mb-3 leading-snug text-[#A1A1A1]", UI.small)}>
             {week.priced > 0 && week.unpriced ? `${week.priced} priced, ${week.unpriced} unpriced. ` : ""}
             {week.disclaimer}
           </p>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={copyList}
-            disabled={loading}
-            className="rounded-lg border border-neutral-200 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-900 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
+          <button type="button" onClick={copyList} disabled={loading} className={cn(UI.btnSecondary, "py-2.5")}>
             {copied ? "Copied" : "Copy as text"}
           </button>
           <button
@@ -4257,7 +4456,7 @@ function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, prici
               if (!printShoppingList(listText())) copyList();
             }}
             disabled={loading}
-            className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className={cn(UI.btnPrimary, "py-2.5")}
           >
             Print
           </button>
@@ -4267,25 +4466,61 @@ function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, prici
   );
 }
 
+/* ============================================================ ConfirmPopup */
+
+/**
+ * Small destructive-action confirmation, styled like
+ * pop-folder/discard-confirmation-popup.jsx so it matches the rest of the app.
+ */
+function ConfirmPopup({ title, message, confirmLabel = "Confirm", cancelLabel = "Cancel", onClose, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
+      <div className="w-full max-w-[360px] rounded-[16px] bg-white p-5 shadow-lg" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-[#252525] text-[16px] font-semibold leading-normal tracking-[-0.32px]">{title}</h2>
+
+        <p className="mt-2 text-[#738298] text-[13px] font-normal leading-[150%] tracking-[-0.26px]">{message}</p>
+
+        <div className="mt-6 flex justify-end gap-2.5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-[6px] border border-[#E1E6ED] bg-white text-[#535359] text-[12px] font-semibold cursor-pointer hover:bg-[#F5F7FA] transition-colors"
+          >
+            {cancelLabel}
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="px-4 py-2 rounded-[6px] bg-[#E76F51] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#D65F42] transition-colors"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ============================================================ ModalShell */
 
 function ModalShell({ title, subtitle, onClose, widthClass, tall = false, children }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-5" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#252525]/50 p-5" onClick={onClose}>
       <div
         className={cn(
-          "flex w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl",
+          "flex w-full flex-col overflow-hidden rounded-[15px] border border-[#E1E6ED] bg-white shadow-[0px_4px_10px_rgba(0,0,0,0.12)]",
           tall ? "h-[92vh] max-h-[92vh]" : "max-h-[92vh]",
           widthClass,
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-none items-start gap-3 border-b border-neutral-100 px-5 py-4">
-          <div className="min-w-0 flex-1">
-            <div className="text-base font-semibold text-neutral-900">{title}</div>
-            {subtitle && <div className="mt-0.5 text-[12.5px] text-neutral-400">{subtitle}</div>}
+        <div className="flex flex-none items-start gap-3 border-b border-[#E1E6ED] px-5 py-4">
+          <div className="min-w-0 flex-1 flex flex-col gap-1">
+            <p className={UI.title}>{title}</p>
+            {subtitle && <p className={UI.subtitle}>{subtitle}</p>}
           </div>
-          <button onClick={onClose} className="shrink-0 px-1 text-2xl leading-none text-neutral-400 hover:text-neutral-900">
+          <button onClick={onClose} className="shrink-0 px-1 text-2xl leading-none text-[#A1A1A1] cursor-pointer hover:text-[#252525] transition-colors">
             ×
           </button>
         </div>
