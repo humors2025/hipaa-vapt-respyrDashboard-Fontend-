@@ -84,6 +84,7 @@ import {
   updateDietPlanFoodNewTestService,
 } from "@/services/authService";
 import { selectDietAnalysisRequestedWeek } from "@/store/dietAnalysisSlice";
+import { selectMacroSummaryData } from "@/store/macroSummarySlice";
 
 /* ============================================================ constants */
 
@@ -1017,15 +1018,25 @@ function readTargets(source) {
   if (!source || typeof source !== "object") return null;
   const t =
     source.targets ||
+    source.target ||
     source.daily_targets ||
+    source.daily_target ||
+    source.day_targets ||
     source.macro_targets ||
     source.target_macros ||
     source.macro_goals ||
+    source.goals ||
+    source.goal ||
     source.final_macro_summary ||
     source.current_data?.final_macro_summary ||
     source.weekly_json_data ||
     source.macro_summary ||
     source.daily_macros ||
+    source.meta?.targets ||
+    source.summary?.targets ||
+    source.profile?.targets ||
+    source.user_profile?.targets ||
+    source.user?.targets ||
     (source.calories_target !== undefined || source.protein_target !== undefined ? source : null);
   if (!t || typeof t !== "object") return null;
   const targets = {
@@ -1446,6 +1457,59 @@ function fitchefUserFromRequest(req) {
   }
 }
 
+/**
+ * Macro targets the generator was asked for, from food_json._request: either
+ * explicit fields on the recorded request (calories / protein / carbs / fat /
+ * fiber, with or without a *_target / target_* affix) or the same names as
+ * query params of the recorded generator URL. Returns a readTargets()-ready
+ * object, or null when the request carries no macro figures at all.
+ */
+function targetsFromRequest(req) {
+  if (!req || typeof req !== "object") return null;
+  const bag = {};
+  const take = (k, v) => {
+    if (v === undefined || v === null || v === "") return;
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 0) bag[k] = n;
+  };
+  const pick = (obj, keys) => keys.map((k) => obj?.[k]).find((v) => v !== undefined && v !== null && v !== "");
+
+  // Nested request bodies (req.body / req.params / req.query) and flat fields.
+  const sources = [req, req.body, req.params, req.query, req.targets, req.macros].filter(
+    (s) => s && typeof s === "object"
+  );
+  for (const s of sources) {
+    take("kcal", pick(s, ["kcal", "kcals", "calories", "calories_target", "calorie_target", "target_calories", "energy_kcal"]));
+    take("protein_g", pick(s, ["protein_g", "protein", "protein_target", "target_protein"]));
+    take("carbs_g", pick(s, ["carbs_g", "carbs", "carbohydrate", "carbs_target", "target_carbs"]));
+    take("fat_g", pick(s, ["fat_g", "fat", "fats", "fat_target", "target_fat"]));
+    take("fiber_g", pick(s, ["fiber_g", "fibre_g", "fiber", "fibre", "fiber_target", "target_fiber"]));
+  }
+
+  // …/generate?name=…&user=…&calories=1669&protein=146&carbs=125&fat=65
+  const url = String(req.url || "");
+  const qs = url.includes("?") ? url.slice(url.indexOf("?") + 1) : "";
+  if (qs) {
+    const params = {};
+    for (const part of qs.split("&")) {
+      const [k, v = ""] = part.split("=");
+      if (!k) continue;
+      try {
+        params[decodeURIComponent(k)] = decodeURIComponent(v);
+      } catch {
+        params[k] = v;
+      }
+    }
+    if (bag.kcal === undefined) take("kcal", pick(params, ["kcal", "kcals", "calories", "cal", "target_calories"]));
+    if (bag.protein_g === undefined) take("protein_g", pick(params, ["protein", "protein_g", "target_protein"]));
+    if (bag.carbs_g === undefined) take("carbs_g", pick(params, ["carbs", "carbs_g", "carbohydrate", "target_carbs"]));
+    if (bag.fat_g === undefined) take("fat_g", pick(params, ["fat", "fats", "fat_g", "target_fat"]));
+    if (bag.fiber_g === undefined) take("fiber_g", pick(params, ["fiber", "fibre", "fiber_g", "target_fiber"]));
+  }
+
+  return Object.keys(bag).length > 0 ? { targets: bag } : null;
+}
+
 
 /**
  * The FitChef plan's real on-disk key, from food_json._saved_to
@@ -1470,7 +1534,10 @@ function fitchefPlanKeyFromSavedTo(savedTo) {
 export function normalizeWeeklyPlan(response) {
   const data = response?.data && response?.data?.food_json !== undefined ? response.data : response;
   const foodJson = data?.food_json || {};
-  const weekTargets = readTargets(foodJson) || readTargets(data);
+  // Week-level targets: explicit fields on food_json / the row first, then the
+  // macro figures the generator was asked for (food_json._request).
+  const weekTargets =
+    readTargets(foodJson) || readTargets(data) || readTargets(targetsFromRequest(foodJson?._request));
 
   const days = (Array.isArray(foodJson.days) ? foodJson.days : []).map((day, di) => {
     const meals = { breakfast: [], lunch: [], snacks: [], dinner: [] };
@@ -1841,29 +1908,49 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   // Used as the comparison target for days whose plan carries no targets of
   // its own, so the "Xg short / over" labels still have something to measure against.
   const [clientTargets, setClientTargets] = useState(null);
+  // Macro summary client-details already loaded for the selected date
+  // (macroSummary slice) — used when the fetch below finds nothing.
+  const storeMacroSummary = useSelector(selectMacroSummaryData);
+  const storeTargets = useMemo(() => {
+    const body =
+      storeMacroSummary?.data && typeof storeMacroSummary.data === "object" ? storeMacroSummary.data : storeMacroSummary;
+    return readTargets(body) || readTargets(body?.current_data) || readTargets(body?.previous_data);
+  }, [storeMacroSummary]);
 
   /* ---- client macro targets (non-fatal: labels just stay hidden) ---- */
+  // get_macro_summary_by_date only answers for a date that has a strategy, so
+  // try the week start, the week end and today in turn; first hit wins. The
+  // real client id (Redux) is preferred over the plan's FitChef test id.
   useEffect(() => {
-    if (!profileId) {
+    const clientProfileId = requestedWeek?.profileId || profileId;
+    if (!clientProfileId) {
       setClientTargets(null);
       return undefined;
     }
     let cancelled = false;
     (async () => {
-      try {
-        const date = weekStart || new Date().toISOString().slice(0, 10);
-        const res = await fetchMacroSummaryByDate(profileId, date);
-        if (cancelled) return;
-        const body = res?.data && typeof res.data === "object" ? res.data : res;
-        setClientTargets(readTargets(body) || readTargets(body?.current_data) || readTargets(body?.previous_data));
-      } catch {
-        if (!cancelled) setClientTargets(null);
+      const today = new Date().toISOString().slice(0, 10);
+      const dates = [...new Set([weekStart, weekEnd, today].filter(Boolean))];
+      let found = null;
+      for (const date of dates) {
+        try {
+          const res = await fetchMacroSummaryByDate(clientProfileId, date);
+          if (cancelled) return;
+          const body = res?.data && typeof res.data === "object" ? res.data : res;
+          found = readTargets(body) || readTargets(body?.current_data) || readTargets(body?.previous_data);
+          console.debug("[DietPlanNew] client targets", { profileId: clientProfileId, date, found });
+          if (found) break;
+        } catch (err) {
+          if (cancelled) return;
+          console.debug("[DietPlanNew] client targets failed", { profileId: clientProfileId, date, err: err?.message });
+        }
       }
+      if (!cancelled) setClientTargets(found);
     })();
     return () => {
       cancelled = true;
     };
-  }, [profileId, weekStart]);
+  }, [requestedWeek?.profileId, profileId, weekStart, weekEnd]);
 
   /* ---- client diet_type (non-fatal: search just defaults to "All") ---- */
   useEffect(() => {
@@ -1962,9 +2049,15 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   // the macros panel and the day tabs can compare against something.
   const days = useMemo(() => {
     const list = plan?.days || [];
-    if (!clientTargets) return list;
-    return list.map((d) => (d.targets ? d : { ...d, targets: clientTargets }));
-  }, [plan, clientTargets]);
+    const fallback = clientTargets || storeTargets;
+    console.debug("[DietPlanNew] targets", {
+      plan: list[0]?.targets || null,
+      client: clientTargets,
+      store: storeTargets,
+    });
+    if (!fallback) return list;
+    return list.map((d) => (d.targets ? d : { ...d, targets: fallback }));
+  }, [plan, clientTargets, storeTargets]);
   const day = days[dayIdx] || null;
   const slot = SLOTS[mealIdx];
   const items = day?.meals?.[slot] || [];
