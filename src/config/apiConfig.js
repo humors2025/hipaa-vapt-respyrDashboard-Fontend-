@@ -43,7 +43,10 @@ export const API_ENDPOINTS = {
     DELETEDIETPLAN: `/${API_VERSION}/dietitian/api/web/delete_diet_plan`,
     UPDATEDIETFOOD: `/${API_VERSION}/dietitian/api/web/trainer-update-weekly-food-json`,
     // Same add/update/delete contract, but against weekly_food_json_suggestions_newtest (DietPlanNew)
-    UPDATEDIETFOODNEWTEST: `/${API_VERSION}/dietitian/api/web/trainer-update-weekly-food-json-newtest`
+    UPDATEDIETFOODNEWTEST: `/${API_VERSION}/dietitian/api/web/trainer-update-weekly-food-json-newtest`,
+    // "Reset week" for DietPlanNew — puts the weekly_food_json_suggestions_newtest
+    // row back to its originally generated plan (drops every trainer edit).
+    RESETWEEKLYFOODJSONNEWTEST: `/${API_VERSION}/dietitian/api/web/reset-weekly-food-json-newtest`
   },
   CLIENTPROFILE: {
     CLIENTPROFILEDATA: `/${API_VERSION}/dietitian/api/web/get_client_data`,
@@ -147,6 +150,11 @@ export const API_ENDPOINTS = {
      FITCHEFSEARCH: `/${API_VERSION}/dietitian/api/web/search-foods`,
     // FitChef shopping-list pricer (internal Next.js proxy to respyr.in/fitchef-dashboard/api/shopping)
     FITCHEFSHOPPING: "/api/food/shopping",
+    // FitChef custom meal (internal Next.js proxy to respyr.in/fitchef-dashboard/api/custom_meal)
+    FITCHEFCUSTOMMEAL: "/api/food/custom-meal",
+    // "Make my meal" plate → Lambda (respyr-metabolism-web). Registers the
+    // combination against the plan row and returns the generated meal image.
+    CUSTOMMEAL: `/${API_VERSION}/dietitian/api/web/custom-meal`,
   },
 
     LOGS: {

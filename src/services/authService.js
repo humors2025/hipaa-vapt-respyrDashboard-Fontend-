@@ -523,6 +523,30 @@ export const updateDietPlanFoodNewTestService = async (payload) => {
   });
 };
 
+// "Reset week" for DietPlanNew (reset-weekly-food-json-newtest). Puts the
+// weekly_food_json_suggestions_newtest row back to its originally generated
+// plan, discarding every trainer edit (added / swapped / custom-meal foods).
+// Payload:
+//   { id, dietitian_id, profile_id, week_start_date, week_end_date }
+//   id            — row id of weekly_food_json_suggestions_newtest (plan.meta.id)
+//   dietitian_id  — must equal the JWT's dietician_id, so it is filled from the
+//                   access token when the caller leaves it out
+// Resolves to the API reply as-is ({ status, message, data } envelope).
+export const resetWeeklyFoodJsonNewTestService = async (payload) => {
+  const body = {
+    id: Number(payload?.id),
+    dietitian_id: payload?.dietitian_id || getDietitianIdFromAccessToken(),
+    profile_id: payload?.profile_id,
+    week_start_date: payload?.week_start_date,
+    week_end_date: payload?.week_end_date,
+  };
+  return apiFetcher(API_ENDPOINTS.PLAN.RESETWEEKLYFOODJSONNEWTEST, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+};
+
 
 
 export const fetchDietPlanJsonService = async (login_id, profile_id, diet_plan_id) => {
@@ -779,7 +803,7 @@ export const fetchDietAnalysisPlan = async (
 // null to go back to the real profileId / week / token-derived dietitian_id.
 export const NEWTEST_FIXED_PAYLOAD = {
   dietitian_id: "RESPYRD01",
-  profile_id: "profile405",
+  profile_id: "profile101",
   week_start_date: "2026-09-06",
   week_end_date: "2026-09-12",
 };
@@ -1525,6 +1549,49 @@ export const priceShoppingListService = async (days, { signal, zip  } = {}) => {
   const data = await res.json().catch(() => null);
   if (!res.ok || !data || data.error) {
     throw new Error(data?.error || `Shopping pricing failed (${res.status})`);
+  }
+  return data;
+};
+
+// Registers a "Make my meal" plate built from several dish-bank foods with
+// FitChef (internal Next.js proxy → respyr.in/fitchef-dashboard/api/custom_meal).
+// payload: { profile_id, record_id, day, meal_name, name, ingredients: [{ key, grams }] }
+//   day is 0-based; meal_name is breakfast | lunch | snacks | dinner. Same shape
+//   as saveCustomMealService below, just without the bearer token.
+// Resolves to the upstream reply as-is; throws on a non-2xx or { error } reply.
+export const createFitChefCustomMealService = async (payload, { signal } = {}) => {
+  const res = await fetch(API_ENDPOINTS.FOOD.FITCHEFCUSTOMMEAL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data || data.error) {
+    throw new Error(data?.error || `Custom meal failed (${res.status})`);
+  }
+  return data;
+};
+
+// Registers a "Make my meal" plate (several dish-bank foods on one slot) with
+// the Lambda backend (POST /dietitian/api/web/custom-meal) and gets back the
+// generated meal image. Goes through apiFetcher, so the bearer token is attached.
+// payload:
+//   { profile_id, record_id, day, meal_name, name, ingredients: [{ key, grams }] }
+//   record_id  — id of the weekly_food_json_suggestions_newtest row (plan.meta.id)
+//   day        — 0-based day index in the week
+//   meal_name  — breakfast | lunch | snacks | dinner
+//   ingredients — dish-bank keys ("usa_breakfast:741") with grams on the plate
+// Resolves to the API reply as-is; throws on a non-2xx / { status: false } reply.
+export const saveCustomMealService = async (payload, { signal } = {}) => {
+  const data = await apiFetcher(API_ENDPOINTS.FOOD.CUSTOMMEAL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal,
+  });
+  if (data?.status === false) {
+    throw new Error(data?.message || data?.error || "Custom meal failed");
   }
   return data;
 };

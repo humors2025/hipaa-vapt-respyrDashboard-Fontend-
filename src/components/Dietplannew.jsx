@@ -74,10 +74,12 @@ import { useSelector } from "react-redux";
 import { cn } from "@/lib/utils";
 import {
   NEWTEST_FIXED_PAYLOAD,
+  saveCustomMealService,
   fetchDietAnalysisPlanNewTest,
   fetchMacroSummaryByDate,
   getClientProfileDetails,
   priceShoppingListService,
+  resetWeeklyFoodJsonNewTestService,
   searchFitChefFoodsService,
   updateDietPlanFoodNewTestService,
 } from "@/services/authService";
@@ -136,6 +138,19 @@ function toMealRow(food) {
     qty: 1,
     source: food?.macro_source || "library",
   };
+}
+
+/**
+ * Total grams of one builder row on the plate: its fitted portion × qty, from
+ * the row's own grams or, failing that, the sum of its ingredient grams.
+ * Used for the FitChef custom_meal payload ({ key, grams }).
+ */
+function mealRowGrams(r) {
+  const qty = num(r?.qty) || 1;
+  const own = num(r?.grams);
+  if (own > 0) return own * qty;
+  const parts = (Array.isArray(r?.contains) ? r.contains : []).reduce((s, i) => s + num(i?.grams), 0);
+  return parts * qty;
 }
 
 /** Free text → steps: one per line, leading "1." / "1)" / "-" / "•" stripped. */
@@ -684,6 +699,25 @@ function readFoodId(meal) {
   const raw = meal?.id ?? meal?.food_id ?? meal?.foodId ?? meal?.custom_id ?? meal?.customId ?? null;
   const s = raw === null || raw === undefined ? "" : String(raw).trim();
   return s ? s : null;
+}
+
+/**
+ * Picture URL out of the custom-meal API reply. The field name is not pinned
+ * down yet, so the usual candidates are tried in order (top level, then the
+ * nested meal / food / result objects, then the first of an images list).
+ */
+function pickCustomMealImage(body) {
+  if (!body || typeof body !== "object") return null;
+  const holders = [body, body.meal, body.food, body.result, body.custom_meal];
+  for (const h of holders) {
+    if (!h || typeof h !== "object") continue;
+    const direct = h.image_url ?? h.imageUrl ?? h.image ?? h.url ?? h.s3_url ?? null;
+    if (typeof direct === "string" && direct.trim()) return direct.trim();
+    const list = Array.isArray(h.images) ? h.images : null;
+    const first = list?.find((u) => typeof u === "string" && u.trim());
+    if (first) return first.trim();
+  }
+  return null;
 }
 
 /** New id for a dish built with Make my meal, same shape the API uses ("custom-" + 10 hex chars). */
@@ -1394,6 +1428,42 @@ function normalizeShopping(raw) {
 }
 
 /**
+ * The FitChef user the plan was generated for, from food_json._request:
+ * an explicit `user` / `user_id` field when present, else the `user=` query
+ * param of the recorded generator URL. Null when neither exists.
+ */
+function fitchefUserFromRequest(req) {
+  if (!req || typeof req !== "object") return null;
+  const direct = req.user || req.user_id || req.userId;
+  if (direct) return String(direct);
+  const url = String(req.url || "");
+  const m = url.match(/[?&]user=([^&]+)/);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return m[1];
+  }
+}
+
+
+/**
+ * The FitChef plan's real on-disk key, from food_json._saved_to
+ * ("…/plans/profile405_week1.json" → "profile405_week1"). This is what
+ * find() in fitchef_dashboard.py actually indexes plans by — it does an
+ * EXACT filename match, and a plan is saved as "<profile>_week<N>.json",
+ * not just "<profile>.json". Using the bare profile id (from the
+ * generator's user= param) 404s against a plan that has a week suffix.
+ */
+function fitchefPlanKeyFromSavedTo(savedTo) {
+  if (!savedTo || typeof savedTo !== "string") return null;
+  const base = savedTo.split(/[\\/]/).pop() || "";
+  return base.replace(/\.json$/i, "") || null;
+}
+
+
+
+/**
  * Response of get_weekly_food_json_suggestions_weeks_newtest → PLAN SHAPE.
  * Accepts either the full envelope ({ status, data }) or just `data`.
  */
@@ -1449,6 +1519,17 @@ export function normalizeWeeklyPlan(response) {
       // &zip=), so live re-pricing (Make My Meal, Shopping List) can match it
       // instead of falling back to the pricer's default region.
       zip: foodJson?._request?.zip || foodJson?.shopping?.week?.zip || null,
+      // FitChef identity the plan was generated for: the `user=` param of the
+      // generator request (…/generate?name=profile405&user=profile405&…), which
+      // is the profile id. custom_meal is posted under this same id.
+      
+      // fitchefUserId: fitchefUserFromRequest(foodJson?._request) || data?.profile_id || null,
+
+      fitchefUserId:
+  fitchefPlanKeyFromSavedTo(foodJson?._saved_to) ||
+  fitchefUserFromRequest(foodJson?._request) ||
+  data?.profile_id ||
+  null,
     },
   };
 }
@@ -1751,6 +1832,9 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   const [mealBuilder, setMealBuilder] = useState(null); // { name, rows: [{ingredient, grams}] }
   const [shoppingOpen, setShoppingOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false); // "Reset week" confirmation popup
+  const [resetting, setResetting] = useState(false); // reset-weekly-food-json-newtest in flight
+  const [deleteTarget, setDeleteTarget] = useState(null); // { dayIdx, slot, foodId, name } awaiting "Delete" confirmation
+  const [customSaving, setCustomSaving] = useState(false); // "Make my meal" save is registering the plate with FitChef
   // Client's diet preference → default diet filter for the FitChef swap search.
   const [clientDiet, setClientDiet] = useState("");
   // Client's prescribed macros (get_macro_summary_by_date → final_macro_summary).
@@ -1966,9 +2050,17 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   function deleteFood(foodId) {
     const f = items.find((x) => x.id === foodId);
     if (!f) return;
-    if (!window.confirm(`Remove "${f.name}" from the plan?\n\nThe slot stays, empty, so you can build a replacement.`)) return;
-    updateFood(dayIdx, slot, foodId, (fd) => ({ ...fd, removed: true }));
-    flash(`Removed ${f.name}`);
+    // Opens the confirmation popup; performDelete() does the work once confirmed.
+    setDeleteTarget({ dayIdx, slot, foodId, name: f.name });
+  }
+
+  /** Runs once the "Delete" popup is confirmed. */
+  function performDelete() {
+    const t = deleteTarget;
+    setDeleteTarget(null);
+    if (!t) return;
+    updateFood(t.dayIdx, t.slot, t.foodId, (fd) => ({ ...fd, removed: true }));
+    flash(`Removed ${t.name}`);
   }
 
   /**
@@ -2058,8 +2150,8 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
     return sumMealRows(mealBuilder?.rows);
   }
 
-  function saveCustomMeal() {
-    if (!mealBuilder) return;
+  async function saveCustomMeal() {
+    if (!mealBuilder || customSaving) return;
     const totals = mealBuilderTotals();
     if (mealBuilder.rows.length === 0) {
       flash("Add at least one food to the meal first.");
@@ -2133,7 +2225,9 @@ const ingredients = rows.flatMap((r) =>
 
     const typedSteps = textToSteps(mealBuilder.method);
     const customId = newCustomFoodId();
-    const customImages = Array.from(new Set(rows.map((r) => r.image).filter(Boolean)));
+    // A plate built from several foods shows no picture at all (the card falls
+    // back to its icon); a single-food meal keeps that food's picture.
+    const customImages = single ? Array.from(new Set(rows.map((r) => r.image).filter(Boolean))) : [];
     const custom = {
       id: customId,
       foodId: customId,
@@ -2163,11 +2257,61 @@ const ingredients = rows.flatMap((r) =>
       fitchefKey: single?.fitchefKey ?? null,
       removed: false,
     };
+
+    // Several dish-bank foods on one plate → register the combination with the
+    // backend (POST /dietitian/api/web/custom-meal) against this plan row, which
+    // answers with the generated picture for the plate. Rows without a dish-bank
+    // key (manual entries) have nothing the backend can look up, so they are
+    // left out of the payload. A failure never blocks the local save.
+    let note = "";
+    const fitchefIngredients = rows
+      .filter((r) => r.fitchefKey)
+      .map((r) => ({ key: r.fitchefKey, grams: round(mealRowGrams(r)) }))
+      .filter((i) => i.grams > 0);
+    if (rows.length > 1 && fitchefIngredients.length > 0) {
+      const meta = plan?.meta || {};
+      const customProfileId = meta.profile_id || profileId || null;
+      const recordId = Number(meta.id);
+      if (!customProfileId || !recordId) {
+        console.warn("[DietPlanNew] custom-meal skipped: plan has no profile id / record id");
+      } else {
+        const payload = {
+          profile_id: customProfileId,
+          record_id: recordId,
+          day: dayIdx,
+          meal_name: slot,
+          name: custom.name,
+          ingredients: fitchefIngredients,
+        };
+        setCustomSaving(true);
+        try {
+          const res = await saveCustomMealService(payload);
+          console.debug("[DietPlanNew] custom-meal", { payload, response: res });
+          const body = res?.data ?? res;
+          // The plate's generated picture becomes the card image (single tile,
+          // no collage since the backend renders the whole plate as one photo).
+          const image = pickCustomMealImage(body);
+          if (image) {
+            custom.image = image;
+            custom.images = [image];
+          }
+          // Keep whatever key the backend assigned so the plate can be referenced later.
+          const key = body?.key ?? body?.food?.key ?? body?.meal?.key ?? body?.result?.key ?? null;
+          if (key) custom.fitchefKey = key;
+        } catch (err) {
+          console.warn("[DietPlanNew] custom-meal failed:", err?.message || err);
+          note = ` (meal image not generated: ${err?.message || "unreachable"})`;
+        } finally {
+          setCustomSaving(false);
+        }
+      }
+    }
+
     // Empty slot (no food to replace) → add; otherwise replace the chosen food.
     if (mealBuilder.forFoodId == null) addFood(dayIdx, slot, custom);
     else updateFood(dayIdx, slot, mealBuilder.forFoodId, () => custom);
     setMealBuilder(null);
-    flash(`Saved ${mealBuilder.name || "custom meal"}`);
+    flash(`Saved ${mealBuilder.name || "custom meal"}${note}`);
   }
 
   function shoppingList() {
@@ -2260,33 +2404,60 @@ const ingredients = rows.flatMap((r) =>
   }
 
   /**
-   * "Reset week": throws away every unsaved change on the whole week — foods
-   * added from "Search a swap", swapped-in alternatives, "Make my meal" rows,
-   * portion steps and deletions — and puts the plan back to what was last
-   * loaded / saved. Nothing is sent to the server; only local state changes.
-   * Any open swap / meal-builder dialog is closed so a half-finished pick
-   * cannot land on the freshly reset plan.
+   * "Reset week": asks the server (reset-weekly-food-json-newtest) to put the
+   * whole week back to its originally generated plan, dropping every trainer
+   * edit — saved or not — foods added from "Search a swap", swapped-in
+   * alternatives, "Make my meal" rows, portion steps and deletions. Local
+   * unsaved changes are thrown away too and the plan is reloaded from the
+   * server. Any open swap / meal-builder dialog is closed so a half-finished
+   * pick cannot land on the freshly reset plan.
    */
   function resetWeek() {
-    if (!original || saving) return;
-    if (!dirty) {
-      flash("Nothing to reset — no unsaved changes");
-      return;
-    }
+    if (!plan || saving || resetting) return;
     setResetOpen(true);
   }
 
   /** Runs once the "Reset week" popup is confirmed. */
-  function performReset() {
+  async function performReset() {
     setResetOpen(false);
-    if (!original || saving || !dirty) return;
-    setPlan(structuredClone(original));
-    setSwapState(null);
-    setSwapQuery("");
-    setMealBuilder(null);
-    setDirty(false);
-    flash("Week reset to the last saved plan");
-    onUndo?.();
+    if (!plan || saving || resetting) return;
+
+    const meta = plan.meta || {};
+    const payload = {
+      id: Number(meta.id),
+      dietitian_id: meta.dietitian_id || undefined, // service falls back to the access token
+      profile_id: meta.profile_id || profileId,
+      week_start_date: meta.week_start_date || weekStart,
+      week_end_date: meta.week_end_date || weekEnd,
+    };
+    if (!payload.id || !payload.profile_id || !payload.week_start_date || !payload.week_end_date) {
+      flash("Cannot reset: this plan has no row id / profile id / week.");
+      return;
+    }
+
+    setResetting(true);
+    try {
+      const res = await resetWeeklyFoodJsonNewTestService(payload);
+      // The newtest endpoints answer { status: true|false, message, data }.
+      const accepted = res?.ok === true || res?.success === true || res?.status === true || res?.status === "success";
+      console.debug("[DietPlanNew] reset week", { payload, response: res, accepted });
+      if (!accepted) {
+        throw new Error(res?.message || "Reset week failed");
+      }
+      setSwapState(null);
+      setSwapQuery("");
+      setMealBuilder(null);
+      setDirty(false);
+      flash(res?.message || "Week reset to the original plan");
+      onUndo?.();
+      // Reload from the server so the grid shows the reset row.
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      console.error("DietPlanNew reset week failed:", err);
+      flash("Reset failed: " + (err?.message || "unknown error"));
+    } finally {
+      setResetting(false);
+    }
   }
 
 
@@ -2358,11 +2529,11 @@ const ingredients = rows.flatMap((r) =>
           <div className="flex items-center gap-2.5 flex-wrap">
             <button
               onClick={resetWeek}
-              disabled={!dirty || saving}
-              title={dirty ? "Discard all unsaved changes to this week" : "No unsaved changes to reset"}
+              disabled={!plan?.meta?.id || saving || resetting}
+              title="Put this week back to its original plan — every edit (saved or unsaved) is discarded"
               className={UI.btnDanger}
             >
-              Reset week
+              {resetting ? "Resetting…" : "Reset week"}
             </button>
             <button onClick={() => setShoppingOpen(true)} className={UI.btnSecondary}>
               Shopping list
@@ -2570,6 +2741,7 @@ const ingredients = rows.flatMap((r) =>
           onChange={setMealBuilder}
           onClose={() => setMealBuilder(null)}
           onSave={saveCustomMeal}
+          saving={customSaving}
         />
       )}
 
@@ -2577,10 +2749,21 @@ const ingredients = rows.flatMap((r) =>
       {resetOpen && (
         <ConfirmPopup
           title="Reset this week?"
-          message="All unsaved changes (added, swapped and custom meals) will be discarded."
+          message="The week goes back to its original plan. Every edit — added, swapped and custom meals, saved or not — will be discarded."
           confirmLabel="Reset week"
           onClose={() => setResetOpen(false)}
           onConfirm={performReset}
+        />
+      )}
+
+      {/* ------------------------------------------------ delete food confirm */}
+      {deleteTarget && (
+        <ConfirmPopup
+          title={`Remove "${deleteTarget.name}" from the plan?`}
+          message="The slot stays, empty, so you can build a replacement."
+          confirmLabel="Delete"
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={performDelete}
         />
       )}
 
@@ -3539,7 +3722,7 @@ function macroShares(p, c, f) {
  *     something is added, then follows what is being built
  *   - nothing matches → "Not in the dish bank." (no AI / free-text add)
  */
-function MakeMealDialog({ state, totals, target, slot, defaultDiet = "", zip, onChange, onClose, onSave }) {
+function MakeMealDialog({ state, totals, target, slot, defaultDiet = "", zip, onChange, onClose, onSave, saving = false }) {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState([]);
   const [meta, setMeta] = useState({ count: 0, bank: 0, inSlot: 0, page: 0, pages: 0 });
@@ -4058,8 +4241,8 @@ const totalPrice = useMemo(() => {
 
       {/* ------------------------------------------------ save */}
       <div className="flex-none border-t border-[#E1E6ED] px-5 py-3">
-        <button onClick={onSave} disabled={!hasRows} className={cn(UI.btnPrimary, "w-full py-2.5 text-[13px] xl:text-[14px] 2xl:text-[15px]")}>
-          Save into the plan
+        <button onClick={onSave} disabled={!hasRows || saving} className={cn(UI.btnPrimary, "w-full py-2.5 text-[13px] xl:text-[14px] 2xl:text-[15px]")}>
+          {saving ? "Saving…" : "Save into the plan"}
         </button>
       </div>
     </ModalShell>
@@ -4216,15 +4399,15 @@ function ShoppingMeal({ meal: m }) {
   return (
     <section className="border-t border-[#E1E6ED]">
       <div className="flex items-baseline gap-2 px-4 pt-2.5 pb-1">
-        <span className={UI.sectionLabel}>{SLOT_META[m.slot]?.label || m.slot}</span>
-        <span className={cn("min-w-0 flex-1 truncate text-[#738298]", UI.small)}>{m.title}</span>
+        <span className={cn("shrink-0", UI.sectionLabel)}>{SLOT_META[m.slot]?.label || m.slot}</span>
+        <span className={cn("min-w-0 flex-1 break-words leading-[150%] text-[#738298]", UI.small)}>{m.title}</span>
         {m.minutes ? <span className={cn("shrink-0 text-[#A1A1A1]", UI.small)}>{m.minutes} min</span> : null}
       </div>
       <ul className="divide-y divide-[#F5F7FA]">
         {m.items.map((it, i) => (
           <li key={`${i}-${it.name}`} className={cn("flex items-center gap-4 px-4 py-2.5", UI.body)}>
             <span className="w-[150px] shrink-0 font-semibold tabular-nums text-[#252525]">{it.text}</span>
-            <span className="min-w-0 flex-1 truncate text-[#535359]">{it.name}</span>
+            <span className="min-w-0 flex-1 break-words text-[#535359]">{it.name}</span>
             <PriceTag price={it.price} approx={it.approx} note={it.priceNote} className={cn("shrink-0", UI.body)} />
           </li>
         ))}
@@ -4387,7 +4570,7 @@ function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, prici
                       return (
                         <li key={`${i}-${it.name}`} className={cn("flex items-center gap-4 px-4 py-2.5", UI.body)} title={hint || undefined}>
                           <span className="w-[150px] shrink-0 font-semibold tabular-nums text-[#252525]">{it.text}</span>
-                          <span className="min-w-0 flex-1 truncate text-[#535359]">{it.name}</span>
+                          <span className="min-w-0 flex-1 break-words text-[#535359]">{it.name}</span>
                           <PriceTag price={it.price} approx={it.approx} note={it.priceNote} className={cn("shrink-0", UI.body)} />
                         </li>
                       );
