@@ -73,7 +73,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { cn } from "@/lib/utils";
 import {
-  NEWTEST_FIXED_PAYLOAD,
+  // NEWTEST_FIXED_PAYLOAD, // old TEMP sample-week fallback, now null
+  approveWeeklyFoodJsonNewTestService,
   saveCustomMealService,
   fetchDietAnalysisPlanNewTest,
   fetchMacroSummaryByDate,
@@ -861,6 +862,33 @@ function lacksRecipeDetail(item) {
     (item.ingredients || []).length === 0 &&
     item.diet_type !== "custom"
   );
+}
+
+/**
+ * Week-level lock derived from the plan row's `status_value`
+ * (get_weekly_food_json_suggestions_weeks_newtest):
+ *   1 — approved by the dietician
+ *   2 — locked by the server (e.g. week already in use / closed)
+ * Both disable "Reset week" and "Approve week". Compared as a number since the
+ * API may send the value as a string.
+ */
+function weekStatus(plan) {
+  const v = Number(plan?.meta?.status_value);
+  return Number.isFinite(v) ? v : null;
+}
+function isWeekApproved(plan) {
+  return weekStatus(plan) === 1;
+}
+function isWeekLocked(plan) {
+  const s = weekStatus(plan);
+  return s === 1 || s === 2;
+}
+/** Tooltip / toast reason for a locked week, or null when it is open. */
+function weekLockReason(plan) {
+  const s = weekStatus(plan);
+  if (s === 1) return "This week plan is approved";
+  if (s === 2) return "This week plan is locked";
+  return null;
 }
 
 /** Live row whose API record carried no diet tag (so the card shows only "5 MIN"). */
@@ -1870,14 +1898,18 @@ function pluralUnit(unit, n) {
 /* ============================================================ component */
 
 export default function DietPlanNew({ plan: planProp, clientName = "Client", clientGoal = "", onSave, onUndo }) {
-  // Week picked in client-details (recorded by the dietAnalysis slice).
+  // Week picked in client-details (recorded by the dietAnalysis slice). The
+  // week_start_date / week_end_date come from get-weekly-tab-list-newtest;
+  // profileId is the ?profile_id from the URL.
   const requestedWeek = useSelector(selectDietAnalysisRequestedWeek);
-  // TEMP (testing only): when no week has been picked (e.g. the client has no
-  // weekly tab list yet) fall back to the fixed *_newtest sample week so the
-  // plan still loads. Goes away with NEWTEST_FIXED_PAYLOAD in authService.
-  const profileId = requestedWeek?.profileId ?? NEWTEST_FIXED_PAYLOAD?.profile_id ?? null;
-  const weekStart = requestedWeek?.weekStartDate ?? NEWTEST_FIXED_PAYLOAD?.week_start_date ?? null;
-  const weekEnd = requestedWeek?.weekEndDate ?? NEWTEST_FIXED_PAYLOAD?.week_end_date ?? null;
+  // Old TEMP fallback to the fixed *_newtest sample week (NEWTEST_FIXED_PAYLOAD
+  // is now null in authService):
+  // const profileId = requestedWeek?.profileId ?? NEWTEST_FIXED_PAYLOAD?.profile_id ?? null;
+  // const weekStart = requestedWeek?.weekStartDate ?? NEWTEST_FIXED_PAYLOAD?.week_start_date ?? null;
+  // const weekEnd = requestedWeek?.weekEndDate ?? NEWTEST_FIXED_PAYLOAD?.week_end_date ?? null;
+  const profileId = requestedWeek?.profileId ?? null;
+  const weekStart = requestedWeek?.weekStartDate ?? null;
+  const weekEnd = requestedWeek?.weekEndDate ?? null;
 
   const [plan, setPlan] = useState(() => planProp || null);
   const [original, setOriginal] = useState(() => (planProp ? structuredClone(planProp) : null));
@@ -1891,6 +1923,14 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
 
   const [dayIdx, setDayIdx] = useState(0);
   const [mealIdx, setMealIdx] = useState(0);
+  // Mirrors of dayIdx / mealIdx for the load effect, which must not re-run on
+  // every day click. Which week the grid currently shows, so a reload of the
+  // same week (after Save / Reset / Retry) keeps the trainer on their day.
+  const dayIdxRef = useRef(0);
+  const mealIdxRef = useRef(0);
+  dayIdxRef.current = dayIdx;
+  mealIdxRef.current = mealIdx;
+  const loadedWeekKeyRef = useRef(null);
   const [dirty, setDirty] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -1900,6 +1940,8 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   const [shoppingOpen, setShoppingOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false); // "Reset week" confirmation popup
   const [resetting, setResetting] = useState(false); // reset-weekly-food-json-newtest in flight
+  const [approveOpen, setApproveOpen] = useState(false); // "Approve week" confirmation popup
+  const [approving, setApproving] = useState(false); // food_json_suggestion_approve_plan_newtest in flight
   const [deleteTarget, setDeleteTarget] = useState(null); // { dayIdx, slot, foodId, name } awaiting "Delete" confirmation
   const [customSaving, setCustomSaving] = useState(false); // "Make my meal" save is registering the plate with FitChef
   // Client's diet preference → default diet filter for the FitChef swap search.
@@ -1938,11 +1980,11 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
           if (cancelled) return;
           const body = res?.data && typeof res.data === "object" ? res.data : res;
           found = readTargets(body) || readTargets(body?.current_data) || readTargets(body?.previous_data);
-          console.debug("[DietPlanNew] client targets", { profileId: clientProfileId, date, found });
+        
           if (found) break;
         } catch (err) {
           if (cancelled) return;
-          console.debug("[DietPlanNew] client targets failed", { profileId: clientProfileId, date, err: err?.message });
+        
         }
       }
       if (!cancelled) setClientTargets(found);
@@ -2010,8 +2052,23 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
         setPlan(next);
         setOriginal(structuredClone(next));
         setDirty(false);
-        setDayIdx(0);
-        setMealIdx(0);
+        // Only jump back to Day 1 when a different client / week comes in. A
+        // reload of the week already on screen (the refetch after Save, Reset
+        // week or Retry) stays on the day and meal the trainer was working on,
+        // clamped in case the server returned fewer days / meals.
+        const weekKey = `${profileId}|${weekStart}|${weekEnd}`;
+        if (loadedWeekKeyRef.current === weekKey) {
+          const dayCount = next.days.length;
+          const keptDay = Math.min(dayIdxRef.current, Math.max(dayCount - 1, 0));
+          const mealCount = next.days[keptDay]?.meals?.length ?? 0;
+          const keptMeal = Math.min(mealIdxRef.current, Math.max(mealCount - 1, 0));
+          setDayIdx(keptDay);
+          setMealIdx(keptMeal);
+        } else {
+          setDayIdx(0);
+          setMealIdx(0);
+        }
+        loadedWeekKeyRef.current = weekKey;
         setSwapState(null);
         setMealBuilder(null);
         if (next.days.length === 0) {
@@ -2050,11 +2107,7 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   const days = useMemo(() => {
     const list = plan?.days || [];
     const fallback = clientTargets || storeTargets;
-    console.debug("[DietPlanNew] targets", {
-      plan: list[0]?.targets || null,
-      client: clientTargets,
-      store: storeTargets,
-    });
+    
     if (!fallback) return list;
     return list.map((d) => (d.targets ? d : { ...d, targets: fallback }));
   }, [plan, clientTargets, storeTargets]);
@@ -2506,14 +2559,23 @@ const ingredients = rows.flatMap((r) =>
    * pick cannot land on the freshly reset plan.
    */
   function resetWeek() {
-    if (!plan || saving || resetting) return;
+    if (!plan || saving || resetting || approving) return;
+    // An approved (status 1) or locked (status 2) week cannot be reset.
+    if (isWeekLocked(plan)) {
+      flash(`${weekLockReason(plan)} and cannot be reset.`);
+      return;
+    }
     setResetOpen(true);
   }
 
   /** Runs once the "Reset week" popup is confirmed. */
   async function performReset() {
     setResetOpen(false);
-    if (!plan || saving || resetting) return;
+    if (!plan || saving || resetting || approving) return;
+    if (isWeekLocked(plan)) {
+      flash(`${weekLockReason(plan)} and cannot be reset.`);
+      return;
+    }
 
     const meta = plan.meta || {};
     const payload = {
@@ -2550,6 +2612,76 @@ const ingredients = rows.flatMap((r) =>
       flash("Reset failed: " + (err?.message || "unknown error"));
     } finally {
       setResetting(false);
+    }
+  }
+
+  /**
+   * "Approve week" — opens the confirmation popup. The actual API call runs
+   * in performApprove() once the user clicks "Yes".
+   */
+  function approveWeek() {
+    if (!plan || saving || resetting || approving) return;
+    // Already approved (status 1) or locked (status 2): nothing to approve.
+    if (isWeekLocked(plan)) {
+      flash(`${weekLockReason(plan)} and cannot be approved.`);
+      return;
+    }
+    setApproveOpen(true);
+  }
+
+  /**
+   * Runs once the "Approve week" popup is confirmed. POSTs
+   * food_json_suggestion_approve_plan_newtest with
+   * { id, dietician_id, profile_id, status: 1 } and, on success, marks the
+   * loaded plan as approved so the "Approved" badge shows immediately.
+   */
+  async function performApprove() {
+    setApproveOpen(false);
+    if (!plan || saving || resetting || approving) return;
+    if (isWeekLocked(plan)) {
+      flash(`${weekLockReason(plan)} and cannot be approved.`);
+      return;
+    }
+
+    const meta = plan.meta || {};
+    const payload = {
+      id: Number(meta.id),
+      dietician_id: meta.dietitian_id || undefined, // service falls back to the access token
+      profile_id: meta.profile_id || profileId,
+      status: 1,
+    };
+    if (!payload.id || !payload.profile_id) {
+      flash("Cannot approve: this plan has no row id / profile id.");
+      return;
+    }
+
+    setApproving(true);
+    try {
+      const res = await approveWeeklyFoodJsonNewTestService(payload);
+      // The approve endpoint answers { status: "success"|"error", code, message, data }.
+      const accepted = res?.status === "success" || res?.status === true || res?.success === true;
+      console.debug("[DietPlanNew] approve week", { payload, response: res, accepted });
+      if (!accepted) {
+        throw new Error(res?.message || "Approve week failed");
+      }
+      setPlan((prev) => {
+        if (!prev) return prev;
+        const next = structuredClone(prev);
+        next.meta = { ...(next.meta || {}), status_value: 1 };
+        return next;
+      });
+      setOriginal((prev) => {
+        if (!prev) return prev;
+        const next = structuredClone(prev);
+        next.meta = { ...(next.meta || {}), status_value: 1 };
+        return next;
+      });
+      flash(res?.message || "Week plan approved");
+    } catch (err) {
+      console.error("DietPlanNew approve week failed:", err);
+      flash("Approve failed: " + (err?.message || "unknown error"));
+    } finally {
+      setApproving(false);
     }
   }
 
@@ -2603,9 +2735,14 @@ const ingredients = rows.flatMap((r) =>
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2 flex-wrap py-[5px]">
               <p className={UI.title}>{clientName}</p>
-              {plan.meta?.status_value === 1 && (
+              {isWeekApproved(plan) && (
                 <span className="px-2.5 py-[5px] rounded-[5px] bg-[#2A9D8F1A] text-[#2A9D8F] text-[10px] xl:text-[11px] 2xl:text-[12px] font-semibold leading-[110%] tracking-[-0.2px]">
                   Approved
+                </span>
+              )}
+              {weekStatus(plan) === 2 && (
+                <span className="px-2.5 py-[5px] rounded-[5px] bg-[#7382981A] text-[#738298] text-[10px] xl:text-[11px] 2xl:text-[12px] font-semibold leading-[110%] tracking-[-0.2px]">
+                  Locked
                 </span>
               )}
               {dirty && (
@@ -2622,8 +2759,12 @@ const ingredients = rows.flatMap((r) =>
           <div className="flex items-center gap-2.5 flex-wrap">
             <button
               onClick={resetWeek}
-              disabled={!plan?.meta?.id || saving || resetting}
-              title="Put this week back to its original plan — every edit (saved or unsaved) is discarded"
+              disabled={!plan?.meta?.id || saving || resetting || approving || isWeekLocked(plan)}
+              title={
+                isWeekLocked(plan)
+                  ? `${weekLockReason(plan)} and can no longer be reset`
+                  : "Put this week back to its original plan — every edit (saved or unsaved) is discarded"
+              }
               className={UI.btnDanger}
             >
               {resetting ? "Resetting…" : "Reset week"}
@@ -2631,7 +2772,20 @@ const ingredients = rows.flatMap((r) =>
             <button onClick={() => setShoppingOpen(true)} className={UI.btnSecondary}>
               Shopping list
             </button>
-            <button className={UI.btnPrimary}>Approve week</button>
+            <button
+              onClick={approveWeek}
+              disabled={!plan?.meta?.id || saving || resetting || approving || isWeekLocked(plan)}
+              title={
+                isWeekApproved(plan)
+                  ? "This week plan is already approved"
+                  : isWeekLocked(plan)
+                    ? `${weekLockReason(plan)} and cannot be approved`
+                    : "Mark this week plan as approved"
+              }
+              className={UI.btnPrimary}
+            >
+              {approving ? "Approving…" : isWeekApproved(plan) ? "Approved" : "Approve week"}
+            </button>
           </div>
         </div>
 
@@ -2846,6 +3000,19 @@ const ingredients = rows.flatMap((r) =>
           confirmLabel="Reset week"
           onClose={() => setResetOpen(false)}
           onConfirm={performReset}
+        />
+      )}
+
+      {/* ---------------------------------------------- approve week confirm */}
+      {approveOpen && (
+        <ConfirmPopup
+          title="Approve this week plan?"
+          message="Are you sure you want to approve this week plan?"
+          confirmLabel="Yes"
+          cancelLabel="No"
+          tone="primary"
+          onClose={() => setApproveOpen(false)}
+          onConfirm={performApprove}
         />
       )}
 
@@ -4605,6 +4772,29 @@ function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, prici
         </div>
       )}
 
+      {/* By-day segmented day picker. Lives outside the scrolling body below so
+          it stays pinned while the day's items scroll underneath it. */}
+      {hasApiList && view === "day" && selectedDay && (
+        <div className="px-5 pt-2 pb-3 shrink-0">
+          <div className="border border-[#E1E6ED] rounded-[10px] flex overflow-hidden">
+            {shopping.byDay.map((d) => {
+              const isActive = d.day === selectedDay.day;
+              return (
+                <div
+                  key={d.day}
+                  onClick={() => setDayNo(d.day)}
+                  className={cn("flex-1 px-4 py-2.5 text-center cursor-pointer transition-colors", isActive ? "bg-[#308BF9]" : "bg-white hover:bg-[#F5F7FA]")}
+                >
+                  <p className={cn("text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-[110%] tracking-[-0.24px]", isActive ? "text-white" : "text-[#A1A1A1]")}>
+                    D{d.day}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="max-h-[440px] overflow-y-auto scroll-hide">
         {/* ------------------------------------------------- loading */}
         {loading && (
@@ -4677,26 +4867,9 @@ function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, prici
 
         {/* ------------------------------------------------------ by day */}
         {hasApiList && view === "day" && selectedDay && (
-          <div className="px-5 pb-4 pt-2">
-            {/* segmented day picker */}
-            <div className="border border-[#E1E6ED] rounded-[10px] flex overflow-hidden">
-              {shopping.byDay.map((d) => {
-                const isActive = d.day === selectedDay.day;
-                return (
-                  <div
-                    key={d.day}
-                    onClick={() => setDayNo(d.day)}
-                    className={cn("flex-1 px-4 py-2.5 text-center cursor-pointer transition-colors", isActive ? "bg-[#308BF9]" : "bg-white hover:bg-[#F5F7FA]")}
-                  >
-                    <p className={cn("text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-[110%] tracking-[-0.24px]", isActive ? "text-white" : "text-[#A1A1A1]")}>
-                      D{d.day}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="mt-3 rounded-[15px] border border-[#E1E6ED] overflow-hidden">
+          <div className="px-5 pb-4">
+            {/* segmented day picker is rendered above the scroll body (pinned) */}
+            <div className="rounded-[15px] border border-[#E1E6ED] overflow-hidden">
               <div className="flex items-center gap-2 px-4 pt-3.5 pb-2">
                 <span className="text-base leading-none">📅</span>
                 <span className={cn("text-[#252525] font-semibold", UI.body)}>Day {selectedDay.day}</span>
@@ -4748,7 +4921,15 @@ function ShoppingListDialog({ shopping, fallbackItems = [], dirty = false, prici
  * Small destructive-action confirmation, styled like
  * pop-folder/discard-confirmation-popup.jsx so it matches the rest of the app.
  */
-function ConfirmPopup({ title, message, confirmLabel = "Confirm", cancelLabel = "Cancel", onClose, onConfirm }) {
+/**
+ * `tone` picks the confirm button colour: "danger" (red, default — reset /
+ * delete) or "primary" (blue — approve).
+ */
+function ConfirmPopup({ title, message, confirmLabel = "Confirm", cancelLabel = "Cancel", tone = "danger", onClose, onConfirm }) {
+  const confirmClass =
+    tone === "primary"
+      ? "px-4 py-2 rounded-[6px] bg-[#308BF9] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#2677DB] transition-colors"
+      : "px-4 py-2 rounded-[6px] bg-[#E76F51] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#D65F42] transition-colors";
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
       <div className="w-full max-w-[360px] rounded-[16px] bg-white p-5 shadow-lg" onClick={(e) => e.stopPropagation()}>
@@ -4765,11 +4946,7 @@ function ConfirmPopup({ title, message, confirmLabel = "Confirm", cancelLabel = 
             {cancelLabel}
           </button>
 
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="px-4 py-2 rounded-[6px] bg-[#E76F51] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#D65F42] transition-colors"
-          >
+          <button type="button" onClick={onConfirm} className={confirmClass}>
             {confirmLabel}
           </button>
         </div>

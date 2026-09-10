@@ -55,6 +55,9 @@ export const API_ENDPOINTS = {
     CLIENTINDIVIDUALPROFILEMASKING: `/${API_VERSION}/dietitian/api/web/get-data-points-score-all-ranges-coach-masking`,
     CLIENTPROFILEDATESLIST: `/${API_VERSION}/dietitian/api/web/get-profile-details-dates-taken`,
     CLIENTWEEKLYDATES: `/${API_VERSION}/dietitian/api/web/get-weekly-tab-list`,
+    // Week tabs for DietPlanNew — same payload/response shape as get-weekly-tab-list,
+    // but backed by weekly_food_json_suggestions_newtest
+    CLIENTWEEKLYDATESNEWTEST: `/${API_VERSION}/dietitian/api/web/get-weekly-tab-list-newtest`,
     GETCLIENTPROFILEDETAILS: `/${API_VERSION}/dietitian/api/web/get_client_profile_details`,
     GETCLIENTPROFILEDETAILSMASKED: `/${API_VERSION}/dietitian/api/web/get_client_profile_details_masked`
 
@@ -84,7 +87,9 @@ export const API_ENDPOINTS = {
     DIETANALYSISPLAN: `/${API_VERSION}/dietitian/api/web/get_weekly_food_json_suggestions_weeks`,
     // Recipe-level weekly plan (nutrition, ingredients, method, alternatives) used by DietPlanNew
     DIETANALYSISPLANNEWTEST: `/${API_VERSION}/dietitian/api/web/get_weekly_food_json_suggestions_weeks_newtest`,
-    APPROVALPLAN: `/${API_VERSION}/dietitian/api/web/food_json_suggestion_approve_plan`
+    APPROVALPLAN: `/${API_VERSION}/dietitian/api/web/food_json_suggestion_approve_plan`,
+    // "Approve week" for DietPlanNew — flips status on a weekly_food_json_suggestions_newtest row
+    APPROVALPLANNEWTEST: `/${API_VERSION}/dietitian/api/web/food_json_suggestion_approve_plan_newtest`
   },
   MACROSANALYSIS: {
     GETMACROSUMMARY: `/${API_VERSION}/dietitian/api/web/get_macro_summary_by_date`

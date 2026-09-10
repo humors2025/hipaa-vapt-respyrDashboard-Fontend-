@@ -547,6 +547,29 @@ export const resetWeeklyFoodJsonNewTestService = async (payload) => {
   });
 };
 
+// "Approve week" for DietPlanNew (food_json_suggestion_approve_plan_newtest).
+// Sets status on the weekly_food_json_suggestions_newtest row: 1 = approved,
+// 0 = un-approved. Payload:
+//   { id, dietician_id, profile_id, status }
+//   id            — row id of weekly_food_json_suggestions_newtest (plan.meta.id)
+//   dietician_id  — API spelling; must equal the JWT's dietician_id, so it is
+//                   filled from the access token when the caller leaves it out
+// Resolves to the API reply as-is:
+//   { status: "success"|"error", code, message, data?: { previous_status, new_status, changed, … } }
+export const approveWeeklyFoodJsonNewTestService = async (payload) => {
+  const body = {
+    id: Number(payload?.id),
+    dietician_id: payload?.dietician_id || payload?.dietitian_id || getDietitianIdFromAccessToken(),
+    profile_id: payload?.profile_id,
+    status: payload?.status === undefined || payload?.status === null ? 1 : Number(payload.status),
+  };
+  return apiFetcher(API_ENDPOINTS.DIETANALYSIS.APPROVALPLANNEWTEST, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+};
+
 
 
 export const fetchDietPlanJsonService = async (login_id, profile_id, diet_plan_id) => {
@@ -799,34 +822,39 @@ export const fetchDietAnalysisPlan = async (
 
 
 // TEMP (testing only): fixed payload for the *_newtest endpoint so the sample
-// week can be viewed regardless of which client / week is selected. Set to
-// null to go back to the real profileId / week / token-derived dietitian_id.
-export const NEWTEST_FIXED_PAYLOAD = {
-  dietitian_id: "RESPYRD01",
-  profile_id: "profile101",
-  week_start_date: "2026-09-06",
-  week_end_date: "2026-09-12",
-};
+// week can be viewed regardless of which client / week is selected. Now null:
+// the real payload is built from the URL / access token / selected week below.
+// export const NEWTEST_FIXED_PAYLOAD = {
+//   dietitian_id: "RESPYRD01",
+//   profile_id: "profile101",
+//   week_start_date: "2026-09-06",
+//   week_end_date: "2026-09-12",
+// };
+export const NEWTEST_FIXED_PAYLOAD = null;
 
 // Recipe-level weekly plan for DietPlanNew (get_weekly_food_json_suggestions_weeks_newtest).
-// dietitian_id comes from the access token (JWT-bound identity); super-admin
-// partner_code override applied the same way as fetchDietAnalysisPlan.
+// Payload:
+//   profile_id      — from the page URL (?profile_id=...), arg used as fallback
+//   dietitian_id    — `dietician_id` decoded from the access_token cookie,
+//                     arg used as fallback
+//   week_start_date — from get-weekly-tab-list-newtest (selected week)
+//   week_end_date   — from get-weekly-tab-list-newtest (selected week)
+// Super-admin partner_code override applied the same way as fetchDietAnalysisPlan.
 export const fetchDietAnalysisPlanNewTest = async (
   profileId,
   weekStartDate,
   weekEndDate,
   dietitianId = null
 ) => {
-  const resolvedDietitianId = dietitianId || getDietitianIdFromAccessToken();
+  const resolvedProfileId = getProfileIdFromUrl() ?? profileId ?? null;
+  const resolvedDietitianId = getDietitianIdFromAccessToken() || dietitianId || null;
 
-  const payload = NEWTEST_FIXED_PAYLOAD
-    ? { ...NEWTEST_FIXED_PAYLOAD }
-    : {
-        dietitian_id: resolvedDietitianId,
-        profile_id: profileId,
-        week_start_date: weekStartDate,
-        week_end_date: weekEndDate,
-      };
+  const payload = {
+    dietitian_id: resolvedDietitianId,
+    profile_id: resolvedProfileId,
+    week_start_date: weekStartDate,
+    week_end_date: weekEndDate,
+  };
 
   return apiFetcher(API_ENDPOINTS.DIETANALYSIS.DIETANALYSISPLANNEWTEST, {
     method: "POST",
@@ -870,6 +898,44 @@ export const fetchClientWeeklyDates = async (profileId, dietitianId) => {
       };
     }
     // Re-throw other errors
+    throw error;
+  }
+};
+
+// Week tabs for DietPlanNew (get-weekly-tab-list-newtest).
+// Payload: { profile_id, dietitian_id }
+// Response: { status, message, total_weeks, data: [{ week_label, week_start_date, week_end_date, ... }] }
+export const fetchClientWeeklyDatesNewTest = async (profileId, dietitianId) => {
+  try {
+    const accessToken = Cookies.get("access_token");
+    // profile_id from URL, dietitian_id from the access_token (JWT-bound identity
+    // the backend requires). No partner_code override — see fetchClientProfileDatesList.
+    const resolvedProfileId = profileId ?? getProfileIdFromUrl();
+    const resolvedDietitianId = getDietitianIdFromAccessToken();
+
+    const response = await apiFetcher(API_ENDPOINTS.CLIENTPROFILE.CLIENTWEEKLYDATESNEWTEST, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        profile_id: resolvedProfileId,
+        dietitian_id: resolvedDietitianId,
+      }),
+    });
+
+    return response;
+  } catch (error) {
+    // Same "no weekly data found" handling as fetchClientWeeklyDates
+    if (error.message?.includes("No weekly data found") ||
+        error.data?.message?.includes("No weekly data found")) {
+      return {
+        status: false,
+        message: error.message || "No weekly data found for last 3 months",
+        profile_id: profileId
+      };
+    }
     throw error;
   }
 };

@@ -30,7 +30,8 @@ import {
 import { getTrainerDirection } from "../store/trainerDirectionSlice";
 import {
   fetchClientProfileDatesList,
-  fetchClientWeeklyDates,
+  // fetchClientWeeklyDates, // old: get-weekly-tab-list
+  fetchClientWeeklyDatesNewTest, // new: get-weekly-tab-list-newtest
 } from "../services/authService";
 
 import { cookieManager } from "../lib/cookies";
@@ -160,16 +161,45 @@ const transformDatesToDisplay = () => {
     return "Strong";
   };
 
+  // "2026-09-06" -> "06 Sep, 2026" (built from week_start_date / week_end_date
+  // instead of relying on the API's week_range string)
+  const WEEK_MONTHS = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+  const formatWeekDate = (dateString) => {
+    if (!dateString) return "";
+    const [y, m, d] = String(dateString).split("-").map(Number);
+    if (!y || !m || !d || !WEEK_MONTHS[m - 1]) return dateString;
+    return `${String(d).padStart(2, "0")} ${WEEK_MONTHS[m - 1]}, ${y}`;
+  };
+
+  // Old mapping (get-weekly-tab-list):
+  // const transformWeeklyDatesToDisplay = () => {
+  //   if (!weeklyDates || weeklyDates.length === 0) return [];
+  //
+  //   return weeklyDates.map((weekObj) => ({
+  //     week: weekObj.week_label,
+  //     range: weekObj.week_range,
+  //     weekStartDate: weekObj.week_start_date,
+  //     weekEndDate: weekObj.week_end_date,
+  //     monthLabel: weekObj.month_label,
+  //     weekNoInMonth: weekObj.week_no_in_month,
+  //   }));
+  // };
+
+  // New mapping (get-weekly-tab-list-newtest): only week_label,
+  // week_start_date and week_end_date are bound from the response.
   const transformWeeklyDatesToDisplay = () => {
     if (!weeklyDates || weeklyDates.length === 0) return [];
 
     return weeklyDates.map((weekObj) => ({
       week: weekObj.week_label,
-      range: weekObj.week_range,
       weekStartDate: weekObj.week_start_date,
       weekEndDate: weekObj.week_end_date,
-      monthLabel: weekObj.month_label,
-      weekNoInMonth: weekObj.week_no_in_month,
+      range: `${formatWeekDate(weekObj.week_start_date)} - ${formatWeekDate(
+        weekObj.week_end_date
+      )}`,
     }));
   };
 
@@ -265,7 +295,11 @@ const transformDatesToDisplay = () => {
       setIsDietAnalysisAvailable(true);
 
       try {
-        const response = await fetchClientWeeklyDates(profileId, dietitianId);
+        // Old API (get-weekly-tab-list):
+        // const response = await fetchClientWeeklyDates(profileId, dietitianId);
+
+        // New API (get-weekly-tab-list-newtest), payload { profile_id, dietitian_id }
+        const response = await fetchClientWeeklyDatesNewTest(profileId, dietitianId);
 
         if (
           response &&
