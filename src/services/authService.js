@@ -1968,6 +1968,13 @@ export const createAgreementUploadUrlService = async (payload) => {
 };
 
 export const uploadAgreementPdfToS3 = async (uploadUrl, file) => {
+  // UAT ONLY: the backend returns upload_url = null when agreement storage is
+  // disabled (APP_ENV=uat + SKIP_AGREEMENT_STORAGE=true on the API). Nothing to
+  // upload in that case. Production always returns a real URL.
+  if (!uploadUrl) {
+    return true;
+  }
+
   const res = await fetch(uploadUrl, {
     method: "PUT",
     headers: {
