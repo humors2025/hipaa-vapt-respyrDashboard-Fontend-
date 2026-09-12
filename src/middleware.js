@@ -66,6 +66,7 @@ const ROLE_ALIASES = {
   admin: 'trainer_admin',
   trainer_admin: 'trainer_admin',
   super_admin: 'super_admin',
+  facility_admin: 'facility_admin',
   trainer: 'trainer',
   dietician: 'trainer',
   client: 'client',
@@ -127,6 +128,9 @@ function homeForRole(role) {
     case 'trainer_admin':
       return '/trainer-admin/trainers';
 
+    case 'facility_admin':
+      return '/facility-admin/trainers';
+
     case 'trainer':
       return '/trainer/dashboard';
 
@@ -181,6 +185,8 @@ export function middleware(request) {
   const isProtectedRoute =
     pathname.startsWith('/trainer') ||
     pathname.startsWith('/trainer-admin') ||
+    pathname.startsWith('/facility-admin') ||
+    pathname.startsWith('/payout-setup') ||
     pathname.startsWith('/super-admin') ||
     pathname.startsWith('/superadmin-trainer');
 
@@ -225,6 +231,31 @@ export function middleware(request) {
      * trainer_admin-only.
      */
     if (
+      pathname.startsWith('/facility-admin') &&
+      role !== 'facility_admin'
+    ) {
+      return secureRedirect(
+        homeForRole(role),
+        request
+      );
+    }
+
+    // Stripe returns every payee to /payout-setup; send them to their own
+    // earnings page (query string preserved: ?return=1 / ?refresh=1).
+    if (pathname.startsWith('/payout-setup')) {
+      const dest =
+        role === 'facility_admin'
+          ? '/facility-admin/earnings/payout-setup'
+          : role === 'trainer_admin'
+          ? '/trainer-admin/earnings/payout-setup'
+          : '/trainer/earnings/payout-setup';
+      return secureRedirect(
+        `${dest}${request.nextUrl.search || ''}`,
+        request
+      );
+    }
+
+    if (
       pathname.startsWith(
         '/trainer-admin/invites'
       )
@@ -262,6 +293,7 @@ export function middleware(request) {
       const trainerRoles = [
         'trainer',
         'trainer_admin',
+        'facility_admin',
         'super_admin',
       ];
 
@@ -317,6 +349,8 @@ export const config = {
     '/signup',
     '/trainer/:path*',
     '/trainer-admin/:path*',
+    '/facility-admin/:path*',
+    '/payout-setup',
     '/super-admin/:path*',
     '/superadmin-trainer/:path*',
   ],
