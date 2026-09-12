@@ -166,6 +166,15 @@ export const API_ENDPOINTS = {
     LISTPAYOUTS: `/${API_VERSION}/dietitian/api/web/list-payouts`,
     OVERVIEW: `/${API_VERSION}/dietitian/api/web/commission-overview`,
     CREATECHECKOUTSESSION: `/${API_VERSION}/dietitian/api/web/create-checkout-session`,
+    ORDERPAGECONTEXT: `/${API_VERSION}/dietitian/api/web/order-page-context`,
+    ORDERSESSIONSTATUS: `/${API_VERSION}/dietitian/api/web/order-session-status`,
+    REFERREDMEMBERS: `/${API_VERSION}/dietitian/api/web/referred-members`,
+    RESENDPURCHASECODE: `/${API_VERSION}/dietitian/api/web/resend-purchase-code`,
+    QRGENERATE: `/${API_VERSION}/dietitian/api/web/qr-generate`,
+    QRLINK: `/${API_VERSION}/dietitian/api/web/qr-link`,
+    QRLIST: `/${API_VERSION}/dietitian/api/web/qr-list`,
+    GETPRICING: `/${API_VERSION}/dietitian/api/web/get-pricing`,
+    SETPRICING: `/${API_VERSION}/dietitian/api/web/set-pricing`,
   },
 
    FOOD: {

@@ -29,11 +29,10 @@ const MonoIcon = ({ src, size = 20, color = "#A1A1A1", alt = "" }) => (
 );
 
 const MENU = [
-  { name: "Trainers",         icon: "/icons/hugeicons_home-05.svg",        path: "/facility-admin/trainers" },
-  { name: "Invite Trainer",   icon: "/icons/hugeicons_award-01.svg",       path: "/facility-admin/invites" },
-  { name: "My clients",       icon: "/icons/hugeicons_user-group.png",     path: "/trainer/dashboard" },
-  { name: "Earnings",         icon: "/icons/hugeicons_award-01.svg",       path: "/facility-admin/earnings" },
-  { name: "QR Code",          icon: "/icons/hugeicons_view.svg",           path: "/facility-admin/qr" },
+  { name: "Trainers",   icon: "/icons/hugeicons_home-05.svg",        path: "/facility-admin/trainers" },
+  { name: "Referrals",  icon: "/icons/hugeicons_view.svg",           path: "/facility-admin/referrals" },
+  { name: "Earnings",   icon: "/icons/hugeicons_award-01.svg",       path: "/facility-admin/earnings" },
+  { name: "My clients", icon: "/icons/hugeicons_user-group.png",     path: "/trainer/dashboard" },
 ];
 
 

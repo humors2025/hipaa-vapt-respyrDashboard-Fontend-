@@ -94,6 +94,34 @@ export const createCheckoutSessionService = ({ partnerCode, email }) =>
     email: email || undefined,
   });
 
+export const fetchOrderPageContextService = ({ partnerCode, qrId }) =>
+  post(API_ENDPOINTS.COMMISSION.ORDERPAGECONTEXT, { partner_code: partnerCode || undefined, qr_id: qrId || undefined });
+
+export const fetchOrderSessionStatusService = ({ sessionId }) =>
+  post(API_ENDPOINTS.COMMISSION.ORDERSESSIONSTATUS, { session_id: sessionId });
+
+export const createCheckoutSessionFromStickerService = ({ qrId, partnerCode, email }) =>
+  post(API_ENDPOINTS.COMMISSION.CREATECHECKOUTSESSION, { qr_id: qrId || undefined, partner_code: partnerCode || undefined, email: email || undefined });
+
+// ── Referrals (owner / trainer) ──────────────────────────────────────────────
+
+export const fetchReferredMembersService = () => post(API_ENDPOINTS.COMMISSION.REFERREDMEMBERS);
+
+export const resendPurchaseCodeService = ({ stripeSubscriptionId }) =>
+  post(API_ENDPOINTS.COMMISSION.RESENDPURCHASECODE, { stripe_subscription_id: stripeSubscriptionId });
+
+// ── QR stickers ──────────────────────────────────────────────────────────────
+
+export const generateQrBatchService = ({ count }) => post(API_ENDPOINTS.COMMISSION.QRGENERATE, { count });
+export const linkQrService = ({ qrId, targetUserId }) => post(API_ENDPOINTS.COMMISSION.QRLINK, { qr_id: qrId, target_user_id: targetUserId || null });
+export const listQrService = ({ status, facilityId } = {}) => post(API_ENDPOINTS.COMMISSION.QRLIST, { status: status || undefined, facility_id: facilityId ?? undefined });
+
+// ── Pricing ──────────────────────────────────────────────────────────────────
+
+export const fetchPricingService = () => post(API_ENDPOINTS.COMMISSION.GETPRICING);
+export const setPricingService = ({ listPrice, referredPrice, note }) =>
+  post(API_ENDPOINTS.COMMISSION.SETPRICING, { list_price: listPrice, referred_price: referredPrice, note: note || undefined });
+
 // ── Formatting helpers shared by the earnings pages ──────────────────────────
 
 export function formatMinor(minor, currency = "USD") {

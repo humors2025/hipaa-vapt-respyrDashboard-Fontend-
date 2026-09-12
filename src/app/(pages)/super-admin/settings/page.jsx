@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { fetchCommissionRateService, setCommissionRateService } from "@/services/commissionService";
+import { fetchCommissionRateService, setCommissionRateService, fetchPricingService, setPricingService, formatMinor } from "@/services/commissionService";
 
 /**
  * Super admin › Settings. Today: the platform commission rate (Rysflo -> facility).
@@ -14,6 +14,88 @@ function fmt(v) {
   if (!v) return "—";
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }) + " UTC";
+}
+
+function PricingSection() {
+  const [data, setData] = useState(null);
+  const [list, setList] = useState("");
+  const [referred, setReferred] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const d = await fetchPricingService();
+      setData(d);
+      if (d.current) {
+        setList((d.current.list_price_minor / 100).toFixed(2));
+        setReferred((d.current.referred_price_minor / 100).toFixed(2));
+      }
+    } catch (err) {
+      toast.error(err?.message || "Could not load pricing");
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const l = Number(list), r = Number(referred);
+  const valid = Number.isFinite(l) && Number.isFinite(r) && l > 0 && r > 0 && r <= l;
+  const changed = valid && data?.current && (Math.round(l * 100) !== data.current.list_price_minor || Math.round(r * 100) !== data.current.referred_price_minor);
+
+  const save = async (e) => {
+    e.preventDefault();
+    if (!changed || busy) return;
+    if (!window.confirm(`Set list price to $${l.toFixed(2)} and referred price to $${r.toFixed(2)}? New Stripe coupon and promotion codes are created automatically; existing subscribers keep their price.`)) return;
+    setBusy(true);
+    try {
+      await setPricingService({ listPrice: l, referredPrice: r, note: note.trim() || undefined });
+      toast.success("Pricing updated");
+      setNote("");
+      load();
+    } catch (err) {
+      toast.error(err?.message || "Could not update pricing");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const field = "rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[13px] text-[#252525] focus:outline-none focus:border-[#308BF9]";
+
+  return (
+    <section className="bg-white rounded-[15px] p-6 flex flex-col gap-4 max-w-[720px]">
+      <div>
+        <h2 className="text-[#252525] text-[14px] font-bold">Membership pricing</h2>
+        <p className="text-[#535359] text-[12px] mt-1">
+          The website shows the list price. A gym or trainer code brings it to the referred price — the difference becomes a Stripe coupon applied to every month, and each partner code becomes a Stripe promotion code automatically.
+        </p>
+      </div>
+      <div className="flex items-baseline gap-3">
+        <span className="text-[#252525] text-[32px] font-bold">{data?.current ? formatMinor(data.current.referred_price_minor) : "—"}</span>
+        <span className="text-[#A1A1A1] text-[14px] line-through">{data?.current ? formatMinor(data.current.list_price_minor) : ""}</span>
+        <span className="text-[#A1A1A1] text-[12px]">with a code · per month</span>
+      </div>
+      <form onSubmit={save} className="grid grid-cols-1 sm:grid-cols-[140px_140px_1fr_auto] gap-3 items-end">
+        <label className="flex flex-col gap-1"><span className="text-[#535359] text-[12px] font-semibold">List price $</span><input type="number" min={1} step={0.01} value={list} onChange={(e) => setList(e.target.value)} className={field} /></label>
+        <label className="flex flex-col gap-1"><span className="text-[#535359] text-[12px] font-semibold">Referred price $</span><input type="number" min={1} step={0.01} value={referred} onChange={(e) => setReferred(e.target.value)} className={field} /></label>
+        <label className="flex flex-col gap-1"><span className="text-[#535359] text-[12px] font-semibold">Note</span><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Launch pricing" className={field} /></label>
+        <button type="submit" disabled={!changed || busy} className="rounded-[10px] bg-[#308BF9] text-white text-[13px] font-semibold px-4 py-2 disabled:opacity-50 cursor-pointer">{busy ? "Saving…" : "Save"}</button>
+      </form>
+      {data?.history?.length > 0 && (
+        <div className="overflow-x-auto rounded-[10px] border border-[#E1E6ED] mt-2">
+          <table className="w-full text-[12px]">
+            <thead><tr className="bg-[#F5F7FA] text-[#535359] text-left"><th className="py-2 px-4 font-semibold">List</th><th className="py-2 px-4 font-semibold">Referred</th><th className="py-2 px-4 font-semibold">Effective from</th><th className="py-2 px-4 font-semibold">Set by</th><th className="py-2 px-4 font-semibold">Note</th></tr></thead>
+            <tbody>
+              {data.history.map((h, i) => (
+                <tr key={i} className="border-t border-[#F5F7FA]"><td className="py-2 px-4 text-[#252525] font-semibold">{formatMinor(h.list_price_minor)}</td><td className="py-2 px-4 text-[#252525] font-semibold">{formatMinor(h.referred_price_minor)}</td><td className="py-2 px-4 text-[#535359]">{fmt(h.effective_from)}</td><td className="py-2 px-4 text-[#535359]">{h.set_by_user_id}</td><td className="py-2 px-4 text-[#A1A1A1]">{h.note || "—"}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
 }
 
 export default function SuperAdminSettingsPage() {
@@ -72,6 +154,8 @@ export default function SuperAdminSettingsPage() {
         <h1 className="text-[#252525] text-[20px] font-bold">Settings</h1>
         <p className="text-[#535359] text-[13px] mt-1">Platform-wide configuration for the referral programme.</p>
       </div>
+
+      <PricingSection />
 
       <section className="bg-white rounded-[15px] p-6 flex flex-col gap-4 max-w-[720px]">
         <div>
