@@ -45,6 +45,14 @@ const MENU = [
     ],
   },
   { name: "TA Analytics",    icon: "/icons/hugeicons_note-01.svg",        path: "/super-admin/analytics" },
+  {
+    name: "Commission",
+    icon: "/icons/hugeicons_file-export.svg",
+    submenu: [
+      { name: "Facilities", path: "/super-admin/facilities" },
+      { name: "Payouts", path: "/super-admin/payouts" },
+    ],
+  },
 ];
 
 const DROPDOWN_MENU = [
