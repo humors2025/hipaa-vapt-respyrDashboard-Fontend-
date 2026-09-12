@@ -48,3 +48,4 @@ database/*.dump.sql
 # local preference-learning log fallback (written by /api/diet-plan/log-edit
 # when Flask is unreachable — runtime data, not source)
 /preference_data/
+certificates/

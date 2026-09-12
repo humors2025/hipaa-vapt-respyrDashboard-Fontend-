@@ -39,6 +39,7 @@ function SetupForm({ sticker, onDone, onCancel }) {
   const [type, setType] = useState("facility");
   const [f, setF] = useState({ facilityName: "", firstName: "", lastName: "", email: "", phone: "" });
   const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
   const set = (k) => (e) => setF((v) => ({ ...v, [k]: e.target.value }));
   const ok = f.firstName.trim() && f.lastName.trim() && /\S+@\S+\.\S+/.test(f.email) && (type === "trainer" || f.facilityName.trim());
 
@@ -49,13 +50,32 @@ function SetupForm({ sticker, onDone, onCancel }) {
     try {
       const res = await setupQrService({ qrId: sticker.id, targetType: type, ...f });
       toast.success(`Sticker ${sticker.id} is live for ${res.qr.target_label} (${res.partner_code}). Invite sent to ${res.invited_email}.`);
-      onDone();
+      if (res.debug_invite_link) {
+        // Local/UAT with RETURN_INVITE_LINK_FOR_TESTING: show the link since no email is sent.
+        setResult(res);
+      } else {
+        onDone();
+      }
     } catch (err) {
       toast.error(err?.message || "Could not set up sticker");
     } finally {
       setBusy(false);
     }
   };
+
+  if (result) {
+    return (
+      <div className="rounded-[10px] border border-[#2EAF6A] bg-[#E5F6EE]/60 p-4 flex flex-col gap-2">
+        <div className="text-[#1F7A4A] text-[13px] font-bold">Sticker {sticker.id} is live for {result.qr.target_label} · code {result.partner_code}</div>
+        <div className="text-[#535359] text-[12px]">Test environment — the invite email is not sent. Open this link as the invitee to accept and create their login:</div>
+        <div className="text-[#308BF9] text-[12px] break-all select-all bg-white rounded-[8px] px-3 py-2 border border-[#E1E6ED]">{result.debug_invite_link}</div>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => { navigator.clipboard?.writeText(result.debug_invite_link); toast.success("Invite link copied"); }} className="rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 cursor-pointer">Copy invite link</button>
+          <button type="button" onClick={onDone} className="text-[12px] text-[#535359] cursor-pointer">Done</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={submit} className="rounded-[10px] border border-[#308BF9] bg-[#EEF4FE]/40 p-4 flex flex-col gap-3">
