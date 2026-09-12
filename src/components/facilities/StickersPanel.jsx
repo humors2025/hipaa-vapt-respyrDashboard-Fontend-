@@ -10,7 +10,9 @@ import { listQrService, linkQrService, generateQrBatchService, listFacilitiesSer
  * new batches and open a printable sheet.
  */
 
-const STICKER_BASE = (process.env.NEXT_PUBLIC_STICKER_BASE_URL || process.env.NEXT_PUBLIC_ORDER_BASE_URL?.replace(/\/order$/, "/q") || "https://admin.rysflo.com/q").replace(/\/+$/, "");
+// Either "https://rysflo.com/buy/?q=" (website) or "https://admin.rysflo.com/q/" (dashboard fallback).
+const STICKER_BASE = process.env.NEXT_PUBLIC_STICKER_BASE_URL || "https://rysflo.com/buy/?q=";
+const stickerUrl = (id) => (/[?=&]$/.test(STICKER_BASE) ? STICKER_BASE : STICKER_BASE.replace(/\/+$/, "") + "/") + id;
 
 export default function StickersPanel({ isSuperAdmin = false }) {
   const [items, setItems] = useState([]);
@@ -108,7 +110,7 @@ export default function StickersPanel({ isSuperAdmin = false }) {
           <button type="button" onClick={generate} disabled={busy} className="rounded-[10px] bg-[#EEF4FE] text-[#308BF9] text-[12px] font-semibold px-4 py-2 disabled:opacity-50 cursor-pointer">
             Generate & open print sheet
           </button>
-          <span className="text-[#A1A1A1] text-[11px]">Stickers encode {STICKER_BASE}/&lt;ID&gt;</span>
+          <span className="text-[#A1A1A1] text-[11px]">Stickers encode {stickerUrl("<ID>")}</span>
         </div>
       )}
 

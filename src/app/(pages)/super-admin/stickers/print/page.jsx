@@ -5,7 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { listQrService } from "@/services/commissionService";
 
-const STICKER_BASE = (process.env.NEXT_PUBLIC_STICKER_BASE_URL || process.env.NEXT_PUBLIC_ORDER_BASE_URL?.replace(/\/order$/, "/q") || "https://admin.rysflo.com/q").replace(/\/+$/, "");
+// Either "https://rysflo.com/buy/?q=" (website) or "https://admin.rysflo.com/q/" (dashboard fallback).
+const STICKER_BASE = process.env.NEXT_PUBLIC_STICKER_BASE_URL || "https://rysflo.com/buy/?q=";
+const stickerUrl = (id) => (/[?=&]$/.test(STICKER_BASE) ? STICKER_BASE : STICKER_BASE.replace(/\/+$/, "") + "/") + id;
 
 /** Printable sticker sheet: one QR + its ID per cell. Print at 100%. */
 function Sheet() {
@@ -30,7 +32,7 @@ function Sheet() {
       <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
         {items.map((q) => (
           <div key={q.id} className="border border-[#E1E6ED] rounded-[8px] p-3 flex flex-col items-center gap-1 break-inside-avoid">
-            <QRCodeSVG value={`${STICKER_BASE}/${q.id}`} size={140} level="M" includeMargin={false} />
+            <QRCodeSVG value={stickerUrl(q.id)} size={140} level="M" includeMargin={false} />
             <div className="text-[#252525] text-[16px] font-bold font-mono tracking-[2px] mt-1">{q.id}</div>
             <div className="text-[#A1A1A1] text-[9px]">Scan to get Rysflo</div>
           </div>

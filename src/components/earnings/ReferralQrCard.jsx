@@ -11,7 +11,9 @@ import { fetchEarningsSummaryService } from "@/services/commissionService";
  * Shared by trainer, facility admin and trainer admin.
  */
 
-const ORDER_BASE = (process.env.NEXT_PUBLIC_ORDER_BASE_URL || "https://admin.rysflo.com/order").replace(/\/+$/, "");
+// Either "https://rysflo.com/buy/?code=" (website) or "https://admin.rysflo.com/order/" (dashboard fallback).
+const ORDER_BASE = process.env.NEXT_PUBLIC_ORDER_BASE_URL || "https://rysflo.com/buy/?code=";
+const joinUrl = (base, id) => (/[?=&]$/.test(base) ? base : base.replace(/\/+$/, "") + "/") + encodeURIComponent(id);
 
 export default function ReferralQrCard({ title = "Your referral QR code", subtitle }) {
   const [code, setCode] = useState(null);
@@ -30,7 +32,7 @@ export default function ReferralQrCard({ title = "Your referral QR code", subtit
     })();
   }, []);
 
-  const url = code ? `${ORDER_BASE}/${encodeURIComponent(code)}` : "";
+  const url = code ? joinUrl(ORDER_BASE, code) : "";
 
   const copy = async () => {
     try {
