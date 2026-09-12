@@ -865,6 +865,39 @@ export const fetchDietAnalysisPlanNewTest = async (
   });
 };
 
+// Client food log for DietPlanNew's "Food log" popup — what the client
+// actually logged in the app (read-only, POST /dietitian/api/web/food-log).
+// Payload: { dietitian_id, profile_id, start_date, end_date }  (or { date })
+//   dietitian_id from the access token, profile_id from the URL — same
+//   token-bound identity as fetchDietAnalysisPlanNewTest above.
+// Response: { status, message, data: { profile_id, start_date, end_date, count,
+//   totals, days: [{ log_date, totals, slots: [{ slot, totals, entries }] }] } }
+//   Every day in the range and all four slots are present; deleted rows are
+//   never returned. Range is capped at 92 days server-side.
+export const fetchFoodLogService = async ({ profileId = null, startDate = null, endDate = null, date = null } = {}) => {
+  const resolvedProfileId = getProfileIdFromUrl() ?? profileId ?? null;
+  const resolvedDietitianId = getDietitianIdFromAccessToken() || null;
+
+  const payload = {
+    dietitian_id: resolvedDietitianId,
+    profile_id: resolvedProfileId,
+  };
+  if (date) {
+    payload.date = date;
+  } else {
+    payload.start_date = startDate;
+    payload.end_date = endDate;
+  }
+
+  return apiFetcher(API_ENDPOINTS.DIETANALYSIS.FOODLOG, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(withSuperAdminPartnerCode(payload)),
+  });
+};
+
 export const fetchClientWeeklyDates = async (profileId, dietitianId) => {
   try {
     const accessToken = Cookies.get("access_token");

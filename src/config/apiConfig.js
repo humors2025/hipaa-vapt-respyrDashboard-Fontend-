@@ -89,7 +89,9 @@ export const API_ENDPOINTS = {
     DIETANALYSISPLANNEWTEST: `/${API_VERSION}/dietitian/api/web/get_weekly_food_json_suggestions_weeks_newtest`,
     APPROVALPLAN: `/${API_VERSION}/dietitian/api/web/food_json_suggestion_approve_plan`,
     // "Approve week" for DietPlanNew — flips status on a weekly_food_json_suggestions_newtest row
-    APPROVALPLANNEWTEST: `/${API_VERSION}/dietitian/api/web/food_json_suggestion_approve_plan_newtest`
+    APPROVALPLANNEWTEST: `/${API_VERSION}/dietitian/api/web/food_json_suggestion_approve_plan_newtest`,
+    // Read-only client food log (what the client actually ate) for DietPlanNew's "Food log" popup
+    FOODLOG: `/${API_VERSION}/dietitian/api/web/food-log`
   },
   MACROSANALYSIS: {
     GETMACROSUMMARY: `/${API_VERSION}/dietitian/api/web/get_macro_summary_by_date`

@@ -77,6 +77,7 @@ import {
   approveWeeklyFoodJsonNewTestService,
   saveCustomMealService,
   fetchDietAnalysisPlanNewTest,
+  fetchFoodLogService,
   fetchMacroSummaryByDate,
   getClientProfileDetails,
   priceShoppingListService,
@@ -1920,6 +1921,7 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   const detailCacheRef = useRef(new Map());
   const [saving, setSaving] = useState(false);
   const [measureOpen, setMeasureOpen] = useState(false); // "Measurements" unit reference
+  const [foodLogOpen, setFoodLogOpen] = useState(false); // "Food log" popup (what the client actually logged)
 
   const [dayIdx, setDayIdx] = useState(0);
   const [mealIdx, setMealIdx] = useState(0);
@@ -2194,6 +2196,10 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   }
 
   function deleteFood(foodId) {
+    if (isWeekLocked(plan)) {
+      flash(`${weekLockReason(plan)} and its meals can no longer be deleted.`);
+      return;
+    }
     const f = items.find((x) => x.id === foodId);
     if (!f) return;
     // Opens the confirmation popup; performDelete() does the work once confirmed.
@@ -2750,6 +2756,15 @@ const ingredients = rows.flatMap((r) =>
                   Unsaved changes
                 </span>
               )}
+              <button
+                type="button"
+                onClick={() => setFoodLogOpen(true)}
+                disabled={!profileId}
+                title="What the client actually logged in the app"
+                className={cn(UI.btnSecondary, "px-3 py-1.5")}
+              >
+                Food log
+              </button>
             </div>
             {[clientGoal, weekRange].filter(Boolean).length > 0 && (
               <p className={UI.subtitle}>{[clientGoal, weekRange].filter(Boolean).join(" · ")}</p>
@@ -2917,6 +2932,13 @@ const ingredients = rows.flatMap((r) =>
                       slot={slot}
                       onStepPortion={(delta) => stepPortion(f.id, delta)}
                       onDelete={() => deleteFood(f.id)}
+                      // Same disabled rule as the "Reset week" / "Approve week" buttons.
+                      deleteDisabled={!plan?.meta?.id || saving || resetting || approving || isWeekLocked(plan)}
+                      deleteDisabledReason={
+                        isWeekLocked(plan)
+                          ? `${weekLockReason(plan)} and its meals can no longer be deleted`
+                          : "Please wait for the current action to finish"
+                      }
                       onOpenSwaps={() => setSwapState({ mode: "alts", foodId: f.id })}
                       onSearchSwap={() => {
                         setSwapQuery("");
@@ -2975,6 +2997,17 @@ const ingredients = rows.flatMap((r) =>
 
       {/* ------------------------------------------- measurements reference */}
       {measureOpen && <MeasurementsDialog days={days} onClose={() => setMeasureOpen(false)} />}
+
+      {/* ------------------------------------------------------ food log */}
+      {foodLogOpen && (
+        <FoodLogDialog
+          profileId={profileId}
+          weekStart={weekStart}
+          weekEnd={weekEnd}
+          clientName={clientName}
+          onClose={() => setFoodLogOpen(false)}
+        />
+      )}
 
       {/* ------------------------------------------------ make-my-meal dialog */}
       {mealBuilder && (
@@ -3042,6 +3075,338 @@ const ingredients = rows.flatMap((r) =>
   );
 }
 
+/* ============================================================ FoodLogDialog */
+
+/**
+ * "Food log" popup — what the client actually logged in the app, read from
+ * `POST /dietitian/api/web/food-log` (fetchFoodLogService). Opens on the plan's
+ * week (weekStart..weekEnd) or today when no week is selected; the dietitian
+ * can widen / move the range with the two date pickers (server cap: 92 days).
+ *
+ * The API already returns every day in the range and all four slots (empty
+ * ones with zero totals), so this only picks a day and renders it.
+ */
+
+const FOOD_LOG_SLOTS = [
+  { key: "breakfast", label: "Breakfast" },
+  { key: "lunch", label: "Lunch" },
+  { key: "dinner", label: "Dinner" },
+  { key: "snack", label: "Snacks" },
+];
+
+const FOOD_LOG_MAX_DAYS = 92;
+
+const isYmd = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+/** Local calendar date as YYYY-MM-DD (the app's log_date is a calendar day). */
+function foodLogToday() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** "2026-09-05" → "Fri, Sep 5". */
+function foodLogDayLabel(ymd) {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  if (isNaN(d)) return ymd;
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+/** Inclusive day count between two YYYY-MM-DD strings; 0 when start > end or invalid. */
+function foodLogDaysBetween(start, end) {
+  const a = new Date(`${start}T00:00:00Z`).getTime();
+  const b = new Date(`${end}T00:00:00Z`).getTime();
+  if (isNaN(a) || isNaN(b) || a > b) return 0;
+  return Math.floor((b - a) / 86400000) + 1;
+}
+
+/** 74.3 → "74.3", 4 → "4", null → "–". */
+function foodLogG(v) {
+  if (v === null || v === undefined) return "–";
+  const n = num(v);
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+/** "2026-09-11 12:48:18" → "12:48". */
+function foodLogTime(ts) {
+  const s = String(ts || "");
+  return s.length >= 16 ? s.slice(11, 16) : "";
+}
+
+const FOOD_LOG_SOURCE_LABEL = { plan: "Plan", chef: "Chef", manual: "Manual", search: "Search", photo: "Photo" };
+
+function FoodLogDialog({ profileId, weekStart, weekEnd, clientName, onClose }) {
+  const today = foodLogToday();
+  const planWeek = isYmd(weekStart) && isYmd(weekEnd) ? { start: weekStart, end: weekEnd } : null;
+  const initial = planWeek || { start: today, end: today };
+
+  const [range, setRange] = useState(initial); // what is loaded
+  const [draft, setDraft] = useState(initial); // what the date pickers show
+  const [draftError, setDraftError] = useState(null);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [dayIdx, setDayIdx] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0);
+  // Day strip: scrolled with the arrows / wheel / visible scrollbar, and the
+  // selected day is brought into view whenever it changes.
+  const dayStripRef = useRef(null);
+  const scrollDayStrip = (dir) => dayStripRef.current?.scrollBy({ left: dir * 260, behavior: "smooth" });
+  useEffect(() => {
+    if (loading) return;
+    dayStripRef.current
+      ?.querySelector("[data-active=\"true\"]")
+      ?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  }, [dayIdx, loading]);
+
+  useEffect(() => {
+    if (!profileId) {
+      setLoading(false);
+      setError("No client selected");
+      return undefined;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchFoodLogService({ profileId, startDate: range.start, endDate: range.end })
+      .then((res) => {
+        if (cancelled) return;
+        const body = res?.data || null;
+        setData(body);
+        // Land on today when it is in the range, else the first day with
+        // anything logged, else the first day.
+        const days = Array.isArray(body?.days) ? body.days : [];
+        let idx = days.findIndex((d) => d.log_date === today);
+        if (idx < 0) idx = days.findIndex((d) => num(d?.totals?.entries) > 0);
+        setDayIdx(idx < 0 ? 0 : idx);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setData(null);
+        setError(err?.data?.message || err?.message || "Could not load the food log");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId, range.start, range.end, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const applyDraft = () => {
+    if (!isYmd(draft.start) || !isYmd(draft.end)) return setDraftError("Pick both dates");
+    const n = foodLogDaysBetween(draft.start, draft.end);
+    if (n === 0) return setDraftError("Start date must be on or before the end date");
+    if (n > FOOD_LOG_MAX_DAYS) return setDraftError(`At most ${FOOD_LOG_MAX_DAYS} days at a time`);
+    setDraftError(null);
+    setRange({ start: draft.start, end: draft.end });
+    return undefined;
+  };
+
+  const showPlanWeek = () => {
+    if (!planWeek) return;
+    setDraft(planWeek);
+    setDraftError(null);
+    setRange(planWeek);
+  };
+
+  const days = Array.isArray(data?.days) ? data.days : [];
+  const day = days[dayIdx] || null;
+  const rangeTotals = data?.totals || null;
+  const subtitle = `${clientName || "Client"} · ${range.start === range.end ? foodLogDayLabel(range.start) : `${range.start} – ${range.end}`}`;
+
+  const macroLine = (t) => (
+    <span className={cn("tabular-nums text-[#738298]", UI.small)}>
+      <span style={{ color: MACRO_COLORS.protein }}>P {foodLogG(t?.protein)}g</span>
+      {" · "}
+      <span style={{ color: MACRO_COLORS.carbs }}>C {foodLogG(t?.carbs)}g</span>
+      {" · "}
+      <span style={{ color: MACRO_COLORS.fats }}>F {foodLogG(t?.fat)}g</span>
+      {" · "}
+      <span style={{ color: MACRO_COLORS.fibre }}>Fb {foodLogG(t?.fiber)}g</span>
+    </span>
+  );
+
+  return (
+    <ModalShell title="Food log" subtitle={subtitle} onClose={onClose} widthClass="max-w-[760px]" tall>
+      {/* ------------------------------------------------------ range bar */}
+      <div className="flex flex-none flex-wrap items-center gap-2 border-b border-[#E1E6ED] px-5 py-3">
+        <input
+          type="date"
+          value={draft.start}
+          max={draft.end || undefined}
+          onChange={(e) => setDraft((d) => ({ ...d, start: e.target.value }))}
+          className={cn(UI.input, "w-auto py-1.5")}
+          aria-label="From date"
+        />
+        <span className={cn("text-[#A1A1A1]", UI.small)}>to</span>
+        <input
+          type="date"
+          value={draft.end}
+          min={draft.start || undefined}
+          onChange={(e) => setDraft((d) => ({ ...d, end: e.target.value }))}
+          className={cn(UI.input, "w-auto py-1.5")}
+          aria-label="To date"
+        />
+        <button type="button" onClick={applyDraft} disabled={loading} className={cn(UI.btnSecondary, "px-3 py-1.5")}>
+          Show
+        </button>
+        {planWeek && (range.start !== planWeek.start || range.end !== planWeek.end) && (
+          <button type="button" onClick={showPlanWeek} disabled={loading} className={cn(UI.btnSecondary, "px-3 py-1.5")}>
+            Plan week
+          </button>
+        )}
+        {draftError && <span className={cn("text-[#E76F51]", UI.small)}>{draftError}</span>}
+        {!loading && !error && rangeTotals && (
+          <span className={cn("ml-auto tabular-nums text-[#738298]", UI.small)}>
+            {num(rangeTotals.entries)} {num(rangeTotals.entries) === 1 ? "entry" : "entries"} · {Math.round(num(rangeTotals.kcal))} kcal
+            {data?.truncated ? " · showing first 2000" : ""}
+          </span>
+        )}
+      </div>
+
+      {/* ------------------------------------------------------ day tabs */}
+      {!loading && !error && days.length > 1 && (
+        <div className="flex flex-none items-center gap-2 border-b border-[#E1E6ED] px-3 py-2.5">
+          <button
+            type="button"
+            onClick={() => scrollDayStrip(-1)}
+            aria-label="Scroll days left"
+            className="shrink-0 rounded-[8px] border border-[#E1E6ED] bg-white px-2 py-1.5 text-[#535359] leading-none cursor-pointer hover:bg-[#F5F7FA] transition-colors"
+          >
+            ‹
+          </button>
+
+          {/* Visible thin scrollbar (custom-scrollbar shows it on hover); the
+              arrows and mouse-wheel also scroll it, and the selected day is
+              scrolled into view automatically. */}
+          <div ref={dayStripRef} className="custom-scrollbar flex min-w-0 flex-1 gap-1.5 overflow-x-auto scroll-smooth pb-1">
+            {days.map((d, i) => {
+              const active = i === dayIdx;
+              const logged = num(d?.totals?.entries) > 0;
+              return (
+                <button
+                  key={d.log_date}
+                  type="button"
+                  data-active={active ? "true" : "false"}
+                  onClick={() => setDayIdx(i)}
+                  className={cn(
+                    "flex shrink-0 flex-col items-start rounded-[8px] border px-3 py-1.5 text-left cursor-pointer transition-colors",
+                    active ? "border-[#308BF9] bg-[#308BF9] text-white" : "border-[#E1E6ED] bg-white text-[#252525] hover:bg-[#F5F7FA]",
+                    !logged && !active && "text-[#A1A1A1]",
+                  )}
+                >
+                  <span className={cn("font-semibold whitespace-nowrap", UI.small)}>
+                    {foodLogDayLabel(d.log_date)}
+                    {d.log_date === today ? " · today" : ""}
+                  </span>
+                  <span className={cn("tabular-nums whitespace-nowrap", UI.small, active ? "text-white/80" : "text-[#738298]")}>
+                    {logged ? `${Math.round(num(d.totals.kcal))} kcal` : "nothing logged"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => scrollDayStrip(1)}
+            aria-label="Scroll days right"
+            className="shrink-0 rounded-[8px] border border-[#E1E6ED] bg-white px-2 py-1.5 text-[#535359] leading-none cursor-pointer hover:bg-[#F5F7FA] transition-colors"
+          >
+            ›
+          </button>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------ body */}
+      <div className="min-h-0 flex-1 overflow-y-auto scroll-hide">
+        {loading && (
+          <div className={cn("flex h-[240px] items-center justify-center text-[#738298]", UI.body)}>Loading food log…</div>
+        )}
+
+        {!loading && error && (
+          <div className="flex h-[240px] flex-col items-center justify-center gap-3 px-6 text-center">
+            <p className={cn("text-[#E76F51] font-medium", UI.body)}>{error}</p>
+            {profileId && (
+              <button type="button" onClick={() => setReloadKey((k) => k + 1)} className={UI.btnSecondary}>
+                Try again
+              </button>
+            )}
+          </div>
+        )}
+
+        {!loading && !error && !day && (
+          <div className={cn("flex h-[240px] items-center justify-center text-[#738298]", UI.body)}>No food logged in this range.</div>
+        )}
+
+        {!loading && !error && day && (
+          <>
+            {/* day header */}
+            <div className="flex flex-wrap items-baseline justify-between gap-2 px-5 pb-2 pt-4">
+              <p className={cn("text-[#252525] font-semibold", UI.body)}>
+                {foodLogDayLabel(day.log_date)}
+                <span className={cn("ml-2 font-normal text-[#738298]", UI.small)}>{day.log_date}</span>
+              </p>
+              <p className={cn("tabular-nums text-[#252525] font-semibold", UI.body)}>
+                {Math.round(num(day?.totals?.kcal))} kcal <span className="ml-2 font-normal">{macroLine(day?.totals)}</span>
+              </p>
+            </div>
+
+            {num(day?.totals?.entries) === 0 && (
+              <div className={cn("mx-5 mb-4 rounded-[8px] bg-[#F5F7FA] px-4 py-3 text-[#738298]", UI.body)}>Nothing logged on this day.</div>
+            )}
+
+            {num(day?.totals?.entries) > 0 &&
+              FOOD_LOG_SLOTS.map(({ key, label }) => {
+                const slot = (day.slots || []).find((s) => s.slot === key) || { totals: {}, entries: [] };
+                const entries = Array.isArray(slot.entries) ? slot.entries : [];
+                return (
+                  <div key={key} className="border-t border-[#F5F7FA]">
+                    <div className="flex items-baseline justify-between px-5 pb-1.5 pt-3">
+                      <span className={cn("text-[#738298] font-semibold uppercase", UI.small)}>{label}</span>
+                      <span className={cn("tabular-nums text-[#738298]", UI.small)}>
+                        {entries.length ? `${Math.round(num(slot?.totals?.kcal))} kcal` : ""}
+                      </span>
+                    </div>
+
+                    {entries.length === 0 && <div className={cn("px-5 pb-3 text-[#A1A1A1]", UI.small)}>Nothing logged</div>}
+
+                    {entries.map((e) => (
+                      <div key={e.id} className="flex items-start gap-3 px-5 py-2.5">
+                        <div className="min-w-0 flex-1">
+                          <p className={UI.foodName}>
+                            {e.food_name}
+                            {e.brand ? <span className={cn("ml-1.5 font-normal text-[#738298]", UI.small)}>{e.brand}</span> : null}
+                          </p>
+                          <p className={cn("mt-0.5 text-[#738298]", UI.small)}>
+                            {num(e.quantity) !== 1 ? `${foodLogG(e.quantity)} × ` : ""}
+                            {e.serving_desc}
+                            {e.grams !== null && e.grams !== undefined ? ` · ${foodLogG(e.grams)} g` : ""}
+                            {foodLogTime(e.logged_at) ? ` · ${foodLogTime(e.logged_at)}` : ""}
+                            {e.source && (
+                              <span className="ml-1.5 rounded-[4px] bg-[#F5F7FA] px-1.5 py-[1px] text-[#535359]">
+                                {FOOD_LOG_SOURCE_LABEL[e.source] || e.source}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className={cn("tabular-nums text-[#252525] font-semibold", UI.body)}>{Math.round(num(e.kcal))} kcal</p>
+                          <p className="mt-0.5">{macroLine(e)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+          </>
+        )}
+      </div>
+    </ModalShell>
+  );
+}
+
 /* ============================================================ MacrosPanel */
 
 function MacrosPanel({ totals, targets, dayIndex = 0 }) {
@@ -3059,6 +3424,7 @@ function MacrosPanel({ totals, targets, dayIndex = 0 }) {
   const calFib = 0; // the generator doesn't count fibre either
   const calTot = calC + calF + calP || 1;
   const cal = calP + calC + calF;
+
 
   // Round each share to an integer, then nudge the largest contributor so
   // they sum to exactly 100% (handles rounding drift) — same as macroItem's
@@ -3214,7 +3580,20 @@ function MacrosPanel({ totals, targets, dayIndex = 0 }) {
 
 /* ============================================================ FoodCard */
 
-function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, onSearchSwap, onMakeMeal, onShowMeasurements }) {
+function FoodCard({
+  food: f,
+  slot,
+  index,
+  onStepPortion,
+  onDelete,
+  onOpenSwaps,
+  onSearchSwap,
+  onMakeMeal,
+  onShowMeasurements,
+  // Locked (approved / locked) week or an action in flight: Delete is greyed out.
+  deleteDisabled = false,
+  deleteDisabledReason = "",
+}) {
   const [showMethod, setShowMethod] = useState(false);
   // Per-dish sections for a Make-my-meal dish; null for an ordinary recipe.
   const methodGroups = useMemo(() => groupMethodSteps(f.method_steps), [f.method_steps]);
@@ -3398,8 +3777,11 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
             </ActionBtn>
             <ActionBtn onClick={onMakeMeal}>Make my meal</ActionBtn>
             <button
+              type="button"
               onClick={onDelete}
-              className="ml-auto px-[11px] py-1 rounded-[4px] text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-normal tracking-[-0.24px] text-[#A1A1A1] cursor-pointer hover:bg-[#E76F511A] hover:text-[#E76F51] transition-colors"
+              disabled={deleteDisabled}
+              title={deleteDisabled ? deleteDisabledReason : undefined}
+              className="ml-auto px-[11px] py-1 rounded-[4px] text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-normal tracking-[-0.24px] text-[#A1A1A1] cursor-pointer hover:bg-[#E76F511A] hover:text-[#E76F51] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#A1A1A1]"
             >
               Delete
             </button>
