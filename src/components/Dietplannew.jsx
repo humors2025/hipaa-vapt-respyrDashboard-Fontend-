@@ -868,27 +868,29 @@ function lacksRecipeDetail(item) {
 /**
  * Week-level lock derived from the plan row's `status_value`
  * (get_weekly_food_json_suggestions_weeks_newtest):
+ *   0 — open, still editable
  *   1 — approved by the dietician
  *   2 — locked by the server (e.g. week already in use / closed)
- * Both disable "Reset week" and "Approve week". Compared as a number since the
- * API may send the value as a string.
+ * Anything greater than 0 is treated as approved: it disables "Reset week",
+ * "Approve week", Delete, swaps, "Search a swap" and "Make my meal". Compared
+ * as a number since the API may send the value as a string.
  */
 function weekStatus(plan) {
   const v = Number(plan?.meta?.status_value);
   return Number.isFinite(v) ? v : null;
 }
 function isWeekApproved(plan) {
-  return weekStatus(plan) === 1;
+  const s = weekStatus(plan);
+  return s !== null && s > 0;
 }
 function isWeekLocked(plan) {
-  const s = weekStatus(plan);
-  return s === 1 || s === 2;
+  return isWeekApproved(plan);
 }
 /** Tooltip / toast reason for a locked week, or null when it is open. */
 function weekLockReason(plan) {
   const s = weekStatus(plan);
-  if (s === 1) return "This week plan is approved";
   if (s === 2) return "This week plan is locked";
+  if (s !== null && s > 0) return "This week plan is approved";
   return null;
 }
 
@@ -2119,6 +2121,11 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   const dayTotals = useMemo(() => (day ? sumMeals(day.meals) : EMPTY_TOTALS), [day]);
   const weekRange = plan?.meta?.week_range || (weekStart && weekEnd ? `${weekStart} – ${weekEnd}` : null);
 
+  // status_value > 0 (approved / locked): the plan can no longer be edited.
+  // Drives the disabled state of swaps / Search a swap / Make my meal / Delete.
+  const editLocked = plan ? isWeekLocked(plan) : false;
+  const editLockedReason = editLocked ? `${weekLockReason(plan)} and can no longer be edited` : "";
+
   /* ---- live shopping-list pricing (FitChef) ----
    * `food_json.shopping` is priced when the plan is generated, so a dish added
    * or swapped from Search has no price there until the backend rebuilds it.
@@ -2232,6 +2239,11 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   /** `alt` is a FoodItem — a plan alternative or a FitChef search hit (see fromFitChefResult). */
   function applySwap(alt) {
     if (!swapState) return;
+    if (isWeekLocked(plan)) {
+      setSwapState(null);
+      flash(`${weekLockReason(plan)} and can no longer be edited.`);
+      return;
+    }
 
     // Empty slot: nothing to replace, so add the picked dish as a new row.
     if (swapState.foodId == null) {
@@ -2271,6 +2283,10 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   }
 
   function openMealBuilder(foodId) {
+    if (isWeekLocked(plan)) {
+      flash(`${weekLockReason(plan)} and can no longer be edited.`);
+      return;
+    }
     // The meal being replaced (at its current servings) is the target the
     // builder fits portions to and draws in the chart until foods are added.
     const current = foodId == null ? null : items.find((f) => f.id === foodId) || null;
@@ -2912,6 +2928,8 @@ const ingredients = rows.flatMap((r) =>
                 <div className="flex-1 flex flex-wrap items-center justify-center gap-2.5 py-10">
                   <ActionBtn
                     primary
+                    disabled={editLocked}
+                    title={editLocked ? editLockedReason : undefined}
                     onClick={() => {
                       setSwapQuery("");
                       setSwapState({ mode: "search", foodId: null });
@@ -2919,7 +2937,9 @@ const ingredients = rows.flatMap((r) =>
                   >
                     Search a swap
                   </ActionBtn>
-                  <ActionBtn onClick={() => openMealBuilder(null)}>Make my meal</ActionBtn>
+                  <ActionBtn disabled={editLocked} title={editLocked ? editLockedReason : undefined} onClick={() => openMealBuilder(null)}>
+                    Make my meal
+                  </ActionBtn>
                 </div>
               )}
               {items.length > 0 && (
@@ -2939,6 +2959,8 @@ const ingredients = rows.flatMap((r) =>
                           ? `${weekLockReason(plan)} and its meals can no longer be deleted`
                           : "Please wait for the current action to finish"
                       }
+                      editLocked={editLocked}
+                      editLockedReason={editLockedReason}
                       onOpenSwaps={() => setSwapState({ mode: "alts", foodId: f.id })}
                       onSearchSwap={() => {
                         setSwapQuery("");
@@ -3593,6 +3615,9 @@ function FoodCard({
   // Locked (approved / locked) week or an action in flight: Delete is greyed out.
   deleteDisabled = false,
   deleteDisabledReason = "",
+  // Approved / locked week: swaps, Search a swap and Make my meal are greyed out.
+  editLocked = false,
+  editLockedReason = "",
 }) {
   const [showMethod, setShowMethod] = useState(false);
   // Per-dish sections for a Make-my-meal dish; null for an ordinary recipe.
@@ -3635,11 +3660,17 @@ function FoodCard({
             <b className="font-semibold text-[#252525]">Search a swap</b> or <b className="font-semibold text-[#252525]">Make my meal</b> to fill the slot.
           </div>
           <div className="flex flex-wrap gap-2">
-            {f.alternatives > 0 && <ActionBtn onClick={onOpenSwaps}>{f.alternatives} swaps</ActionBtn>}
-            <ActionBtn primary onClick={onSearchSwap}>
+            {f.alternatives > 0 && (
+              <ActionBtn onClick={onOpenSwaps} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
+                {f.alternatives} swaps
+              </ActionBtn>
+            )}
+            <ActionBtn primary onClick={onSearchSwap} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
               Search a swap
             </ActionBtn>
-            <ActionBtn onClick={onMakeMeal}>Make my meal</ActionBtn>
+            <ActionBtn onClick={onMakeMeal} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
+              Make my meal
+            </ActionBtn>
           </div>
         </div>
       </article>
@@ -3771,11 +3802,17 @@ function FoodCard({
           </div>
 
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            {f.alternatives > 0 && <ActionBtn onClick={onOpenSwaps}>{f.alternatives} swaps</ActionBtn>}
-            <ActionBtn primary onClick={onSearchSwap}>
+            {f.alternatives > 0 && (
+              <ActionBtn onClick={onOpenSwaps} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
+                {f.alternatives} swaps
+              </ActionBtn>
+            )}
+            <ActionBtn primary onClick={onSearchSwap} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
               Search a swap
             </ActionBtn>
-            <ActionBtn onClick={onMakeMeal}>Make my meal</ActionBtn>
+            <ActionBtn onClick={onMakeMeal} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
+              Make my meal
+            </ActionBtn>
             <button
               type="button"
               onClick={onDelete}
@@ -3862,15 +3899,23 @@ function StepBtn({ label, onClick, disabled, title }) {
   );
 }
 
-function ActionBtn({ children, onClick, primary }) {
+function ActionBtn({ children, onClick, primary, disabled = false, title }) {
   return (
     <button
+      type="button"
       onClick={onClick}
+      disabled={disabled}
+      title={title}
       className={cn(
         "flex items-center justify-center px-[11px] py-1.5 rounded-[4px] border text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-normal tracking-[-0.24px] cursor-pointer transition-colors",
         primary
           ? "border-[#308BF9] bg-[#308BF9] text-white hover:bg-[#2678D9] hover:border-[#2678D9]"
           : "border-[#E1E6ED] bg-white text-[#308BF9] hover:bg-[#EEF4FE]",
+        // Approved / locked week: greyed out, no hover, not clickable.
+        "disabled:opacity-50 disabled:cursor-not-allowed",
+        primary
+          ? "disabled:hover:bg-[#308BF9] disabled:hover:border-[#308BF9]"
+          : "disabled:hover:bg-white",
       )}
     >
       {children}
