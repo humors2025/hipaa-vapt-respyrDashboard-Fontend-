@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { listFacilitiesService, inviteFacilityAdminService, formatMinor } from "@/services/commissionService";
-import StickersPanel from "./StickersPanel";
 
 /**
  * Facilities (gyms / studios) — shared by trainer admin (their own) and super
@@ -221,9 +220,6 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
           </div>
         </div>
       )}
-      <div className="bg-white rounded-[15px] p-6 border border-[#E1E6ED]">
-        <StickersPanel isSuperAdmin={isSuperAdmin} />
-      </div>
     </div>
   );
 }

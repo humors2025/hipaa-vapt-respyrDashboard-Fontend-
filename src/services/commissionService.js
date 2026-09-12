@@ -115,6 +115,10 @@ export const resendPurchaseCodeService = ({ stripeSubscriptionId }) =>
 export const generateQrBatchService = ({ count }) => post(API_ENDPOINTS.COMMISSION.QRGENERATE, { count });
 export const linkQrService = ({ qrId, targetUserId }) => post(API_ENDPOINTS.COMMISSION.QRLINK, { qr_id: qrId, target_user_id: targetUserId || null });
 export const listQrService = ({ status, facilityId } = {}) => post(API_ENDPOINTS.COMMISSION.QRLIST, { status: status || undefined, facility_id: facilityId ?? undefined });
+export const assignQrService = ({ toUserId, count, batchId }) => post(API_ENDPOINTS.COMMISSION.QRASSIGN, { to_user_id: toUserId, count, batch_id: batchId || undefined });
+export const setupQrService = ({ qrId, targetType, facilityName, firstName, lastName, email, phone }) =>
+  post(API_ENDPOINTS.COMMISSION.QRSETUP, { qr_id: qrId, target_type: targetType, facility_name: facilityName || undefined, first_name: firstName, last_name: lastName, email, phone: phone || undefined });
+export const listTrainerAdminsService = () => post(API_ENDPOINTS.COMMISSION.LISTTRAINERADMINS);
 
 // ── Pricing ──────────────────────────────────────────────────────────────────
 

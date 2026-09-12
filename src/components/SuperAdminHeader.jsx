@@ -50,6 +50,7 @@ const MENU = [
     icon: "/icons/hugeicons_file-export.svg",
     submenu: [
       { name: "Facilities", path: "/super-admin/facilities" },
+      { name: "QR codes", path: "/super-admin/qr-codes" },
       { name: "Payouts", path: "/super-admin/payouts" },
     ],
   },
