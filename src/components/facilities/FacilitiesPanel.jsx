@@ -36,6 +36,7 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [lastInvite, setLastInvite] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,6 +69,7 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
         facilityName: form.facilityName.trim(),
       });
       toast.success(`Invite sent to ${res.data.invited_email} for ${res.data.facility_name} (code ${res.data.partner_code})`);
+      setLastInvite(res.data);
       setForm(EMPTY);
       setShowForm(false);
       load();
@@ -143,6 +145,21 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
             <span className="text-[#A1A1A1] text-[11px]">The owner gets an email + link. The facility and its QR code are created when they accept.</span>
           </div>
         </form>
+      )}
+
+      {lastInvite && (
+        <div className="rounded-[10px] bg-[#E5F6EE] px-4 py-3 text-[12px] text-[#1F7A4A] max-w-[720px]">
+          Invite sent to <strong>{lastInvite.invited_email}</strong> for <strong>{lastInvite.facility_name}</strong> (code{" "}
+          <span className="font-mono font-semibold">{lastInvite.partner_code}</span>).
+          {/* Only present when the API runs with RETURN_INVITE_LINK_FOR_TESTING (never in production). */}
+          {lastInvite.debug_invite_link && (
+            <div className="mt-2 flex flex-col gap-2">
+              <span className="text-[#535359]">Test environment — invite link (emails are not sent here):</span>
+              <div className="text-[#308BF9] break-all select-all bg-white rounded-[8px] px-3 py-2 border border-[#E1E6ED]">{lastInvite.debug_invite_link}</div>
+              <button type="button" onClick={() => { navigator.clipboard?.writeText(lastInvite.debug_invite_link); toast.success("Invite link copied"); }} className="self-start rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 cursor-pointer">Copy invite link</button>
+            </div>
+          )}
+        </div>
       )}
 
       {loading && !data ? (

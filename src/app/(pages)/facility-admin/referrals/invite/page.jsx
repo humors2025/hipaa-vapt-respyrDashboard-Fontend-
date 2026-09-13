@@ -92,6 +92,14 @@ export default function FacilityAdminInvitePage() {
         <div className="rounded-[10px] bg-[#E5F6EE] px-4 py-3 text-[12px] text-[#1F7A4A] max-w-[640px]">
           Invite sent to <strong>{last.invited_name}</strong> ({last.invited_email}). Their referral code will be{" "}
           <span className="font-mono font-semibold">{last.partner_code}</span>.
+          {/* Only present when the API runs with RETURN_INVITE_LINK_FOR_TESTING (never in production). */}
+          {last.debug_invite_link && (
+            <div className="mt-2 flex flex-col gap-2">
+              <span className="text-[#535359]">Test environment — invite link (emails are not sent here):</span>
+              <div className="text-[#308BF9] break-all select-all bg-white rounded-[8px] px-3 py-2 border border-[#E1E6ED]">{last.debug_invite_link}</div>
+              <button type="button" onClick={() => { navigator.clipboard?.writeText(last.debug_invite_link); toast.success("Invite link copied"); }} className="self-start rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 cursor-pointer">Copy invite link</button>
+            </div>
+          )}
         </div>
       )}
     </div>

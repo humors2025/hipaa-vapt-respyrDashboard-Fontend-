@@ -232,7 +232,8 @@ export function middleware(request) {
      */
     if (
       pathname.startsWith('/facility-admin') &&
-      role !== 'facility_admin'
+      role !== 'facility_admin' &&
+      role !== 'super_admin'
     ) {
       return secureRedirect(
         homeForRole(role),
@@ -274,7 +275,8 @@ export function middleware(request) {
       }
     } else if (
       pathname.startsWith('/trainer-admin') &&
-      role !== 'trainer_admin'
+      role !== 'trainer_admin' &&
+      role !== 'super_admin'
     ) {
       return secureRedirect(
         homeForRole(role),
@@ -289,6 +291,34 @@ export function middleware(request) {
      * trainer_admin and super_admin may also access
      * trainer pages.
      */
+    // A facility admin may use the trainer client tools, but their money and
+    // referral pages live under /facility-admin — never show owner earnings
+    // inside the trainer layout.
+    if (
+      role === 'facility_admin' &&
+      (pathname.startsWith('/trainer/earnings') ||
+        pathname.startsWith('/trainer/referrals'))
+    ) {
+      const mapped = pathname.replace('/trainer/', '/facility-admin/');
+      const known = [
+        '/facility-admin/earnings/overview',
+        '/facility-admin/earnings/payout-setup',
+        '/facility-admin/earnings/how-to-use',
+        '/facility-admin/referrals/qr',
+        '/facility-admin/referrals/members',
+        '/facility-admin/referrals/invite',
+      ];
+      const dest = known.includes(mapped)
+        ? mapped
+        : pathname.startsWith('/trainer/earnings')
+        ? '/facility-admin/earnings/overview'
+        : '/facility-admin/referrals/members';
+      return secureRedirect(
+        dest + (request.nextUrl.search || ''),
+        request
+      );
+    }
+
     if (pathname.startsWith('/trainer/')) {
       const trainerRoles = [
         'trainer',
