@@ -99,9 +99,11 @@ const hideHeaderPaths = [
 
   const menu =
     !hideTrainerMenu &&
-    (userRole === "trainer" || userRole === "super_admin" || userRole === "admin")
+    (userRole === "trainer" || userRole === "super_admin" || userRole === "admin" || userRole === "facility_admin")
       ? [
           { name: "Dashboard", icon: "/icons/hugeicons_home-05.svg", path: "/trainer/dashboard" },
+          // Referrals is trainer-only: facility admins have their own section.
+          ...(userRole === "trainer" ? [{ name: "Referrals", icon: "/icons/hugeicons_view.svg", path: "/trainer/referrals" }] : []),
           { name: "Earnings", icon: "/icons/hugeicons_award-01.svg", path: "/trainer/earnings" },
           { name: "Settings", icon: "/icons/hugeicons_settings-03.svg", path: "/trainer/settings" },
         ]

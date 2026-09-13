@@ -150,6 +150,38 @@ export const API_ENDPOINTS = {
     LISTUSERSINTERNAL: `/${API_VERSION}/dietitian/api/web/list-users`
   },
 
+  // Gym referral commission programme (facilities, splits, Stripe, ledger).
+  COMMISSION: {
+    LISTTRAINERUSERS: `/${API_VERSION}/dietitian/api/web/list-admin-trainer-users-jwt`,
+    INVITEFACILITYADMIN: `/${API_VERSION}/dietitian/api/web/admin-invite-facility-admin`,
+    LISTFACILITIES: `/${API_VERSION}/dietitian/api/web/list-facilities`,
+    SETTRAINERSPLIT: `/${API_VERSION}/dietitian/api/web/set-trainer-commission-split`,
+    REMOVEUSER: `/${API_VERSION}/dietitian/api/web/remove-user`,
+    EARNINGSSUMMARY: `/${API_VERSION}/dietitian/api/web/earnings-summary`,
+    CONNECTSTATUS: `/${API_VERSION}/dietitian/api/web/stripe-connect-status`,
+    CONNECTONBOARDINGLINK: `/${API_VERSION}/dietitian/api/web/stripe-connect-onboarding-link`,
+    CONNECTDASHBOARDLINK: `/${API_VERSION}/dietitian/api/web/stripe-connect-dashboard-link`,
+    GETRATE: `/${API_VERSION}/dietitian/api/web/get-commission-rate`,
+    SETRATE: `/${API_VERSION}/dietitian/api/web/set-commission-rate`,
+    RUNPAYOUTS: `/${API_VERSION}/dietitian/api/web/run-payouts`,
+    RUNBREATHCREDITS: `/${API_VERSION}/dietitian/api/web/run-breath-credits`,
+    LISTPAYOUTS: `/${API_VERSION}/dietitian/api/web/list-payouts`,
+    OVERVIEW: `/${API_VERSION}/dietitian/api/web/commission-overview`,
+    CREATECHECKOUTSESSION: `/${API_VERSION}/dietitian/api/web/create-checkout-session`,
+    ORDERPAGECONTEXT: `/${API_VERSION}/dietitian/api/web/order-page-context`,
+    ORDERSESSIONSTATUS: `/${API_VERSION}/dietitian/api/web/order-session-status`,
+    REFERREDMEMBERS: `/${API_VERSION}/dietitian/api/web/referred-members`,
+    RESENDPURCHASECODE: `/${API_VERSION}/dietitian/api/web/resend-purchase-code`,
+    QRGENERATE: `/${API_VERSION}/dietitian/api/web/qr-generate`,
+    QRLINK: `/${API_VERSION}/dietitian/api/web/qr-link`,
+    QRLIST: `/${API_VERSION}/dietitian/api/web/qr-list`,
+    QRASSIGN: `/${API_VERSION}/dietitian/api/web/qr-assign`,
+    QRSETUP: `/${API_VERSION}/dietitian/api/web/qr-setup`,
+    LISTTRAINERADMINS: `/${API_VERSION}/dietitian/api/web/list-trainer-admins`,
+    GETPRICING: `/${API_VERSION}/dietitian/api/web/get-pricing`,
+    SETPRICING: `/${API_VERSION}/dietitian/api/web/set-pricing`,
+  },
+
    FOOD: {
     // Internal Next.js API routes (relative — not prefixed with API_BASE_URL)
     FOODSEARCH: "/api/food/search",
