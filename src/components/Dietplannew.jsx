@@ -91,6 +91,17 @@ import { selectMacroSummaryData } from "@/store/macroSummarySlice";
 /* ============================================================ constants */
 
 const SLOTS = ["breakfast", "lunch", "snacks", "dinner"];
+
+/**
+ * Name a deleted dish is saved under. Delete does not drop the row: it turns
+ * it into this empty placeholder (zero macros, no recipe) which Save persists
+ * as an ordinary "update", so the slot survives reload exactly as the older
+ * plan screen showed it. Deleting the placeholder itself removes the row.
+ */
+const REMOVED_PLACEHOLDER_NAME = "(empty — removed)";
+function isRemovedPlaceholder(f) {
+  return !!f && String(f.name || "").trim().toLowerCase() === REMOVED_PLACEHOLDER_NAME;
+}
 const SLOT_META = {
   breakfast: { label: "Breakfast", time: "08:00 – 09:00 AM" },
   lunch: { label: "Lunch", time: "01:00 – 02:00 PM" },
@@ -858,6 +869,7 @@ function lacksRecipeDetail(item) {
   return (
     item &&
     !item.removed &&
+    !isRemovedPlaceholder(item) &&
     !item.recipeId &&
     (item.method_steps || []).length === 0 &&
     (item.ingredients || []).length === 0 &&
@@ -1615,10 +1627,14 @@ export function normalizeWeeklyPlan(response) {
   // added, swapped, deleted or re-portioned and then saved. "Reset week" copies
   // the snapshot back over food_json, so the flag clears on the reload after it.
   const originalJson = data?.original_food_json;
-  const edited =
+  const differsFromOriginal =
     originalJson && typeof originalJson === "object" && Array.isArray(originalJson.days)
       ? planSignature(days) !== planSignature(buildDays(originalJson))
       : false;
+  // trainer-update-weekly-food-json-newtest stamps food_json._trainer_edited_at
+  // on every save; reset-weekly-food-json-newtest restores the unstamped
+  // snapshot. Covers rows that have no original_food_json to compare against.
+  const edited = differsFromOriginal || !!foodJson?._trainer_edited_at;
   return {
     days,
     shopping: normalizeShopping(foodJson.shopping || data?.shopping),
@@ -1967,6 +1983,10 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   mealIdxRef.current = mealIdx;
   const loadedWeekKeyRef = useRef(null);
   const [dirty, setDirty] = useState(false);
+  // "<profile>|<weekStart>|<weekEnd>" of the week whose edits were saved in this
+  // session, so the "Edited" badge stays on straight after Save even before the
+  // reload brings back the server's own marker. Cleared by Reset week.
+  const [savedEditsKey, setSavedEditsKey] = useState(null);
   const [toast, setToast] = useState(null);
 
   const [swapState, setSwapState] = useState(null); // { mode: "alts" | "search", foodId }
@@ -2249,7 +2269,35 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
     const t = deleteTarget;
     setDeleteTarget(null);
     if (!t) return;
-    updateFood(t.dayIdx, t.slot, t.foodId, (fd) => ({ ...fd, removed: true }));
+    updateFood(t.dayIdx, t.slot, t.foodId, (fd) =>
+      isRemovedPlaceholder(fd)
+        ? // Deleting an already-empty row drops it for good (Save sends "delete").
+          { ...fd, removed: true }
+        : // Deleting a dish keeps the row as an empty placeholder (Save sends
+          // "update"), so the slot is still there after reload.
+          {
+            ...fd,
+            name: REMOVED_PLACEHOLDER_NAME,
+            kcal_base: 0,
+            protein_g: 0,
+            carbs_g: 0,
+            fat_g: 0,
+            fiber_g: 0,
+            servings: 1,
+            portion: "1 serving",
+            prep_minutes: null,
+            image: null,
+            images: [],
+            ingredients: [],
+            method_steps: [],
+            tips: [],
+            alternatives: 0,
+            alternativeItems: [],
+            recipeId: null,
+            variantId: null,
+            hash: null,
+          }
+    );
     flash(`Removed ${t.name}`);
   }
 
@@ -2579,6 +2627,7 @@ const ingredients = rows.flatMap((r) =>
       }
 
       setDirty(false);
+      setSavedEditsKey(`${profileId}|${weekStart}|${weekEnd}`);
       flash(`Saved ${done} change${done === 1 ? "" : "s"}`);
       onSave?.(plan, lastResponse);
       // Reload from the server so indices/totals reflect what was persisted.
@@ -2656,6 +2705,7 @@ const ingredients = rows.flatMap((r) =>
       setSwapQuery("");
       setMealBuilder(null);
       setDirty(false);
+      setSavedEditsKey(null);
       flash(res?.message || "Week reset to the original plan");
       onUndo?.();
       // Reload from the server so the grid shows the reset row.
@@ -2798,7 +2848,7 @@ const ingredients = rows.flatMap((r) =>
                   Locked
                 </span>
               )}
-              {(dirty || plan?.meta?.edited) && (
+              {(dirty || plan?.meta?.edited || savedEditsKey === `${profileId}|${weekStart}|${weekEnd}`) && (
                 <span
                   title={dirty ? "This week has unsaved changes" : "This week differs from its originally generated plan"}
                   className="px-2.5 py-[5px] rounded-[5px] bg-[#F4A2611A] text-[#F4A261] text-[10px] xl:text-[11px] 2xl:text-[12px] font-semibold leading-[110%] tracking-[-0.2px]"
@@ -3654,15 +3704,18 @@ function FoodCard({
   editLockedReason = "",
 }) {
   const [showMethod, setShowMethod] = useState(false);
-  // A deleted food keeps its slot as an empty placeholder — same card layout,
-  // "(empty — removed)" as the name, zero macros, no photo, servings pinned at 1
-  // — until Save, when the update API splices it out. Search a swap / Make my
-  // meal stay active so the slot can be refilled; Delete is greyed out.
-  const removed = !!f.removed;
+  // A deleted dish shows as an empty placeholder in the normal card layout:
+  // "(empty — removed)", zero macros, no photo, servings pinned at 1. That is
+  // both the unsaved state (performDelete) and the saved one (the row comes
+  // back from the server under the placeholder name). Search a swap / Make my
+  // meal stay active so the slot can be refilled. Delete stays enabled on a
+  // placeholder (it drops the row); it is greyed out once the row is marked
+  // removed and only Save remains.
+  const removed = !!f.removed || isRemovedPlaceholder(f);
   const view = removed
     ? {
         ...f,
-        name: "(empty — removed)",
+        name: REMOVED_PLACEHOLDER_NAME,
         kcal_base: 0,
         protein_g: 0,
         carbs_g: 0,
@@ -3843,8 +3896,8 @@ function FoodCard({
             <button
               type="button"
               onClick={onDelete}
-              disabled={removed || deleteDisabled}
-              title={removed ? "This meal has already been removed" : deleteDisabled ? deleteDisabledReason : undefined}
+              disabled={!!f.removed || deleteDisabled}
+              title={f.removed ? "This meal has already been removed" : deleteDisabled ? deleteDisabledReason : undefined}
               className="ml-auto px-[11px] py-1 rounded-[4px] text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-normal tracking-[-0.24px] text-[#A1A1A1] cursor-pointer hover:bg-[#E76F511A] hover:text-[#E76F51] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#A1A1A1]"
             >
               Delete
