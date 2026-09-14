@@ -42,7 +42,12 @@ function PricingSection() {
 
   const l = Number(list), r = Number(referred);
   const valid = Number.isFinite(l) && Number.isFinite(r) && l > 0 && r > 0 && r <= l;
-  const changed = valid && data?.current && (Math.round(l * 100) !== data.current.list_price_minor || Math.round(r * 100) !== data.current.referred_price_minor);
+  // No pricing yet (fresh environment) counts as a change so the first save is possible.
+  const changed =
+    valid &&
+    (!data?.current ||
+      Math.round(l * 100) !== data.current.list_price_minor ||
+      Math.round(r * 100) !== data.current.referred_price_minor);
 
   const save = async (e) => {
     e.preventDefault();
