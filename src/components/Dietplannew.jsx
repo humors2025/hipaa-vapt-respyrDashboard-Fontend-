@@ -1559,6 +1559,25 @@ function fitchefPlanKeyFromSavedTo(savedTo) {
 
 
 /**
+ * Compact identity of every meal in a plan — per day, per slot: name, servings
+ * and portion of each non-removed food. Two plans with the same signature show
+ * the same dishes in the same amounts; macros are left out so server-side
+ * rounding never counts as an edit.
+ */
+function planSignature(days) {
+  return (days || [])
+    .map((d) =>
+      SLOTS.map((slot) =>
+        (d?.meals?.[slot] || [])
+          .filter((f) => f && !f.removed)
+          .map((f) => `${f.name}|${f.servings}|${f.portion}`)
+          .join(",")
+      ).join(";")
+    )
+    .join("\n");
+}
+
+/**
  * Response of get_weekly_food_json_suggestions_weeks_newtest → PLAN SHAPE.
  * Accepts either the full envelope ({ status, data }) or just `data`.
  */
@@ -1570,7 +1589,7 @@ export function normalizeWeeklyPlan(response) {
   const weekTargets =
     readTargets(foodJson) || readTargets(data) || readTargets(targetsFromRequest(foodJson?._request));
 
-  const days = (Array.isArray(foodJson.days) ? foodJson.days : []).map((day, di) => {
+  const buildDays = (fj) => (Array.isArray(fj?.days) ? fj.days : []).map((day, di) => {
     const meals = { breakfast: [], lunch: [], snacks: [], dinner: [] };
     const list = Array.isArray(day?.meals) ? day.meals : [];
     list.forEach((meal, mi) => {
@@ -1590,7 +1609,16 @@ export function normalizeWeeklyPlan(response) {
       meals,
     };
   });
-
+  const days = buildDays(foodJson);
+  // "Edited": the saved plan no longer matches the generator's untouched
+  // snapshot (original_food_json, returned by the read endpoint) — a food was
+  // added, swapped, deleted or re-portioned and then saved. "Reset week" copies
+  // the snapshot back over food_json, so the flag clears on the reload after it.
+  const originalJson = data?.original_food_json;
+  const edited =
+    originalJson && typeof originalJson === "object" && Array.isArray(originalJson.days)
+      ? planSignature(days) !== planSignature(buildDays(originalJson))
+      : false;
   return {
     days,
     shopping: normalizeShopping(foodJson.shopping || data?.shopping),
@@ -1613,6 +1641,9 @@ export function normalizeWeeklyPlan(response) {
       week_end_date: data?.week_end_date ?? null,
       week_range: data?.week_range ?? null,
       status_value: data?.status_value ?? null,
+      // True when the stored plan differs from its originally generated version
+      // (see above). Drives the "Edited" badge together with unsaved `dirty` state.
+      edited,
       // The zip the plan was generated/priced against (fitchef_generate.py's
       // &zip=), so live re-pricing (Make My Meal, Shopping List) can match it
       // instead of falling back to the pricer's default region.
@@ -2767,9 +2798,12 @@ const ingredients = rows.flatMap((r) =>
                   Locked
                 </span>
               )}
-              {dirty && (
-                <span className="px-2.5 py-[5px] rounded-[5px] bg-[#F4A2611A] text-[#F4A261] text-[10px] xl:text-[11px] 2xl:text-[12px] font-semibold leading-[110%] tracking-[-0.2px]">
-                  Unsaved changes
+              {(dirty || plan?.meta?.edited) && (
+                <span
+                  title={dirty ? "This week has unsaved changes" : "This week differs from its originally generated plan"}
+                  className="px-2.5 py-[5px] rounded-[5px] bg-[#F4A2611A] text-[#F4A261] text-[10px] xl:text-[11px] 2xl:text-[12px] font-semibold leading-[110%] tracking-[-0.2px]"
+                >
+                  Edited
                 </span>
               )}
               <button
@@ -3620,20 +3654,45 @@ function FoodCard({
   editLockedReason = "",
 }) {
   const [showMethod, setShowMethod] = useState(false);
+  // A deleted food keeps its slot as an empty placeholder — same card layout,
+  // "(empty — removed)" as the name, zero macros, no photo, servings pinned at 1
+  // — until Save, when the update API splices it out. Search a swap / Make my
+  // meal stay active so the slot can be refilled; Delete is greyed out.
+  const removed = !!f.removed;
+  const view = removed
+    ? {
+        ...f,
+        name: "(empty — removed)",
+        kcal_base: 0,
+        protein_g: 0,
+        carbs_g: 0,
+        fat_g: 0,
+        fiber_g: 0,
+        servings: 1,
+        portion: "1 serving",
+        prep_minutes: null,
+        image: null,
+        images: [],
+        ingredients: [],
+        method_steps: [],
+        tips: [],
+        alternatives: 0,
+      }
+    : f;
   // Per-dish sections for a Make-my-meal dish; null for an ordinary recipe.
-  const methodGroups = useMemo(() => groupMethodSteps(f.method_steps), [f.method_steps]);
-  const s = scaledFood(f);
-  const serv = f.servings || 1;
+  const methodGroups = useMemo(() => groupMethodSteps(view.method_steps), [view.method_steps]);
+  const s = scaledFood(view);
+  const serv = view.servings || 1;
   // "10 MIN · NON-VEG · BREAKFAST": prep time, diet tag(s), then the slot the
   // row sits in. Older rows may still carry the slot inside diet_type, so
   // repeats are dropped case-insensitively.
   const headerTags = [];
   const seen = new Set();
   for (const raw of [
-    f.prep_minutes ? `${f.prep_minutes} min` : null,
-    ...String(f.diet_type === "custom" ? "" : f.diet_type || "").split(","),
+    view.prep_minutes ? `${view.prep_minutes} min` : null,
+    ...String(view.diet_type === "custom" ? "" : view.diet_type || "").split(","),
     // Recipe's own meal-type label ("Snack (Evening)") when the row has one, else the slot.
-    f.meal_type || SLOT_META[slot]?.label,
+    view.meal_type || SLOT_META[slot]?.label,
   ]) {
     const tag = String(raw || "").trim();
     const key = tag.toLowerCase();
@@ -3642,45 +3701,12 @@ function FoodCard({
     headerTags.push(tag);
   }
   // Stored row id (e.g. "custom-9fe60d7f39"), shown last like the older plan screen does.
-  if (f.foodId) headerTags.push(`ID ${f.foodId}`);
-
-  if (f.removed) {
-    return (
-      <article className="flex gap-[5px] opacity-70 pb-5 border-b border-[#E1E6ED] last:border-b-0 last:pb-0">
-        <div className="flex my-[3px] items-start shrink-0">
-          <div className="flex h-6 w-6 xl:h-7 xl:w-7 2xl:h-[30px] 2xl:w-[30px] items-center justify-center rounded-full bg-[#F5F7FA] text-[#A1A1A1] text-[14px]">○</div>
-          <p className="px-[9px] pt-[3px] pb-0.5 text-[#A1A1A1] text-[15px] xl:text-[16px] 2xl:text-[18px] font-bold leading-[126%] tracking-[-0.3px] tabular-nums">
-            {index + 1}
-          </p>
-        </div>
-        <div className="min-w-0 flex-1 flex flex-col gap-2.5">
-          <p className={cn(UI.foodName, "italic text-[#A1A1A1]")}>{f.name} (removed)</p>
-          <div className={cn("rounded-[10px] border border-dashed border-[#E1E6ED] bg-[#F5F7FA] px-3 py-2.5 text-[#738298]", UI.body)}>
-            This meal was removed. Use {f.alternatives > 0 ? <><b className="font-semibold text-[#252525]">{f.alternatives} swaps</b>, </> : null}
-            <b className="font-semibold text-[#252525]">Search a swap</b> or <b className="font-semibold text-[#252525]">Make my meal</b> to fill the slot.
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {f.alternatives > 0 && (
-              <ActionBtn onClick={onOpenSwaps} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
-                {f.alternatives} swaps
-              </ActionBtn>
-            )}
-            <ActionBtn primary onClick={onSearchSwap} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
-              Search a swap
-            </ActionBtn>
-            <ActionBtn onClick={onMakeMeal} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
-              Make my meal
-            </ActionBtn>
-          </div>
-        </div>
-      </article>
-    );
-  }
+  if (view.foodId) headerTags.push(`ID ${view.foodId}`);
 
   return (
     <article className="flex gap-[5px] pb-5 border-b border-[#E1E6ED] last:border-b-0 last:pb-0">
       <div className="flex my-[3px] items-start shrink-0">
-        <FoodThumb food={f} className="h-6 w-6 xl:h-7 xl:w-7 2xl:h-[30px] 2xl:w-[30px] rounded-full bg-[#F4A2611A] text-[14px]" />
+        <FoodThumb food={view} className="h-6 w-6 xl:h-7 xl:w-7 2xl:h-[30px] 2xl:w-[30px] rounded-full bg-[#F4A2611A] text-[14px]" />
         <p className="px-[9px] pt-[3px] pb-0.5 text-[#252525] text-[15px] xl:text-[16px] 2xl:text-[18px] font-bold leading-[126%] tracking-[-0.3px] tabular-nums">
           {index + 1}
         </p>
@@ -3688,12 +3714,12 @@ function FoodCard({
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-col gap-1">
-          <p className={UI.foodName}>{f.name}</p>
+          <p className={UI.foodName}>{view.name}</p>
           <div className="flex flex-wrap items-center gap-[5px]">
             <p className={cn("text-[#252525] font-normal", UI.small)}>
               <span className="font-semibold tabular-nums">{s.kcal}kcal</span>
             </p>
-            {f.portion && <p className={cn("text-[#252525] font-normal", UI.small)}>{f.portion}</p>}
+            {view.portion && <p className={cn("text-[#252525] font-normal", UI.small)}>{view.portion}</p>}
           </div>
         </div>
 
@@ -3709,7 +3735,8 @@ function FoodCard({
 
           <div className="flex items-start gap-3">
             <FoodThumb
-              food={f}
+              // Removed placeholder: the photo box reads "no photo" instead of the plate emoji.
+              food={removed ? { ...view, icon: <span className={cn("text-[#A1A1A1] font-normal", UI.small)}>no photo</span> } : view}
               collage
               className="h-[76px] w-[76px] rounded-[10px] border border-[#E1E6ED] bg-[#F5F7FA] text-3xl"
             />
@@ -3717,9 +3744,9 @@ function FoodCard({
             <div className="min-w-0 flex-1">
               <div className="mb-1.5 flex flex-wrap items-center gap-2">
                 <span className={cn("text-[#738298] font-semibold uppercase", UI.small)}>servings</span>
-                <StepBtn label="−" disabled={serv - 0.25 < 0.25} onClick={() => onStepPortion(-1)} />
+                <StepBtn label="−" disabled={removed || serv - 0.25 < 0.25} onClick={() => onStepPortion(-1)} />
                 <span className={cn("min-w-[56px] text-center text-[#252525] font-semibold tabular-nums", UI.body)}>{serv}</span>
-                <StepBtn label="+" disabled={serv + 0.25 > 6} onClick={() => onStepPortion(1)} />
+                <StepBtn label="+" disabled={removed || serv + 0.25 > 6} onClick={() => onStepPortion(1)} />
                 {serv !== 1 && (
                   <span className={cn("text-[#308BF9] font-semibold", UI.small)}>
                     {s.kcal} kcal · P{Math.round(s.protein_g)} · C{Math.round(s.carbs_g)} · F{Math.round(s.fat_g)}
@@ -3727,9 +3754,9 @@ function FoodCard({
                 )}
               </div>
 
-              {f.ingredients.length > 0 && (
+              {view.ingredients.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5">
-                  {f.ingredients.map((ing, i) => {
+                  {view.ingredients.map((ing, i) => {
                     const m = unitMetric(ing.unit);
                     return (
                       <span
@@ -3753,7 +3780,7 @@ function FoodCard({
                 </div>
               )}
 
-              {f.method_steps.length > 0 && (
+              {view.method_steps.length > 0 && (
                 <>
                   <button
                     onClick={() => setShowMethod((v) => !v)}
@@ -3781,17 +3808,17 @@ function FoodCard({
                         </div>
                       ) : (
                         <ol className={cn("mt-1.5 list-decimal pl-[18px] text-[#738298]", UI.body)}>
-                          {f.method_steps.map((step, i) => (
+                          {view.method_steps.map((step, i) => (
                             <li key={i} className="mb-1">
                               {step}
                             </li>
                           ))}
                         </ol>
                       )}
-                      {f.tips?.length > 0 && (
+                      {view.tips?.length > 0 && (
                         <div className={cn("mt-1.5 rounded-[5px] bg-[#F4A2611A] px-2.5 py-[5px] text-[#F4A261]", UI.small)}>
                           <b className="mr-1 font-semibold">Tip:</b>
-                          {f.tips.join(" ")}
+                          {view.tips.join(" ")}
                         </div>
                       )}
                     </>
@@ -3802,9 +3829,9 @@ function FoodCard({
           </div>
 
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            {f.alternatives > 0 && (
+            {view.alternatives > 0 && (
               <ActionBtn onClick={onOpenSwaps} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
-                {f.alternatives} swaps
+                {view.alternatives} swaps
               </ActionBtn>
             )}
             <ActionBtn primary onClick={onSearchSwap} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
@@ -3816,8 +3843,8 @@ function FoodCard({
             <button
               type="button"
               onClick={onDelete}
-              disabled={deleteDisabled}
-              title={deleteDisabled ? deleteDisabledReason : undefined}
+              disabled={removed || deleteDisabled}
+              title={removed ? "This meal has already been removed" : deleteDisabled ? deleteDisabledReason : undefined}
               className="ml-auto px-[11px] py-1 rounded-[4px] text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-normal tracking-[-0.24px] text-[#A1A1A1] cursor-pointer hover:bg-[#E76F511A] hover:text-[#E76F51] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#A1A1A1]"
             >
               Delete
