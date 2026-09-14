@@ -72,7 +72,10 @@ export default function SuperAdminHeader() {
   const [mobileSubmenuOpen, setMobileSubmenuOpen] = useState(null);
 
   const profileRef = useRef(null);
-  const submenuRef = useRef(null);
+  // One element per dropdown, keyed by menu name. A single ref would only
+  // hold the last dropdown rendered, so pointer-down on any other dropdown's
+  // links would count as "outside" and close it before the click fired.
+  const submenuRefs = useRef({});
   const mobileMenuRef = useRef(null);
 
   useEffect(() => {
@@ -89,7 +92,10 @@ export default function SuperAdminHeader() {
       if (profileRef.current && !profileRef.current.contains(e.target)) {
         setIsDropdownOpen(false);
       }
-      if (submenuRef.current && !submenuRef.current.contains(e.target)) {
+      const insideSubmenu = Object.values(submenuRefs.current).some(
+        (el) => el && el.contains(e.target)
+      );
+      if (!insideSubmenu) {
         setOpenSubmenu(null);
       }
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) {
@@ -252,7 +258,9 @@ const handleLogout = async () => {
                   <div
                     key={m.name}
                     className="relative"
-                    ref={submenuRef}
+                    ref={(el) => {
+                      submenuRefs.current[m.name] = el;
+                    }}
                     onMouseEnter={() => setOpenSubmenu(m.name)}
                     onMouseLeave={() => setOpenSubmenu(null)}
                   >
