@@ -3007,7 +3007,7 @@ const ingredients = rows.flatMap((r) =>
 
 <div className="flex flex-col max-2xl:flex-row gap-[3px]">
             {/* food cards */}
-            <div className="pt-5 pb-[15px] pl-[15px] pr-2.5 border-4 border-[#F5F7FA] rounded-[15px] flex-1 min-w-0 max-2xl:flex-none min-h-[360px] xl:min-h-[400px] 2xl:min-h-[440px] flex flex-col">
+            <div className="pt-5 pb-[15px] pl-[15px] pr-2.5 border-4 border-[#F5F7FA] rounded-[15px] flex-1 min-w-0 max-2xl:flex-none min-h-[300px] xl:min-h-[320px] 2xl:min-h-[340px] flex flex-col">
               {items.length === 0 && (
                 <div className="flex-1 flex flex-wrap items-center justify-center gap-2.5 py-10">
                   <ActionBtn
@@ -3784,9 +3784,11 @@ function FoodCard({
 
   return (
     // Card = scrollable body (article) + a fixed action row under it. The
-    // separator lives on the wrapper so it sits below the buttons.
+    // separator lives on the wrapper so it sits below the buttons. The body
+    // cap is sized so body + buttons fit inside the client-details panel
+    // (h-[85vh] with its own inner scroller) without scrolling the panel.
     <div className="flex flex-col pb-5 border-b border-[#E1E6ED] last:border-b-0 last:pb-0">
-      <article className="flex gap-[5px] max-h-[260px] xl:max-h-[300px] 2xl:max-h-[340px] overflow-y-auto overscroll-contain pr-2 [scrollbar-width:thin] [scrollbar-color:#E1E6ED_transparent]">
+      <article className="flex gap-[5px] max-h-[200px] xl:max-h-[220px] 2xl:max-h-[240px] overflow-y-auto pr-2 [scrollbar-width:thin] [scrollbar-color:#E1E6ED_transparent]">
       <div className="flex my-[3px] items-start shrink-0">
         <FoodThumb food={view} className="h-6 w-6 xl:h-7 xl:w-7 2xl:h-[30px] 2xl:w-[30px] rounded-full bg-[#F4A2611A] text-[14px]" />
         <p className="px-[9px] pt-[3px] pb-0.5 text-[#252525] text-[15px] xl:text-[16px] 2xl:text-[18px] font-bold leading-[126%] tracking-[-0.3px] tabular-nums">
