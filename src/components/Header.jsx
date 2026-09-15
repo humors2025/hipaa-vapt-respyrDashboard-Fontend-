@@ -159,16 +159,20 @@ const hideHeaderPaths = [
       router.push("/trainer-admin/trainers");
     } else if (userRole === "super_admin") {
       router.push("/super-admin/overview");
+    } else if (userRole === "facility_admin") {
+      router.push("/facility-admin/trainers");
     }
   };
 
-  const showSwitchButton = userRole === "admin" || userRole === "super_admin";
+  const showSwitchButton = userRole === "admin" || userRole === "super_admin" || userRole === "facility_admin";
 
   const switchBasePath =
     userRole === "admin"
       ? "/trainer-admin"
       : userRole === "super_admin"
       ? "/super-admin"
+      : userRole === "facility_admin"
+      ? "/facility-admin"
       : "";
   const isSwitchActive = !!switchBasePath && pathname?.startsWith(switchBasePath);
   const switchColor = isSwitchActive ? "#308BF9" : "#A1A1A1";
