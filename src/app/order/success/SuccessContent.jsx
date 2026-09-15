@@ -52,7 +52,7 @@ export default function SuccessContent() {
           </div>
         ) : (
           <div className="rounded-[10px] bg-[#EEF4FE] p-5 flex flex-col gap-2 items-center">
-            <div className="text-[#1F4E8C] text-[12px] font-semibold uppercase tracking-wide">Your Rysflo code</div>
+            <div className="text-[#1F4E8C] text-[12px] font-semibold uppercase tracking-wide">Your Rysflo Redeem code</div>
             {code ? (
               <div className="text-[#1F4E8C] text-[34px] font-bold font-mono tracking-[3px]">{code}</div>
             ) : (
