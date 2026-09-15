@@ -60,12 +60,13 @@ export default function OrderPage({ code = "", qrId = "" }) {
   };
 
   return (
-    <main className="min-h-screen bg-[#F5F7FA] flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-[920px] grid grid-cols-1 md:grid-cols-[1.1fr_0.9fr] gap-6">
-        <section className="bg-white rounded-[16px] p-8 flex flex-col gap-6">
+    <main className="min-h-screen bg-[#F5F7FA] flex items-center justify-center px-4 py-6 sm:py-10">
+      <div className="w-full max-w-[920px] grid grid-cols-1 md:grid-cols-[1.1fr_0.9fr] gap-4 sm:gap-6">
+        <section className="bg-white rounded-[16px] p-5 sm:p-8 flex flex-col gap-5 sm:gap-6">
           <div>
+            <img src="/icons/logorespyr.png" alt="Respyr" width={48} height={48} className="mb-4" />
             <div className="text-[#308BF9] text-[12px] font-semibold uppercase tracking-wide">Rysflo membership</div>
-            <h1 className="text-[#252525] text-[28px] font-bold leading-tight mt-1">Know what your metabolism is doing. Every morning.</h1>
+            <h1 className="text-[#252525] text-[24px] sm:text-[28px] font-bold leading-tight mt-1">Know what your metabolism is doing. Every morning.</h1>
             <p className="text-[#535359] text-[14px] mt-2">One breath a day. Three biomarkers. A plan that adapts to you and your trainer.</p>
           </div>
           <ul className="flex flex-col gap-4">
@@ -87,11 +88,11 @@ export default function OrderPage({ code = "", qrId = "" }) {
           )}
         </section>
 
-        <section className="bg-white rounded-[16px] p-8 flex flex-col gap-5 self-start">
+        <section className="bg-white rounded-[16px] p-5 sm:p-8 flex flex-col gap-5 self-start">
           <div>
             {pricing ? (
-              <div className="flex items-baseline gap-3">
-                <div className="text-[#252525] text-[40px] font-bold leading-none">
+              <div className="flex items-baseline gap-3 flex-wrap">
+                <div className="text-[#252525] text-[32px] sm:text-[40px] font-bold leading-none">
                   {formatMinor(priceMinor, pricing.currency).replace(/\.00$/, "")}
                   <span className="text-[16px] text-[#535359] font-semibold">/month</span>
                 </div>
@@ -100,7 +101,7 @@ export default function OrderPage({ code = "", qrId = "" }) {
                 )}
               </div>
             ) : (
-              <div className="text-[#252525] text-[40px] font-bold leading-none">—</div>
+              <div className="text-[#252525] text-[32px] sm:text-[40px] font-bold leading-none">—</div>
             )}
             <div className="text-[#A1A1A1] text-[12px] mt-1">Device included · Free US shipping · 30-day returns</div>
           </div>

@@ -41,6 +41,7 @@ export default function SuccessContent() {
     <main className="min-h-screen bg-[#F5F7FA] flex items-center justify-center px-4 py-10">
       <div className="bg-white rounded-[16px] p-8 max-w-[560px] w-full flex flex-col gap-5">
         <div className="text-center">
+          <img src="/icons/logorespyr.png" alt="Respyr" width={56} height={56} className="mx-auto mb-4" />
           <div className="mx-auto w-12 h-12 rounded-full bg-[#E5F6EE] text-[#1F7A4A] text-[22px] flex items-center justify-center">✓</div>
           <h1 className="text-[#252525] text-[24px] font-bold mt-3">You&rsquo;re in.</h1>
           <p className="text-[#535359] text-[14px] mt-1">Your membership is active and your device is on its way.</p>
@@ -54,7 +55,7 @@ export default function SuccessContent() {
           <div className="rounded-[10px] bg-[#EEF4FE] p-5 flex flex-col gap-2 items-center">
             <div className="text-[#1F4E8C] text-[12px] font-semibold uppercase tracking-wide">Your Rysflo Redeem code</div>
             {code ? (
-              <div className="text-[#1F4E8C] text-[34px] font-bold font-mono tracking-[3px]">{code}</div>
+              <div className="text-[#1F4E8C] text-[26px] sm:text-[34px] font-bold font-mono tracking-[2px] sm:tracking-[3px] break-all text-center">{code}</div>
             ) : (
               <div className="text-[#1F4E8C] text-[14px]">{st?.pending || !st ? "Generating your code…" : "Your code is in your email."}</div>
             )}
