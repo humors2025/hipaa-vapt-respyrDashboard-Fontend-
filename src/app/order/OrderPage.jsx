@@ -64,7 +64,7 @@ export default function OrderPage({ code = "", qrId = "" }) {
       <div className="w-full max-w-[920px] grid grid-cols-1 md:grid-cols-[1.1fr_0.9fr] gap-4 sm:gap-6">
         <section className="bg-white rounded-[16px] p-5 sm:p-8 flex flex-col gap-5 sm:gap-6">
           <div>
-            <img src="/icons/logorespyr.png" alt="Respyr" width={48} height={48} className="mb-4" />
+            <img src="/icons/rysflo-logo.png" alt="Rysflo" width={140} height={40} className="mb-4 h-9 w-auto sm:h-10" />
             <div className="text-[#308BF9] text-[12px] font-semibold uppercase tracking-wide">Rysflo membership</div>
             <h1 className="text-[#252525] text-[24px] sm:text-[28px] font-bold leading-tight mt-1">Know what your metabolism is doing. Every morning.</h1>
             <p className="text-[#535359] text-[14px] mt-2">One breath a day. Three biomarkers. A plan that adapts to you and your trainer.</p>
