@@ -3004,6 +3004,8 @@ const ingredients = rows.flatMap((r) =>
               })}
             </div>
 
+
+<div className="flex flex-col max-2xl:flex-row gap-[3px]">
             {/* food cards */}
             <div className="pt-5 pb-[15px] pl-[15px] pr-2.5 border-4 border-[#F5F7FA] rounded-[15px] flex-1 min-w-0 max-2xl:flex-none min-h-[360px] xl:min-h-[400px] 2xl:min-h-[440px] flex flex-col">
               {items.length === 0 && (
@@ -3025,6 +3027,7 @@ const ingredients = rows.flatMap((r) =>
                 </div>
               )}
               {items.length > 0 && (
+                // Each FoodCard scrolls its own body; the list itself just stacks them.
                 <div className="flex flex-col gap-5">
                   {items.map((f, i) => (
                     <FoodCard
@@ -3055,6 +3058,8 @@ const ingredients = rows.flatMap((r) =>
                 </div>
               )}
             </div>
+
+          </div>
           </div>
 
           {/* --------------------------------------------------------- save bar */}
@@ -3778,7 +3783,10 @@ function FoodCard({
   if (view.foodId) headerTags.push(`ID ${view.foodId}`);
 
   return (
-    <article className="flex gap-[5px] pb-5 border-b border-[#E1E6ED] last:border-b-0 last:pb-0">
+    // Card = scrollable body (article) + a fixed action row under it. The
+    // separator lives on the wrapper so it sits below the buttons.
+    <div className="flex flex-col pb-5 border-b border-[#E1E6ED] last:border-b-0 last:pb-0">
+      <article className="flex gap-[5px] max-h-[260px] xl:max-h-[300px] 2xl:max-h-[340px] overflow-y-auto overscroll-contain pr-2 [scrollbar-width:thin] [scrollbar-color:#E1E6ED_transparent]">
       <div className="flex my-[3px] items-start shrink-0">
         <FoodThumb food={view} className="h-6 w-6 xl:h-7 xl:w-7 2xl:h-[30px] 2xl:w-[30px] rounded-full bg-[#F4A2611A] text-[14px]" />
         <p className="px-[9px] pt-[3px] pb-0.5 text-[#252525] text-[15px] xl:text-[16px] 2xl:text-[18px] font-bold leading-[126%] tracking-[-0.3px] tabular-nums">
@@ -3902,37 +3910,41 @@ function FoodCard({
             </div>
           </div>
 
-          <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            {view.alternatives > 0 && (
-              <ActionBtn onClick={onOpenSwaps} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
-                {view.alternatives} swaps
-              </ActionBtn>
-            )}
-            <ActionBtn primary onClick={onSearchSwap} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
-              Search a swap
-            </ActionBtn>
-            <ActionBtn onClick={onMakeMeal} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
-              Make my meal
-            </ActionBtn>
-            <button
-              type="button"
-              onClick={onDelete}
-              disabled={!!f.removed || isRemovedPlaceholder(f) || deleteDisabled}
-              title={
-                f.removed || isRemovedPlaceholder(f)
-                  ? "This meal has already been removed"
-                  : deleteDisabled
-                    ? deleteDisabledReason
-                    : undefined
-              }
-              className="ml-auto px-[11px] py-1 rounded-[4px] text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-normal tracking-[-0.24px] text-[#A1A1A1] cursor-pointer hover:bg-[#E76F511A] hover:text-[#E76F51] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#A1A1A1]"
-            >
-              Delete
-            </button>
-          </div>
+        
         </div>
       </div>
-    </article>
+      </article>
+
+      {/* Always visible: sits under the scrolling body, not inside it. */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        {view.alternatives > 0 && (
+          <ActionBtn onClick={onOpenSwaps} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
+            {view.alternatives} swaps
+          </ActionBtn>
+        )}
+        <ActionBtn primary onClick={onSearchSwap} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
+          Search a swap
+        </ActionBtn>
+        <ActionBtn onClick={onMakeMeal} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
+          Make my meal
+        </ActionBtn>
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={!!f.removed || isRemovedPlaceholder(f) || deleteDisabled}
+          title={
+            f.removed || isRemovedPlaceholder(f)
+              ? "This meal has already been removed"
+              : deleteDisabled
+                ? deleteDisabledReason
+                : undefined
+          }
+          className="ml-auto px-[11px] py-1 rounded-[4px] text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-normal tracking-[-0.24px] text-[#A1A1A1] cursor-pointer hover:bg-[#E76F511A] hover:text-[#E76F51] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#A1A1A1]"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
   );
 }
 
