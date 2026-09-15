@@ -10,6 +10,7 @@ import {
   fetchEarningsSummaryService,
   formatMinor,
 } from "@/services/commissionService";
+import { resendUserInviteService } from "@/services/authService";
 
 /**
  * Facility admin › Trainers.
@@ -190,6 +191,22 @@ export default function FacilityAdminTrainersPage() {
 
   const trainers = useMemo(() => (data?.existing || []).filter((t) => t.status === "active"), [data]);
   const pending = data?.pending_invites || [];
+  const [resending, setResending] = useState(null);
+  const [resent, setResent] = useState(null); // { invitation_id, email, debug_invite_link? }
+
+  const resend = async (p) => {
+    if (resending) return;
+    setResending(p.invitation_id);
+    try {
+      const res = await resendUserInviteService({ inviteId: p.invitation_id });
+      toast.success(`Invite re-sent to ${p.email}`);
+      setResent({ invitation_id: p.invitation_id, email: p.email, debug_invite_link: res?.debug_invite_link || res?.data?.debug_invite_link || null });
+    } catch (err) {
+      toast.error(err?.message || "Could not resend invite");
+    } finally {
+      setResending(null);
+    }
+  };
   const earningsByTrainer = useMemo(() => {
     const m = new Map();
     for (const t of summary?.trainers || []) m.set(t.user_id, t);
@@ -263,8 +280,8 @@ export default function FacilityAdminTrainersPage() {
       {/* Split explainer */}
       <div className="rounded-[10px] bg-[#EEF4FE] px-4 py-3 text-[12px] text-[#1F4E8C]">
         <strong>Commission split</strong> is the share of Rysflo&rsquo;s referral commission a trainer keeps for members who
-        sign up under their own code; the rest comes to the facility. It&rsquo;s your call, from 0% to 100%, and changes
-        apply to future payments only. Members who sign up under the facility&rsquo;s own QR code pay 100% to the facility.
+        sign up under their own code; the rest comes to the facility. It&rsquo;s your call, from 0% to 100%, and a change
+        re-splits every commission not yet paid out (amounts already paid stay as they were). Members who sign up under the facility&rsquo;s own QR code pay 100% to the facility.
       </div>
 
       {/* Trainers table */}
@@ -330,6 +347,7 @@ export default function FacilityAdminTrainersPage() {
                   <th className="py-2.5 px-4 font-semibold">Email</th>
                   <th className="py-2.5 px-4 font-semibold">Code</th>
                   <th className="py-2.5 px-4 font-semibold">Expires</th>
+                  <th className="py-2.5 px-4 font-semibold text-right">Sign-up link</th>
                 </tr>
               </thead>
               <tbody>
@@ -339,11 +357,29 @@ export default function FacilityAdminTrainersPage() {
                     <td className="py-2.5 px-4 text-[#535359]">{p.email}</td>
                     <td className="py-2.5 px-4 text-[#535359] font-mono">{p.partner_code || "—"}</td>
                     <td className="py-2.5 px-4 text-[#A1A1A1]">{p.expires_at || "—"}</td>
+                    <td className="py-2.5 px-4 text-right">
+                      <button type="button" onClick={() => resend(p)} disabled={resending === p.invitation_id} className="rounded-full bg-[#EEF4FE] text-[#308BF9] text-[11px] font-semibold px-3 py-1 disabled:opacity-60 cursor-pointer">
+                        {resending === p.invitation_id ? "Sending…" : "Resend email"}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {resent && (
+            <div className="mt-3 rounded-[10px] bg-[#E5F6EE] px-4 py-3 text-[12px] text-[#1F7A4A]">
+              A fresh sign-up link was emailed to <strong>{resent.email}</strong>. Any older link is now invalid.
+              {/* Only present when the API runs with RETURN_INVITE_LINK_FOR_TESTING (never in production). */}
+              {resent.debug_invite_link && (
+                <div className="mt-2 flex flex-col gap-2">
+                  <span className="text-[#535359]">Test environment — invite link (emails are not sent here):</span>
+                  <div className="text-[#308BF9] break-all select-all bg-white rounded-[8px] px-3 py-2 border border-[#E1E6ED]">{resent.debug_invite_link}</div>
+                  <button type="button" onClick={() => { navigator.clipboard?.writeText(resent.debug_invite_link); toast.success("Invite link copied"); }} className="self-start rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 cursor-pointer">Copy invite link</button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

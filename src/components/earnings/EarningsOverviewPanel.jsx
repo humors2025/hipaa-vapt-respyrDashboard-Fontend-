@@ -145,7 +145,8 @@ export default function EarningsOverviewPanel({ payoutSetupHref }) {
               <thead>
                 <tr className="bg-[#F5F7FA] text-[#535359] text-left">
                   <th className="py-2.5 px-4 font-semibold">Date</th>
-                  <th className="py-2.5 px-4 font-semibold">Referral code</th>
+                  <th className="py-2.5 px-4 font-semibold">Member</th>
+                  <th className="py-2.5 px-4 font-semibold">Referred by</th>
                   <th className="py-2.5 px-4 font-semibold">Your share</th>
                   <th className="py-2.5 px-4 font-semibold text-right">Amount</th>
                   <th className="py-2.5 px-4 font-semibold">Status</th>
@@ -157,7 +158,11 @@ export default function EarningsOverviewPanel({ payoutSetupHref }) {
                   return (
                     <tr key={i} className="border-t border-[#F5F7FA]">
                       <td className="py-2.5 px-4 text-[#535359]">{fmtDate(r.invoice_paid_at)}</td>
-                      <td className="py-2.5 px-4 text-[#535359] font-mono">{r.attributed_partner_code}</td>
+                      <td className="py-2.5 px-4 text-[#252525]">{r.member_name || "—"}</td>
+                      <td className="py-2.5 px-4 text-[#535359]">
+                        {r.referred_by || "—"}
+                        <span className="text-[#A1A1A1] font-mono text-[11px]"> · {r.attributed_partner_code}</span>
+                      </td>
                       <td className="py-2.5 px-4 text-[#535359]">{r.share_pct}%</td>
                       <td className="py-2.5 px-4 text-right text-[#252525] font-semibold">{formatMinor(r.amount_minor, cur)}</td>
                       <td className="py-2.5 px-4">
