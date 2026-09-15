@@ -96,7 +96,8 @@ const SLOTS = ["breakfast", "lunch", "snacks", "dinner"];
  * Name a deleted dish is saved under. Delete does not drop the row: it turns
  * it into this empty placeholder (zero macros, no recipe) which Save persists
  * as an ordinary "update", so the slot survives reload exactly as the older
- * plan screen showed it. Deleting the placeholder itself removes the row.
+ * plan screen showed it. The placeholder's own Delete button is disabled; the
+ * slot can only be refilled via "Search a swap" / "Make my meal".
  */
 const REMOVED_PLACEHOLDER_NAME = "(empty — removed)";
 function isRemovedPlaceholder(f) {
@@ -2259,7 +2260,8 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
       return;
     }
     const f = items.find((x) => x.id === foodId);
-    if (!f) return;
+    // The empty placeholder keeps its slot; it can only be refilled via a swap.
+    if (!f || f.removed || isRemovedPlaceholder(f)) return;
     // Opens the confirmation popup; performDelete() does the work once confirmed.
     setDeleteTarget({ dayIdx, slot, foodId, name: f.name });
   }
@@ -2269,35 +2271,31 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
     const t = deleteTarget;
     setDeleteTarget(null);
     if (!t) return;
-    updateFood(t.dayIdx, t.slot, t.foodId, (fd) =>
-      isRemovedPlaceholder(fd)
-        ? // Deleting an already-empty row drops it for good (Save sends "delete").
-          { ...fd, removed: true }
-        : // Deleting a dish keeps the row as an empty placeholder (Save sends
-          // "update"), so the slot is still there after reload.
-          {
-            ...fd,
-            name: REMOVED_PLACEHOLDER_NAME,
-            kcal_base: 0,
-            protein_g: 0,
-            carbs_g: 0,
-            fat_g: 0,
-            fiber_g: 0,
-            servings: 1,
-            portion: "1 serving",
-            prep_minutes: null,
-            image: null,
-            images: [],
-            ingredients: [],
-            method_steps: [],
-            tips: [],
-            alternatives: 0,
-            alternativeItems: [],
-            recipeId: null,
-            variantId: null,
-            hash: null,
-          }
-    );
+    // Deleting a dish keeps the row as an empty placeholder (Save sends
+    // "update"), so the slot is still there after reload. The placeholder
+    // itself cannot be deleted (its Delete button is disabled).
+    updateFood(t.dayIdx, t.slot, t.foodId, (fd) => ({
+      ...fd,
+      name: REMOVED_PLACEHOLDER_NAME,
+      kcal_base: 0,
+      protein_g: 0,
+      carbs_g: 0,
+      fat_g: 0,
+      fiber_g: 0,
+      servings: 1,
+      portion: "1 serving",
+      prep_minutes: null,
+      image: null,
+      images: [],
+      ingredients: [],
+      method_steps: [],
+      tips: [],
+      alternatives: 0,
+      alternativeItems: [],
+      recipeId: null,
+      variantId: null,
+      hash: null,
+    }));
     flash(`Removed ${t.name}`);
   }
 
@@ -3550,35 +3548,51 @@ function MacrosPanel({ totals, targets, dayIndex = 0 }) {
     if (maxKey === "Fib") pctFib += drift;
   }
 
-  // Arcs, clockwise from 12 o'clock: Fibre → Protein → Fats → Carbs.
-  const R = 90;
+  // Ring geometry mirrors the MacrosUpdate doughnut (chart.js cutout 78%,
+  // rotation -45°): a thick band with no gaps between segments, a thin
+  // #E1E6ED hairline on both edges and a rounded cap on the END of each
+  // segment that overlaps the start of the next one.
+  const R_OUT = 117;
+  const R_IN = R_OUT * 0.78;
+  const BAND = R_OUT - R_IN;
+  const R = (R_OUT + R_IN) / 2; // stroke centre line
   const CIRC = 2 * Math.PI * R;
-  const GAP = 6;
+  const START_DEG = -45; // clockwise from 12 o'clock, like MacrosUpdate
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  // Arcs, clockwise from the start angle: Carbs → Fats → Protein → Fibre.
   const arcs = [
-    { key: "fibre", pct: pctFib, color: MACRO_COLORS.fibre },
-    { key: "protein", pct: pctP, color: MACRO_COLORS.protein },
-    { key: "fats", pct: pctF, color: MACRO_COLORS.fats },
     { key: "carbs", pct: pctC, color: MACRO_COLORS.carbs },
+    { key: "fats", pct: pctF, color: MACRO_COLORS.fats },
+    { key: "protein", pct: pctP, color: MACRO_COLORS.protein },
+    { key: "fibre", pct: pctFib, color: MACRO_COLORS.fibre },
   ];
   let cursor = 0;
   const segs = arcs.map((a) => {
-    const len = Math.max(0, (a.pct / 100) * CIRC - (a.pct > 0 ? GAP : 0));
-    const seg = { ...a, dash: `${len} ${CIRC - len}`, dashOffset: -cursor };
-    cursor += (a.pct / 100) * CIRC;
+    const len = Math.max(0, (a.pct / 100) * CIRC);
+    const endRad = toRad(START_DEG + ((cursor + a.pct) / 100) * 360 - 90);
+    const seg = {
+      ...a,
+      dash: `${len} ${CIRC - len}`,
+      dashOffset: -(cursor / 100) * CIRC,
+      // Rounded cap drawn at the segment's end (skipped for slivers thinner than the cap).
+      cap: (a.pct / 100) * CIRC >= BAND / 2 ? { x: 120 + R * Math.cos(endRad), y: 120 + R * Math.sin(endRad) } : null,
+    };
+    cursor += a.pct;
     return seg;
   });
 
-  // Bubbles sit at the midpoint angle of their own segment. Hidden below 4%
-  // — at that size two bubbles land on top of each other and read as noise.
+  // Bubbles sit on the band at the midpoint angle of their own segment.
+  // Hidden below 4% — at that size two bubbles land on top of each other
+  // and read as noise.
   let bubbleCursor = 0;
   const bubbles = arcs
     .map((a) => {
       const midPct = bubbleCursor + a.pct / 2;
       bubbleCursor += a.pct;
       if (a.pct < 4) return null;
-      const angleRad = ((midPct / 100) * 360 - 90) * (Math.PI / 180);
-      const cx = 120 + 75 * Math.cos(angleRad);
-      const cy = 120 + 75 * Math.sin(angleRad);
+      const angleRad = toRad(START_DEG + (midPct / 100) * 360 - 90);
+      const cx = 120 + R * Math.cos(angleRad);
+      const cy = 120 + R * Math.sin(angleRad);
       return { key: a.key, pct: a.pct, top: (cy / 240) * 100, left: (cx / 240) * 100 };
     })
     .filter(Boolean);
@@ -3610,22 +3624,29 @@ function MacrosPanel({ totals, targets, dayIndex = 0 }) {
 
       <div className="flex justify-center items-center py-5">
         <div className="relative w-[200px] h-[200px]">
-          <svg viewBox="0 0 240 240" className="h-full w-full -rotate-90">
-            <circle cx="120" cy="120" r={R} fill="transparent" stroke="#E1E6ED" strokeWidth="20" />
-            {segs.map((s) => (
-              <circle
-                key={s.key}
-                cx="120"
-                cy="120"
-                r={R}
-                fill="transparent"
-                stroke={s.color}
-                strokeWidth="20"
-                strokeDasharray={s.dash}
-                strokeDashoffset={s.dashOffset}
-                className="transition-all duration-500"
-              />
-            ))}
+          <svg viewBox="0 0 240 240" className="h-full w-full">
+            {/* Empty track (only visible while the day has no macros) */}
+            <circle cx="120" cy="120" r={R} fill="transparent" stroke="#E1E6ED" strokeWidth={BAND} />
+            <g transform={`rotate(${START_DEG - 90} 120 120)`}>
+              {segs.map((s) => (
+                <circle
+                  key={s.key}
+                  cx="120"
+                  cy="120"
+                  r={R}
+                  fill="transparent"
+                  stroke={s.color}
+                  strokeWidth={BAND}
+                  strokeDasharray={s.dash}
+                  strokeDashoffset={s.dashOffset}
+                  className="transition-all duration-500"
+                />
+              ))}
+            </g>
+            {segs.map((s) => (s.cap ? <circle key={`${s.key}-cap`} cx={s.cap.x} cy={s.cap.y} r={BAND / 2} fill={s.color} /> : null))}
+            {/* Hairlines on the inner and outer edge of the band */}
+            <circle cx="120" cy="120" r={R_IN} fill="transparent" stroke="#E1E6ED" strokeWidth="4" />
+            <circle cx="120" cy="120" r={R_OUT} fill="transparent" stroke="#E1E6ED" strokeWidth="4" />
           </svg>
           {bubbles.map((b) => (
             <div
@@ -3896,8 +3917,14 @@ function FoodCard({
             <button
               type="button"
               onClick={onDelete}
-              disabled={!!f.removed || deleteDisabled}
-              title={f.removed ? "This meal has already been removed" : deleteDisabled ? deleteDisabledReason : undefined}
+              disabled={!!f.removed || isRemovedPlaceholder(f) || deleteDisabled}
+              title={
+                f.removed || isRemovedPlaceholder(f)
+                  ? "This meal has already been removed"
+                  : deleteDisabled
+                    ? deleteDisabledReason
+                    : undefined
+              }
               className="ml-auto px-[11px] py-1 rounded-[4px] text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-normal tracking-[-0.24px] text-[#A1A1A1] cursor-pointer hover:bg-[#E76F511A] hover:text-[#E76F51] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#A1A1A1]"
             >
               Delete
