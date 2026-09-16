@@ -8,6 +8,7 @@ import {
   generateQrBatchService,
   assignQrService,
   setupQrService,
+  revokeQrService,
   listTrainerAdminsService,
 } from "@/services/commissionService";
 
@@ -20,6 +21,8 @@ import {
  * Trainer admin: "My stickers" — every sticker handed to them, in a table.
  * "Set up" on a row: Business (gym owner) or Personal trainer, name, owner
  * email, phone → the invite goes out and the sticker is live immediately.
+ * "Revoke" while the invite is still pending cancels it and puts the sticker
+ * back to "not set up" so it can be set up again.
  */
 
 // Either "https://rysflo.com/buy/?q=" (website) or "https://admin.rysflo.com/q/" (fallback).
@@ -114,6 +117,7 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
   const [setupId, setSetupId] = useState(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [revokingId, setRevokingId] = useState(null);
   const [count, setCount] = useState(50);
   const [tas, setTas] = useState([]);
   const [assignTo, setAssignTo] = useState("");
@@ -162,6 +166,22 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
       toast.error(err?.message || "Could not assign");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const revoke = async (q) => {
+    const who = q.target_label || q.partner_code;
+    if (!window.confirm(`Revoke the invite to ${q.invited_email || who}? Sticker ${q.id} goes back to "not set up" and the code ${q.partner_code} stops working.`)) return;
+    setRevokingId(q.id);
+    try {
+      await revokeQrService({ qrId: q.id });
+      toast.success(`Invite revoked — sticker ${q.id} is ready to set up again`);
+      if (setupId === q.id) setSetupId(null);
+      load();
+    } catch (err) {
+      toast.error(err?.message || "Could not revoke");
+    } finally {
+      setRevokingId(null);
     }
   };
 
@@ -253,6 +273,7 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
             <tbody>
               {items.map((q) => {
                 const isSet = q.status === "assigned" && !!q.partner_code;
+                const canRevoke = isSet && q.target_status === "pending" && (!isSuperAdmin || q.assigned_to_user_id);
                 return [
                   <tr key={q.id} className="border-t border-[#F5F7FA]">
                     <td className="py-2 px-4"><button type="button" onClick={() => setPreview(q)} className="cursor-pointer" title="Preview"><QRCodeCanvas value={stickerUrl(q.id)} size={36} /></button></td>
@@ -272,6 +293,9 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
                     <td className="py-2.5 px-4 text-right">
                       {!isSet && (!isSuperAdmin || q.assigned_to_user_id) && (
                         <button type="button" onClick={() => setSetupId(setupId === q.id ? null : q.id)} className="rounded-full bg-[#308BF9] text-white text-[11px] font-semibold px-3 py-1 cursor-pointer">Set up</button>
+                      )}
+                      {canRevoke && (
+                        <button type="button" onClick={() => revoke(q)} disabled={revokingId === q.id} className="rounded-full bg-[#FDECEC] text-[#E5484D] text-[11px] font-semibold px-3 py-1 disabled:opacity-50 cursor-pointer">{revokingId === q.id ? "Revoking…" : "Revoke"}</button>
                       )}
                     </td>
                   </tr>,

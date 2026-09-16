@@ -118,6 +118,7 @@ export const listQrService = ({ status, facilityId } = {}) => post(API_ENDPOINTS
 export const assignQrService = ({ toUserId, count, batchId }) => post(API_ENDPOINTS.COMMISSION.QRASSIGN, { to_user_id: toUserId, count, batch_id: batchId || undefined });
 export const setupQrService = ({ qrId, targetType, facilityName, firstName, lastName, email, phone }) =>
   post(API_ENDPOINTS.COMMISSION.QRSETUP, { qr_id: qrId, target_type: targetType, facility_name: facilityName || undefined, first_name: firstName, last_name: lastName, email, phone: phone || undefined });
+export const revokeQrService = ({ qrId }) => post(API_ENDPOINTS.COMMISSION.QRREVOKE, { qr_id: qrId });
 export const listTrainerAdminsService = () => post(API_ENDPOINTS.COMMISSION.LISTTRAINERADMINS);
 
 // ── Pricing ──────────────────────────────────────────────────────────────────
