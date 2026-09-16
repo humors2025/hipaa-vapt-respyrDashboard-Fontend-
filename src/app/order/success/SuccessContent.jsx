@@ -225,7 +225,7 @@ export default function SuccessContent() {
                 <div className="flex items-center justify-between gap-3">
                   <p id="pass-label" className="inline-flex items-center gap-1.5 text-[#1F4E8C] text-[12px] font-semibold uppercase tracking-wide">
                     <IconKey className="h-4 w-4" />
-                    Your Rysflo Redeem code
+                    Your Rysflo Referral Code
                   </p>
                   <CopyButton text={code} codeRef={codeRef} />
                 </div>
