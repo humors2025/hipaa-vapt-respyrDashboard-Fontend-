@@ -3828,9 +3828,10 @@ function FoodCard({
             <div className="min-w-0 flex-1">
               <div className="mb-1.5 flex flex-wrap items-center gap-2">
                 <span className={cn("text-[#738298] font-semibold uppercase", UI.small)}>servings</span>
-                <StepBtn label="−" disabled={removed || serv - 0.25 < 0.25} onClick={() => onStepPortion(-1)} />
+                {/* Approved / locked week: servings can no longer be changed. */}
+                <StepBtn label="−" disabled={editLocked || removed || serv - 0.25 < 0.25} title={editLocked ? editLockedReason : undefined} onClick={() => onStepPortion(-1)} />
                 <span className={cn("min-w-[56px] text-center text-[#252525] font-semibold tabular-nums", UI.body)}>{serv}</span>
-                <StepBtn label="+" disabled={removed || serv + 0.25 > 6} onClick={() => onStepPortion(1)} />
+                <StepBtn label="+" disabled={editLocked || removed || serv + 0.25 > 6} title={editLocked ? editLockedReason : undefined} onClick={() => onStepPortion(1)} />
                 {serv !== 1 && (
                   <span className={cn("text-[#308BF9] font-semibold", UI.small)}>
                     {s.kcal} kcal · P{Math.round(s.protein_g)} · C{Math.round(s.carbs_g)} · F{Math.round(s.fat_g)}
