@@ -139,6 +139,7 @@ export default function ReferralQrCard({ title = "Your referral QR code", subtit
           )}
 
           {hasStickers ? (
+            /* Hidden for now: gym code + share link card shown under the sticker.
             <div className="rounded-[15px] border border-[#E1E6ED] bg-white p-5 flex flex-col gap-3">
               <div>
                 <div className={LABEL}>Your gym code</div>
@@ -161,6 +162,8 @@ export default function ReferralQrCard({ title = "Your referral QR code", subtit
                 Members pay $29/month for the Rysflo device and app. Every reading they take earns them 20¢ off the next month, up to $6.
               </p>
             </div>
+            */
+            null
           ) : codeQr ? (
             <div className="flex flex-col md:flex-row gap-6 items-start">
               <QrBlock value={url} filename={`rysflo-${code}.png`} />
