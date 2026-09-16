@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { fetchReferredMembersService, resendPurchaseCodeService, formatMinor } from "@/services/commissionService";
 
+// Mirrors the API's per-recipient cooldown (EMAIL_RESEND_COOLDOWN_SECONDS, default 60).
+const RESEND_COOLDOWN_SECONDS = 60;
+
 /**
  * Referrals › Members: everyone who bought through the caller's code(s).
  *
@@ -68,7 +71,7 @@ function InvoiceHistory({ m, isOwner, currency }) {
   );
 }
 
-function MemberRow({ m, isOwner, open, onToggle, onResend, busy, currency }) {
+function MemberRow({ m, isOwner, open, onToggle, onResend, busy, coolingDown, currency }) {
   return (
     <>
       <tr className="border-t border-[#F5F7FA] cursor-pointer hover:bg-[#FAFBFC]" onClick={onToggle}>
@@ -104,8 +107,8 @@ function MemberRow({ m, isOwner, open, onToggle, onResend, busy, currency }) {
         </td>
         <td className="py-2.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
           {!m.linked && (
-            <button type="button" onClick={onResend} disabled={busy} className="text-[11px] font-semibold text-[#308BF9] hover:underline disabled:opacity-50 cursor-pointer">
-              {busy ? "Sending…" : "Resend code"}
+            <button type="button" onClick={onResend} disabled={busy || coolingDown > 0} className="text-[11px] font-semibold text-[#308BF9] hover:underline disabled:opacity-50 cursor-pointer">
+              {busy ? "Sending…" : coolingDown > 0 ? `Resend in ${coolingDown}s` : "Resend code"}
             </button>
           )}
         </td>
@@ -121,7 +124,7 @@ function MemberRow({ m, isOwner, open, onToggle, onResend, busy, currency }) {
   );
 }
 
-function MembersTable({ members, isOwner, openId, setOpenId, resend, busyId, currency }) {
+function MembersTable({ members, isOwner, openId, setOpenId, resend, busyId, cooldowns, currency }) {
   return (
     <table className="w-full text-[12px]">
       <thead>
@@ -148,6 +151,7 @@ function MembersTable({ members, isOwner, openId, setOpenId, resend, busyId, cur
             onToggle={() => setOpenId(openId === m.stripe_subscription_id ? null : m.stripe_subscription_id)}
             onResend={() => resend(m.stripe_subscription_id)}
             busy={busyId === m.stripe_subscription_id}
+            coolingDown={cooldowns[m.stripe_subscription_id] || 0}
           />
         ))}
       </tbody>
@@ -159,6 +163,9 @@ export default function ReferredMembersPanel() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  // Seconds left before "Resend code" is allowed again, per subscription. Set
+  // after a successful send (server cooldown) or from a 429's retry_after_seconds.
+  const [cooldowns, setCooldowns] = useState({});
   const [filter, setFilter] = useState("all");
   const [openId, setOpenId] = useState(null);
   const [openGroups, setOpenGroups] = useState({});
@@ -185,13 +192,24 @@ export default function ReferredMembersPanel() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!Object.values(cooldowns).some((s) => s > 0)) return undefined;
+    const t = setInterval(() => {
+      setCooldowns((c) => Object.fromEntries(Object.entries(c).map(([k, v]) => [k, Math.max(0, v - 1)]).filter(([, v]) => v > 0)));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [cooldowns]);
+
   const resend = async (id) => {
     setBusyId(id);
     try {
       await resendPurchaseCodeService({ stripeSubscriptionId: id });
       toast.success("Code re-sent");
+      setCooldowns((c) => ({ ...c, [id]: RESEND_COOLDOWN_SECONDS }));
       load();
     } catch (err) {
+      const wait = Number(err?.data?.retry_after_seconds);
+      if (err?.status === 429 && wait > 0) setCooldowns((c) => ({ ...c, [id]: Math.min(wait, 3600) }));
       toast.error(err?.message || "Could not resend");
     } finally {
       setBusyId(null);
@@ -301,7 +319,7 @@ export default function ReferredMembersPanel() {
                     {members.length === 0 ? (
                       <div className="px-4 py-3 text-[#A1A1A1] text-[12px]">No members through this code yet.</div>
                     ) : (
-                      <MembersTable members={members} isOwner openId={openId} setOpenId={setOpenId} resend={resend} busyId={busyId} currency={currency} />
+                      <MembersTable members={members} isOwner openId={openId} setOpenId={setOpenId} resend={resend} busyId={busyId} cooldowns={cooldowns} currency={currency} />
                     )}
                   </div>
                 )}
@@ -311,7 +329,7 @@ export default function ReferredMembersPanel() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-[10px] border border-[#E1E6ED]">
-          <MembersTable members={items} isOwner={false} openId={openId} setOpenId={setOpenId} resend={resend} busyId={busyId} currency={currency} />
+          <MembersTable members={items} isOwner={false} openId={openId} setOpenId={setOpenId} resend={resend} busyId={busyId} cooldowns={cooldowns} currency={currency} />
         </div>
       )}
     </div>
