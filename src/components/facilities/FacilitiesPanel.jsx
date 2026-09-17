@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { QrCode } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { listFacilitiesService, inviteFacilityAdminService, listQrService, setupQrService, formatMinor } from "@/services/commissionService";
 import { inviteTrainerClientService, superAdminInviteTrainerService } from "@/services/authService";
 
@@ -22,6 +24,8 @@ const PAYOUT = {
 };
 
 const EMPTY = { type: "facility", qrId: "", firstName: "", lastName: "", email: "", phone: "", facilityName: "" };
+// Radix Select can't hold "" as an item value — sentinel for "invite only".
+const NO_STICKER = "__none__";
 
 function Card({ label, value, hint, accent }) {
   return (
@@ -159,10 +163,22 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
             )}
             <label className="flex flex-col gap-1">
               <span className="text-[#535359] text-[12px] font-semibold">QR sticker (optional)</span>
-              <select className={field} value={form.qrId} onChange={set("qrId")}>
-                <option value="">No sticker yet — invite only</option>
-                {stickers.map((q) => <option key={q.id} value={q.id}>{q.id}</option>)}
-              </select>
+              <Select value={form.qrId || NO_STICKER} onValueChange={(v) => setForm((f) => ({ ...f, qrId: v === NO_STICKER ? "" : v }))}>
+                <SelectTrigger className={`${field} h-auto shadow-none data-[placeholder]:text-[#252525] [&_svg]:text-[#A1A1A1] focus-visible:ring-0 focus-visible:border-[#308BF9] data-[state=open]:border-[#308BF9]`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent side="bottom" align="start" sideOffset={6} avoidCollisions={false} className="rounded-[10px] border-[#E1E6ED] bg-white shadow-[0_8px_24px_rgba(37,37,37,0.10)] max-h-[280px]">
+                  <SelectItem value={NO_STICKER} className="rounded-[8px] py-2 text-[13px] text-[#535359] cursor-pointer focus:bg-[#EEF4FE] focus:text-[#308BF9]">
+                    No sticker yet — invite only
+                  </SelectItem>
+                  {stickers.map((q) => (
+                    <SelectItem key={q.id} value={q.id} className="rounded-[8px] py-2 text-[13px] text-[#252525] cursor-pointer focus:bg-[#EEF4FE] focus:text-[#308BF9]">
+                      <QrCode className="size-4 text-[#A1A1A1]" />
+                      <span className="font-mono font-semibold">{q.id}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <span className="text-[#A1A1A1] text-[11px]">{stickers.length ? "Stickers you hold that are not set up. The one you pick goes live for this invite." : "No stickers waiting to be set up."}</span>
             </label>
           </div>
