@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
+import { UserRound } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   listQrService,
   generateQrBatchService,
@@ -185,14 +187,15 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
     }
   };
 
-  const items = data.items.filter((q) => {
-    if (filter === "all") return q.status !== "retired";
-    if (filter === "unset") return q.status !== "assigned" || !q.partner_code;
-    if (filter === "live") return q.status === "assigned" && !!q.partner_code;
-    return true;
-  });
-  const unset = data.items.filter((q) => q.status !== "assigned" || !q.partner_code).length;
-  const live = data.items.filter((q) => q.status === "assigned" && !!q.partner_code).length;
+  // One predicate per filter pill; the pill count is the number of rows it shows.
+  const FILTERS = {
+    all: (q) => q.status !== "retired",
+    unset: (q) => q.status !== "assigned" || !q.partner_code,
+    live: (q) => q.status === "assigned" && !!q.partner_code,
+  };
+  const items = data.items.filter(FILTERS[filter] || (() => true));
+  const counts = Object.fromEntries(Object.entries(FILTERS).map(([k, fn]) => [k, data.items.filter(fn).length]));
+  const { unset, live } = counts;
 
   return (
     <div className="flex flex-col gap-6">
@@ -227,10 +230,23 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
           <form onSubmit={assign} className="rounded-[10px] border border-[#E1E6ED] p-4 flex flex-col gap-3">
             <div className="text-[#252525] text-[13px] font-bold">Hand stickers to a trainer admin</div>
             <div className="flex items-center gap-3 flex-wrap">
-              <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)} className={`${field} w-auto min-w-[220px]`}>
-                <option value="">Choose trainer admin…</option>
-                {tas.map((t) => <option key={t.user_id} value={t.user_id}>{t.name || t.user_id} — {t.user_id}</option>)}
-              </select>
+              <Select value={assignTo || undefined} onValueChange={setAssignTo}>
+                <SelectTrigger className={`${field} w-auto min-w-[260px] max-w-[360px] h-auto shadow-none data-[placeholder]:text-[#A1A1A1] [&_svg]:text-[#A1A1A1] focus-visible:ring-0 focus-visible:border-[#308BF9] data-[state=open]:border-[#308BF9]`}>
+                  <SelectValue placeholder="Choose trainer admin…" />
+                </SelectTrigger>
+                <SelectContent side="bottom" align="start" sideOffset={6} avoidCollisions={false} className="rounded-[10px] border-[#E1E6ED] bg-white shadow-[0_8px_24px_rgba(37,37,37,0.10)] max-h-[280px] w-[var(--radix-select-trigger-width)]">
+                  {tas.length === 0 && <div className="px-3 py-2 text-[12px] text-[#A1A1A1]">No trainer admins yet</div>}
+                  {tas.map((t) => (
+                    <SelectItem key={t.user_id} value={t.user_id} className="rounded-[8px] py-2 text-[13px] text-[#252525] cursor-pointer focus:bg-[#EEF4FE] focus:text-[#308BF9]">
+                      <UserRound className="size-4 text-[#A1A1A1]" />
+                      <span className="flex flex-col leading-tight min-w-0">
+                        <span className="font-semibold truncate">{t.name || t.user_id}</span>
+                        {t.name && <span className="text-[11px] text-[#A1A1A1] truncate">{t.user_id}</span>}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <input type="number" min={1} max={1000} value={assignCount} onChange={(e) => setAssignCount(Number(e.target.value) || 1)} className={`${field} w-24`} />
               <button type="submit" disabled={busy || !assignTo} className="rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 disabled:opacity-50 cursor-pointer">Assign</button>
             </div>
@@ -247,7 +263,10 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
 
       <div className="flex gap-2 flex-wrap">
         {[["all", "All"], ["unset", "Not set up"], ["live", "Live"]].map(([k, label]) => (
-          <button key={k} type="button" onClick={() => setFilter(k)} className={`rounded-full px-3 py-1 text-[11px] font-semibold cursor-pointer ${filter === k ? "bg-[#308BF9] text-white" : "bg-[#F5F7FA] text-[#535359]"}`}>{label}</button>
+          <button key={k} type="button" onClick={() => setFilter(k)} className={`inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1 text-[11px] font-semibold cursor-pointer ${filter === k ? "bg-[#308BF9] text-white" : "bg-[#F5F7FA] text-[#535359]"}`}>
+            {label}
+            <span className={`inline-flex min-w-[20px] justify-center rounded-full px-1.5 py-px text-[10px] tabular-nums ${filter === k ? "bg-white/25 text-white" : "bg-white text-[#252525] border border-[#E1E6ED]"}`}>{counts[k]}</span>
+          </button>
         ))}
       </div>
 
