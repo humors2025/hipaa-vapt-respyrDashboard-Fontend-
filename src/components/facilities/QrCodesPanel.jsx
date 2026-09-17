@@ -44,7 +44,6 @@ function SetupForm({ sticker, onDone, onCancel }) {
   const [type, setType] = useState("facility");
   const [f, setF] = useState({ facilityName: "", firstName: "", lastName: "", email: "", phone: "" });
   const [busy, setBusy] = useState(false);
-  const [showAllocation, setShowAllocation] = useState(false); // super admin: who holds how many stickers
   const [result, setResult] = useState(null);
   const set = (k) => (e) => setF((v) => ({ ...v, [k]: e.target.value }));
   const ok = f.firstName.trim() && f.lastName.trim() && /\S+@\S+\.\S+/.test(f.email) && (type === "trainer" || f.facilityName.trim());
@@ -120,6 +119,7 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
   const [setupId, setSetupId] = useState(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [showAllocation, setShowAllocation] = useState(false); // super admin: who holds how many stickers
   const [revokingId, setRevokingId] = useState(null);
   const [count, setCount] = useState(50);
   const [tas, setTas] = useState([]);
