@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { QrCode } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { listFacilitiesService, inviteFacilityAdminService, listQrService, setupQrService, revokeInviteService, formatMinor } from "@/services/commissionService";
-import { inviteTrainerClientService, superAdminInviteTrainerService } from "@/services/authService";
+import { inviteTrainerClientService, superAdminInviteTrainerService, resendUserInviteService } from "@/services/authService";
+import ConfirmDialog from "./ConfirmDialog";
 
 /**
  * Facilities (gyms / studios) — shared by trainer admin (their own) and super
@@ -26,6 +27,8 @@ const PAYOUT = {
 const EMPTY = { type: "facility", qrId: "", firstName: "", lastName: "", email: "", phone: "", facilityName: "" };
 // Radix Select can't hold "" as an item value — sentinel for "invite only".
 const NO_STICKER = "__none__";
+// Mirrors the API's per-recipient cooldown (EMAIL_RESEND_COOLDOWN_SECONDS, default 60).
+const RESEND_COOLDOWN_SECONDS = 60;
 
 function Card({ label, value, hint, accent }) {
   return (
@@ -46,6 +49,18 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   const [lastInvite, setLastInvite] = useState(null);
   const [stickers, setStickers] = useState([]);
   const [revokingId, setRevokingId] = useState(null);
+  const [confirmRevoke, setConfirmRevoke] = useState(null); // pending invite awaiting "Are you sure?"
+  const [resendingId, setResendingId] = useState(null);
+  // Seconds left before "Resend" is allowed again, per invite — set after a
+  // successful send (server cooldown) or from a 429's retry_after_seconds.
+  const [cooldowns, setCooldowns] = useState({});
+  useEffect(() => {
+    if (!Object.values(cooldowns).some((sec) => sec > 0)) return undefined;
+    const t = setInterval(() => {
+      setCooldowns((c) => Object.fromEntries(Object.entries(c).map(([k, v]) => [k, Math.max(0, v - 1)]).filter(([, v]) => v > 0)));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [cooldowns]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -114,22 +129,40 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
     }
   };
 
-  // Pending owner invite → revoked; a sticker bound at invite time goes back to "not set up".
-  const revokeInvite = async (p) => {
+  // Pending owner invite → revoked (after the in-app confirm); a sticker bound
+  // at invite time goes back to "not set up".
+  const revokeInvite = async () => {
+    const p = confirmRevoke;
+    if (!p) return;
     const who = p.invited_name || p.invited_email;
-    const stickerNote = p.qr_id ? ` Sticker ${p.qr_id} goes back to "not set up".` : "";
-    if (!window.confirm(`Revoke the invite to ${who} for ${p.facility_name}? The code ${p.partner_code} stops working.${stickerNote}`)) return;
     setRevokingId(p.id);
     try {
       await revokeInviteService({ inviteId: p.id });
       toast.success(`Invite to ${who} revoked${p.qr_id ? ` — sticker ${p.qr_id} is ready to set up again` : ""}`);
       if (lastInvite?.partner_code && lastInvite.partner_code === p.partner_code) setLastInvite(null);
+      setConfirmRevoke(null);
       load();
       if (p.qr_id) loadStickers();
     } catch (err) {
       toast.error(err?.message || "Could not revoke invite");
     } finally {
       setRevokingId(null);
+    }
+  };
+
+  const resendInvite = async (p) => {
+    if (resendingId || (cooldowns[p.id] || 0) > 0) return;
+    setResendingId(p.id);
+    try {
+      await resendUserInviteService({ inviteId: p.id });
+      toast.success(`Invite re-sent to ${p.invited_email}`);
+      setCooldowns((c) => ({ ...c, [p.id]: RESEND_COOLDOWN_SECONDS }));
+    } catch (err) {
+      const wait = Number(err?.data?.retry_after_seconds);
+      if (err?.status === 429 && wait > 0) setCooldowns((c) => ({ ...c, [p.id]: Math.min(wait, 3600) }));
+      toast.error(err?.message || "Could not resend invite");
+    } finally {
+      setResendingId(null);
     }
   };
 
@@ -318,10 +351,15 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
                     <td className="py-2.5 px-4 text-[#535359] font-mono">{p.partner_code}</td>
                     <td className="py-2.5 px-4 text-[#535359] font-mono">{p.qr_id || <span className="text-[#A1A1A1] font-sans">—</span>}</td>
                     <td className="py-2.5 px-4 text-[#A1A1A1]">{p.expires_at || "—"}</td>
-                    <td className="py-2.5 px-4 text-right">
-                      <button type="button" onClick={() => revokeInvite(p)} disabled={revokingId === p.id} className="rounded-full bg-[#FDECEC] text-[#E5484D] text-[11px] font-semibold px-3 py-1 disabled:opacity-50 cursor-pointer">
-                        {revokingId === p.id ? "Revoking…" : "Revoke"}
-                      </button>
+                    <td className="py-2.5 px-4">
+                      <div className="flex items-center justify-end gap-2">
+                        <button type="button" onClick={() => resendInvite(p)} disabled={resendingId === p.id || (cooldowns[p.id] || 0) > 0} className="rounded-full bg-[#EEF4FE] text-[#308BF9] text-[11px] font-semibold px-3 py-1 disabled:opacity-50 cursor-pointer whitespace-nowrap">
+                          {resendingId === p.id ? "Sending…" : (cooldowns[p.id] || 0) > 0 ? `Resend in ${cooldowns[p.id]}s` : "Resend"}
+                        </button>
+                        <button type="button" onClick={() => setConfirmRevoke(p)} disabled={revokingId === p.id} className="rounded-full bg-[#FDECEC] text-[#E5484D] text-[11px] font-semibold px-3 py-1 disabled:opacity-50 cursor-pointer">
+                          Revoke
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -330,6 +368,25 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmRevoke}
+        danger
+        title={`Are you sure you want to revoke ${confirmRevoke?.invited_email}?`}
+        confirmText="Yes, revoke"
+        busyText="Revoking…"
+        busy={!!revokingId}
+        onConfirm={revokeInvite}
+        onClose={() => !revokingId && setConfirmRevoke(null)}
+      >
+        The invite for <strong className="text-[#252525]">{confirmRevoke?.facility_name}</strong> is cancelled and the code{" "}
+        <span className="font-mono font-semibold text-[#252525]">{confirmRevoke?.partner_code}</span> stops working.
+        {confirmRevoke?.qr_id && (
+          <>
+            {" "}Sticker <span className="font-mono font-semibold text-[#252525]">{confirmRevoke.qr_id}</span> goes back to &ldquo;not set up&rdquo; so you can set it up again.
+          </>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }
