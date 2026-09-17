@@ -70,7 +70,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { cn } from "@/lib/utils";
 import {
   // NEWTEST_FIXED_PAYLOAD, // old TEMP sample-week fallback, now null
@@ -85,7 +85,7 @@ import {
   searchFitChefFoodsService,
   updateDietPlanFoodNewTestService,
 } from "@/services/authService";
-import { selectDietAnalysisRequestedWeek } from "@/store/dietAnalysisSlice";
+import { selectDietAnalysisRequestedWeek, setNewTestPlan } from "@/store/dietAnalysisSlice";
 import { selectMacroSummaryData } from "@/store/macroSummarySlice";
 
 /* ============================================================ constants */
@@ -1953,6 +1953,7 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   // week_start_date / week_end_date come from get-weekly-tab-list-newtest;
   // profileId is the ?profile_id from the URL.
   const requestedWeek = useSelector(selectDietAnalysisRequestedWeek);
+  const dispatch = useDispatch();
   // Old TEMP fallback to the fixed *_newtest sample week (NEWTEST_FIXED_PAYLOAD
   // is now null in authService):
   // const profileId = requestedWeek?.profileId ?? NEWTEST_FIXED_PAYLOAD?.profile_id ?? null;
@@ -1964,6 +1965,16 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
 
   const [plan, setPlan] = useState(() => planProp || null);
   const [original, setOriginal] = useState(() => (planProp ? structuredClone(planProp) : null));
+  // Mirror what is on screen into the dietAnalysis slice so client-details'
+  // export button can turn the current week (edits included) into a PDF.
+  // Cloned so Immer's freeze of store state never touches the object the
+  // editor keeps mutating locally.
+  useEffect(() => {
+    dispatch(setNewTestPlan(plan ? structuredClone(plan) : null));
+    return () => {
+      dispatch(setNewTestPlan(null));
+    };
+  }, [plan, dispatch]);
   const [loading, setLoading] = useState(!planProp);
   const [loadError, setLoadError] = useState(null); // { message, noData: boolean }
   const [reloadKey, setReloadKey] = useState(0);
