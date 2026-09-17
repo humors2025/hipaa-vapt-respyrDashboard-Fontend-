@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
-import { UserRound } from "lucide-react";
+import { UserRound, Users, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   listQrService,
@@ -44,6 +44,7 @@ function SetupForm({ sticker, onDone, onCancel }) {
   const [type, setType] = useState("facility");
   const [f, setF] = useState({ facilityName: "", firstName: "", lastName: "", email: "", phone: "" });
   const [busy, setBusy] = useState(false);
+  const [showAllocation, setShowAllocation] = useState(false); // super admin: who holds how many stickers
   const [result, setResult] = useState(null);
   const set = (k) => (e) => setF((v) => ({ ...v, [k]: e.target.value }));
   const ok = f.firstName.trim() && f.lastName.trim() && /\S+@\S+\.\S+/.test(f.email) && (type === "trainer" || f.facilityName.trim());
@@ -228,7 +229,16 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
             <div className="text-[#A1A1A1] text-[11px]">Stickers encode {stickerUrl("<ID>")}</div>
           </div>
           <form onSubmit={assign} className="rounded-[10px] border border-[#E1E6ED] p-4 flex flex-col gap-3">
-            <div className="text-[#252525] text-[13px] font-bold">Hand stickers to a trainer admin</div>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-[#252525] text-[13px] font-bold">Hand stickers to a trainer admin</div>
+              {data.allocation.length > 0 && (
+                <button type="button" onClick={() => setShowAllocation(true)} className="inline-flex items-center gap-1.5 rounded-full bg-[#EEF4FE] text-[#308BF9] text-[11px] font-semibold px-3 py-1 cursor-pointer">
+                  <Users className="size-3.5" />
+                  Who holds what
+                  <span className="inline-flex min-w-[18px] justify-center rounded-full bg-white px-1.5 py-px text-[10px] tabular-nums border border-[#E1E6ED] text-[#252525]">{data.allocation.length}</span>
+                </button>
+              )}
+            </div>
             <div className="flex items-center gap-3 flex-wrap">
               <Select value={assignTo || undefined} onValueChange={setAssignTo}>
                 <SelectTrigger className={`${field} w-auto min-w-[260px] max-w-[360px] h-auto shadow-none data-[placeholder]:text-[#A1A1A1] [&_svg]:text-[#A1A1A1] focus-visible:ring-0 focus-visible:border-[#308BF9] data-[state=open]:border-[#308BF9]`}>
@@ -250,13 +260,6 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
               <input type="number" min={1} max={1000} value={assignCount} onChange={(e) => setAssignCount(Number(e.target.value) || 1)} className={`${field} w-24`} />
               <button type="submit" disabled={busy || !assignTo} className="rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 disabled:opacity-50 cursor-pointer">Assign</button>
             </div>
-            {data.allocation.length > 0 && (
-              <div className="text-[12px] text-[#535359] flex flex-wrap gap-x-4 gap-y-1">
-                {data.allocation.map((a) => (
-                  <span key={a.ta || "pool"}><strong className="text-[#252525]">{a.ta_name || a.ta || "Unassigned pool"}</strong>: {a.total} ({a.linked} live)</span>
-                ))}
-              </div>
-            )}
           </form>
         </div>
       )}
@@ -327,6 +330,50 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {showAllocation && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowAllocation(false)}>
+          <div className="relative bg-white rounded-[15px] shadow-[0_16px_48px_rgba(37,37,37,0.18)] w-full max-w-[560px] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-3">
+              <div>
+                <div className="text-[#252525] text-[15px] font-bold">Who holds what</div>
+                <div className="text-[#535359] text-[12px] mt-0.5">Stickers held by each trainer admin, and how many are live.</div>
+              </div>
+              <button type="button" onClick={() => setShowAllocation(false)} aria-label="Close" className="rounded-full p-1.5 text-[#A1A1A1] hover:bg-[#F5F7FA] hover:text-[#535359] cursor-pointer">
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto border-t border-[#F5F7FA]">
+              <table className="w-full text-[12px]">
+                <thead className="sticky top-0 bg-[#F5F7FA] text-[#535359] text-left">
+                  <tr>
+                    <th className="py-2.5 px-6 font-semibold">Trainer admin</th>
+                    <th className="py-2.5 px-3 font-semibold text-right">Total</th>
+                    <th className="py-2.5 px-3 font-semibold text-right">Live</th>
+                    <th className="py-2.5 px-6 font-semibold text-right">Not set up</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.allocation.map((a) => (
+                    <tr key={a.ta || "pool"} className="border-t border-[#F5F7FA]">
+                      <td className="py-2.5 px-6">
+                        <div className="text-[#252525] font-semibold">{a.ta_name || a.ta || "Unassigned pool"}</div>
+                        {a.ta_name && a.ta && <div className="text-[#A1A1A1] text-[11px]">{a.ta}</div>}
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-[#252525] font-semibold tabular-nums">{a.total}</td>
+                      <td className="py-2.5 px-3 text-right tabular-nums"><span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[#E5F6EE] text-[#1F7A4A]">{a.linked}</span></td>
+                      <td className="py-2.5 px-6 text-right tabular-nums"><span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[#FFF4E0] text-[#A66B00]">{a.unassigned}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end px-6 py-3 border-t border-[#F5F7FA]">
+              <button type="button" onClick={() => setShowAllocation(false)} className="rounded-[10px] border border-[#E1E6ED] bg-white text-[#535359] text-[12px] font-semibold px-4 py-2 hover:bg-[#F5F7FA] cursor-pointer">Close</button>
+            </div>
+          </div>
         </div>
       )}
 
