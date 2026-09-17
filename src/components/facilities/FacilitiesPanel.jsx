@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { QrCode } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { listFacilitiesService, inviteFacilityAdminService, listQrService, setupQrService, formatMinor } from "@/services/commissionService";
+import { listFacilitiesService, inviteFacilityAdminService, listQrService, setupQrService, revokeInviteService, formatMinor } from "@/services/commissionService";
 import { inviteTrainerClientService, superAdminInviteTrainerService } from "@/services/authService";
 
 /**
@@ -45,6 +45,7 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   const [showForm, setShowForm] = useState(false);
   const [lastInvite, setLastInvite] = useState(null);
   const [stickers, setStickers] = useState([]);
+  const [revokingId, setRevokingId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -110,6 +111,25 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
       toast.error(err?.message || "Could not send invite");
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Pending owner invite → revoked; a sticker bound at invite time goes back to "not set up".
+  const revokeInvite = async (p) => {
+    const who = p.invited_name || p.invited_email;
+    const stickerNote = p.qr_id ? ` Sticker ${p.qr_id} goes back to "not set up".` : "";
+    if (!window.confirm(`Revoke the invite to ${who} for ${p.facility_name}? The code ${p.partner_code} stops working.${stickerNote}`)) return;
+    setRevokingId(p.id);
+    try {
+      await revokeInviteService({ inviteId: p.id });
+      toast.success(`Invite to ${who} revoked${p.qr_id ? ` — sticker ${p.qr_id} is ready to set up again` : ""}`);
+      if (lastInvite?.partner_code && lastInvite.partner_code === p.partner_code) setLastInvite(null);
+      load();
+      if (p.qr_id) loadStickers();
+    } catch (err) {
+      toast.error(err?.message || "Could not revoke invite");
+    } finally {
+      setRevokingId(null);
     }
   };
 
@@ -282,7 +302,9 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
                   <th className="py-2.5 px-4 font-semibold">Facility</th>
                   <th className="py-2.5 px-4 font-semibold">Owner</th>
                   <th className="py-2.5 px-4 font-semibold">Code</th>
+                  <th className="py-2.5 px-4 font-semibold">Sticker</th>
                   <th className="py-2.5 px-4 font-semibold">Expires</th>
+                  <th className="py-2.5 px-4 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -294,7 +316,13 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
                       <div className="text-[#A1A1A1] text-[11px]">{p.invited_email}</div>
                     </td>
                     <td className="py-2.5 px-4 text-[#535359] font-mono">{p.partner_code}</td>
+                    <td className="py-2.5 px-4 text-[#535359] font-mono">{p.qr_id || <span className="text-[#A1A1A1] font-sans">—</span>}</td>
                     <td className="py-2.5 px-4 text-[#A1A1A1]">{p.expires_at || "—"}</td>
+                    <td className="py-2.5 px-4 text-right">
+                      <button type="button" onClick={() => revokeInvite(p)} disabled={revokingId === p.id} className="rounded-full bg-[#FDECEC] text-[#E5484D] text-[11px] font-semibold px-3 py-1 disabled:opacity-50 cursor-pointer">
+                        {revokingId === p.id ? "Revoking…" : "Revoke"}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

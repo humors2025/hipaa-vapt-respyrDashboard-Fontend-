@@ -178,6 +178,7 @@ export const API_ENDPOINTS = {
     QRASSIGN: `/${API_VERSION}/dietitian/api/web/qr-assign`,
     QRSETUP: `/${API_VERSION}/dietitian/api/web/qr-setup`,
     QRREVOKE: `/${API_VERSION}/dietitian/api/web/qr-revoke`,
+    INVITEREVOKE: `/${API_VERSION}/dietitian/api/web/invite-revoke`,
     LISTTRAINERADMINS: `/${API_VERSION}/dietitian/api/web/list-trainer-admins`,
     GETPRICING: `/${API_VERSION}/dietitian/api/web/get-pricing`,
     SETPRICING: `/${API_VERSION}/dietitian/api/web/set-pricing`,
