@@ -125,6 +125,7 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
   const [tas, setTas] = useState([]);
   const [assignTo, setAssignTo] = useState("");
   const [assignCount, setAssignCount] = useState(10);
+  const selectedTa = tas.find((t) => t.user_id === assignTo) || null;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -241,17 +242,28 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <Select value={assignTo || undefined} onValueChange={setAssignTo}>
-                <SelectTrigger className={`${field} w-auto min-w-[260px] max-w-[360px] h-auto shadow-none data-[placeholder]:text-[#A1A1A1] [&_svg]:text-[#A1A1A1] focus-visible:ring-0 focus-visible:border-[#308BF9] data-[state=open]:border-[#308BF9]`}>
-                  <SelectValue placeholder="Choose trainer admin…" />
+                <SelectTrigger className={`${field} w-auto min-w-[380px] max-w-[520px] h-auto py-2.5 shadow-none data-[placeholder]:text-[#A1A1A1] [&_svg]:text-[#A1A1A1] focus-visible:ring-0 focus-visible:border-[#308BF9] data-[state=open]:border-[#308BF9]`}>
+                  <SelectValue placeholder="Choose trainer admin…">
+                    {selectedTa && (
+                      <span className="flex items-center gap-2 min-w-0">
+                        <UserRound className="size-4 shrink-0" />
+                        <span className="truncate">{selectedTa.name || selectedTa.user_id}</span>
+                        {selectedTa.name && <span className="text-[#A1A1A1] text-[12px] truncate">· {selectedTa.user_id}</span>}
+                      </span>
+                    )}
+                  </SelectValue>
                 </SelectTrigger>
-                <SelectContent side="bottom" align="start" sideOffset={6} avoidCollisions={false} className="rounded-[10px] border-[#E1E6ED] bg-white shadow-[0_8px_24px_rgba(37,37,37,0.10)] max-h-[280px] w-[var(--radix-select-trigger-width)]">
-                  {tas.length === 0 && <div className="px-3 py-2 text-[12px] text-[#A1A1A1]">No trainer admins yet</div>}
+                <SelectContent side="bottom" align="start" sideOffset={6} avoidCollisions={false} className="rounded-[12px] border-[#E1E6ED] bg-white shadow-[0_8px_24px_rgba(37,37,37,0.10)] max-h-[320px] min-w-[var(--radix-select-trigger-width)] w-max max-w-[560px] [&_[data-radix-select-viewport]]:pr-2 [&_[data-slot=select-scroll-up-button]]:text-[#A1A1A1] [&_[data-slot=select-scroll-down-button]]:text-[#A1A1A1]">
+                  <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.6px] text-[#A1A1A1]">Trainer admins</div>
+                  {tas.length === 0 && <div className="px-3 py-3 text-[12px] text-[#A1A1A1]">No trainer admins yet</div>}
                   {tas.map((t) => (
-                    <SelectItem key={t.user_id} value={t.user_id} className="rounded-[8px] py-2 text-[13px] text-[#252525] cursor-pointer focus:bg-[#EEF4FE] focus:text-[#308BF9]">
-                      <UserRound className="size-4 text-[#A1A1A1]" />
-                      <span className="flex flex-col leading-tight min-w-0">
-                        <span className="font-semibold truncate">{t.name || t.user_id}</span>
-                        {t.name && <span className="text-[11px] text-[#A1A1A1] truncate">{t.user_id}</span>}
+                    <SelectItem key={t.user_id} value={t.user_id} className="rounded-[8px] ml-1 mr-2 my-0.5 py-2.5 pl-3 pr-12 gap-3 text-[13px] text-[#252525] cursor-pointer focus:bg-[#EEF4FE] focus:text-[#252525] data-[state=checked]:bg-[#EEF4FE]">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#F5F7FA] text-[#535359]">
+                        <UserRound className="size-4" />
+                      </span>
+                      <span className="flex flex-col min-w-0 gap-0.5">
+                        <span className="font-semibold leading-[18px] truncate">{t.name || t.user_id}</span>
+                        {t.name && <span className="text-[11px] leading-[14px] text-[#A1A1A1] truncate">{t.user_id}</span>}
                       </span>
                     </SelectItem>
                   ))}
