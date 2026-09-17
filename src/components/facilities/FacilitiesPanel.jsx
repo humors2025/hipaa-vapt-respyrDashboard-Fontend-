@@ -327,13 +327,14 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
 
       {(data?.pending_invites?.length || 0) > 0 && (
         <div>
-          <h2 className="text-[#252525] text-[14px] font-bold mb-2">Pending owner invites</h2>
+          <h2 className="text-[#252525] text-[14px] font-bold mb-2">Pending invites</h2>
           <div className="overflow-x-auto rounded-[10px] border border-[#E1E6ED]">
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="bg-[#F5F7FA] text-[#535359] text-left">
+                  <th className="py-2.5 px-4 font-semibold">Type</th>
                   <th className="py-2.5 px-4 font-semibold">Facility</th>
-                  <th className="py-2.5 px-4 font-semibold">Owner</th>
+                  <th className="py-2.5 px-4 font-semibold">Invitee</th>
                   <th className="py-2.5 px-4 font-semibold">Code</th>
                   <th className="py-2.5 px-4 font-semibold">Sticker</th>
                   <th className="py-2.5 px-4 font-semibold">Expires</th>
@@ -343,7 +344,12 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
               <tbody>
                 {data.pending_invites.map((p) => (
                   <tr key={p.id} className="border-t border-[#F5F7FA]">
-                    <td className="py-2.5 px-4 text-[#252525] font-semibold">{p.facility_name}</td>
+                    <td className="py-2.5 px-4">
+                      {p.invited_role === "trainer"
+                        ? <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[#EEF4FE] text-[#308BF9]">Personal trainer</span>
+                        : <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[#F1ECFE] text-[#6B46C1]">Business owner</span>}
+                    </td>
+                    <td className="py-2.5 px-4 text-[#252525] font-semibold">{p.facility_name || <span className="text-[#A1A1A1] font-normal">—</span>}</td>
                     <td className="py-2.5 px-4">
                       <div className="text-[#252525]">{p.invited_name || "—"}</div>
                       <div className="text-[#A1A1A1] text-[11px]">{p.invited_email}</div>
@@ -379,7 +385,8 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
         onConfirm={revokeInvite}
         onClose={() => !revokingId && setConfirmRevoke(null)}
       >
-        The invite for <strong className="text-[#252525]">{confirmRevoke?.facility_name}</strong> is cancelled and the code{" "}
+        The {confirmRevoke?.invited_role === "trainer" ? "personal trainer" : "facility owner"} invite
+        {confirmRevoke?.facility_name && <> for <strong className="text-[#252525]">{confirmRevoke.facility_name}</strong></>} is cancelled and the code{" "}
         <span className="font-mono font-semibold text-[#252525]">{confirmRevoke?.partner_code}</span> stops working.
         {confirmRevoke?.qr_id && (
           <>
