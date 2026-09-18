@@ -1921,7 +1921,7 @@ function deltaLabel(value, target) {
   const pct = Math.abs(diff / target) * 100;
   if (Math.abs(diff) < 1 || pct < 2) return { text: "on target", cls: "text-[#2A9D8F]", up: null };
   const up = diff > 0;
-  return { text: `${Math.abs(Math.round(diff))}g ${up ? "over" : "short"}`, cls: up ? "text-[#F4A261]" : "text-[#308BF9]", up };
+  return { text: `${Math.abs(Math.round(diff))}g ${up ? "over" : "short"}`, cls: up ? "text-[#B5363A]" : "text-[#8E5BD9]", up };
 }
 
 /**
@@ -1934,7 +1934,7 @@ function gapLabel(value, target) {
   const pct = Math.abs(diff / target) * 100;
   if (Math.abs(diff) < 1 || pct < 2) return { text: "just right", cls: "text-[#2A9D8F]", up: null };
   const up = diff > 0;
-  return { text: `${Math.abs(Math.round(diff))}g ${up ? "too much" : "more needed"}`, cls: up ? "text-[#F4A261]" : "text-[#308BF9]", up };
+  return { text: `${Math.abs(Math.round(diff))}g ${up ? "too much" : "more needed"}`, cls: up ? "text-[#B5363A]" : "text-[#8E5BD9]", up };
 }
 
 /** "piece" ↔ "pieces", "ounces" ↔ "ounce" — only for plain single-word units. */
@@ -2893,9 +2893,9 @@ const ingredients = rows.flatMap((r) =>
             >
               {resetting ? "Resetting…" : "Reset week"}
             </button>
-            <button onClick={() => setShoppingOpen(true)} className={UI.btnSecondary}>
+            {/* <button onClick={() => setShoppingOpen(true)} className={UI.btnSecondary}>
               Shopping list
-            </button>
+            </button> */}
             <button
               onClick={approveWeek}
               disabled={!plan?.meta?.id || saving || resetting || approving || isWeekLocked(plan)}
@@ -2936,11 +2936,11 @@ const ingredients = rows.flatMap((r) =>
                     !active && status === "none" && "bg-white hover:bg-[#F5F7FA]",
                     active && status === "none" && "bg-[#308BF9]",
                     !active && status === "ok" && "bg-[#2A9D8F1A] hover:bg-[#2A9D8F33]",
-                    !active && status === "over" && "bg-[#F4A2611A] hover:bg-[#F4A26133]",
-                    !active && status === "under" && "bg-[#308BF91A] hover:bg-[#308BF933]",
+                    !active && status === "over" && "bg-[#B5363A1A] hover:bg-[#B5363A33]",
+                    !active && status === "under" && "bg-[#8E5BD91A] hover:bg-[#8E5BD933]",
                     active && status === "ok" && "bg-[#2A9D8F]",
-                    active && status === "over" && "bg-[#F4A261]",
-                    active && status === "under" && "bg-[#308BF9]",
+                    active && status === "over" && "bg-[#B5363A]",
+                    active && status === "under" && "bg-[#8E5BD9]",
                   )}
                 >
                   <p
@@ -2949,8 +2949,8 @@ const ingredients = rows.flatMap((r) =>
                       active && "text-white",
                       !active && status === "none" && "text-[#A1A1A1]",
                       !active && status === "ok" && "text-[#2A9D8F]",
-                      !active && status === "over" && "text-[#F4A261]",
-                      !active && status === "under" && "text-[#308BF9]",
+                      !active && status === "over" && "text-[#B5363A]",
+                      !active && status === "under" && "text-[#8E5BD9]",
                     )}
                   >
                     {d.label}
@@ -2966,11 +2966,11 @@ const ingredients = rows.flatMap((r) =>
               on target
             </span>
             <span className="flex items-center gap-1.5">
-              <i className="inline-block h-[6px] w-[6px] rounded-full bg-[#F4A261]" />
+              <i className="inline-block h-[6px] w-[6px] rounded-full bg-[#B5363A]" />
               over
             </span>
             <span className="flex items-center gap-1.5">
-              <i className="inline-block h-[6px] w-[6px] rounded-full bg-[#308BF9]" />
+              <i className="inline-block h-[6px] w-[6px] rounded-full bg-[#8E5BD9]" />
               short
             </span>
             <span className="text-[#535359]">by calories · hover a day for its numbers</span>
@@ -4840,7 +4840,7 @@ const totalPrice = useMemo(() => {
                 {same ? (
                   <span className="font-semibold text-[#2A9D8F]">about the same.</span>
                 ) : (
-                  <span className={cn("font-semibold", diff > 0 ? "text-[#F4A261]" : "text-[#308BF9]")}>
+                  <span className={cn("font-semibold", diff > 0 ? "text-[#B5363A]" : "text-[#8E5BD9]")}>
                     {Math.abs(diff)} kcal {diff > 0 ? "too much" : "short"}.
                   </span>
                 )}
