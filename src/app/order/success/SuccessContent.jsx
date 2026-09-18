@@ -230,11 +230,11 @@ export default function SuccessContent() {
                   <CopyButton text={code} codeRef={codeRef} />
                 </div>
                 {code ? (
-                  <p ref={codeRef} className="mt-2 text-[#1F4E8C] text-[26px] sm:text-[34px] font-bold font-mono tracking-[2px] sm:tracking-[3px] break-all select-all">
+                  <p ref={codeRef} className="mt-2 text-center text-[#1F4E8C] text-[26px] sm:text-[34px] font-bold font-mono tracking-[2px] sm:tracking-[3px] break-all select-all">
                     {code}
                   </p>
                 ) : (
-                  <p className="mt-2 text-[#1F4E8C] text-[14px]">{st?.pending || !st ? "Generating your code…" : "Your code is in your email."}</p>
+                  <p className="mt-2 text-center text-[#1F4E8C] text-[14px]">{st?.pending || !st ? "Generating your code…" : "Your code is in your email."}</p>
                 )}
               </div>
               <div className="border-t border-dashed border-[#308BF9]/30" aria-hidden="true" />
