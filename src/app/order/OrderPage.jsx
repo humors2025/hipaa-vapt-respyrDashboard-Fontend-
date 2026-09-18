@@ -31,6 +31,7 @@ export default function OrderPage({ code = "", qrId = "" }) {
   const [typedCode, setTypedCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -56,11 +57,18 @@ export default function OrderPage({ code = "", qrId = "" }) {
     e.preventDefault();
     setBusy(true);
     setError("");
+    setNotice("");
     try {
       const res = await createCheckoutSessionFromStickerService({ qrId: stickerId, partnerCode: effectiveCode || code, email: email.trim() });
       window.location.assign(res.checkout_url);
     } catch (err) {
-      setError(err?.message || "Something went wrong starting checkout. Please try again.");
+      // Backend refuses a second purchase for an email that already has a live
+      // membership — that's good news for the member, not an error.
+      if (err?.data?.code === "already_member") {
+        setNotice(err.message);
+      } else {
+        setError(err?.message || "Something went wrong starting checkout. Please try again.");
+      }
       setBusy(false);
     }
   };
@@ -143,6 +151,11 @@ export default function OrderPage({ code = "", qrId = "" }) {
             </label>
 
             {error && <div className="rounded-[10px] bg-[#FCEAEB] px-3 py-2 text-[12px] text-[#B5363A]">{error}</div>}
+            {notice && (
+              <div className="rounded-[10px] bg-[#E5F6EE] px-3 py-2 text-[12px] text-[#1F7A4A]">
+                <strong className="font-semibold">You&rsquo;re already a member.</strong> {notice}
+              </div>
+            )}
             <button type="submit" disabled={busy || !pricing} className="rounded-[10px] bg-[#308BF9] text-white text-[14px] font-semibold px-5 py-3 disabled:opacity-60 cursor-pointer">
               {busy ? "Opening secure checkout…" : "Continue to secure checkout"}
             </button>
