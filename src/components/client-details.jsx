@@ -76,12 +76,7 @@ export default function ClientDetails() {
   const [weeklyDatesLoading, setWeeklyDatesLoading] = useState(false);
   const [weeklyDatesError, setWeeklyDatesError] = useState(null);
   const [isDietAnalysisAvailable, setIsDietAnalysisAvailable] = useState(true);
-  // TEMP (testing only): keep the Weekly Diet Analysis tab clickable even when
-  // get-weekly-tab-list returns "No weekly data", so the *_newtest plan
-  // (fixed sample payload in authService) can be viewed. Set to false to restore
-  // the original gating.
-  const ALLOW_DIET_TAB_WITHOUT_WEEKS = true;
-  const dietTabDisabled = !isDietAnalysisAvailable && !ALLOW_DIET_TAB_WITHOUT_WEEKS;
+  const dietTabDisabled = !isDietAnalysisAvailable;
   const [isLoadingWeeklyData, setIsLoadingWeeklyData] = useState(true);
   const [isPDFExporting, setIsPDFExporting] = useState(false);
 
@@ -322,7 +317,7 @@ const transformDatesToDisplay = () => {
           setIsDietAnalysisAvailable(false);
           setWeeklyDates([]);
 
-          if (activeTab === "diet" && !ALLOW_DIET_TAB_WITHOUT_WEEKS) {
+          if (activeTab === "diet") {
             setActiveTab("test");
           }
         } else if (response && response.status === true && response.data) {
@@ -351,7 +346,7 @@ const transformDatesToDisplay = () => {
           setIsDietAnalysisAvailable(false);
           setWeeklyDates([]);
 
-          if (activeTab === "diet" && !ALLOW_DIET_TAB_WITHOUT_WEEKS) {
+          if (activeTab === "diet") {
             setActiveTab("test");
           }
         } else {
