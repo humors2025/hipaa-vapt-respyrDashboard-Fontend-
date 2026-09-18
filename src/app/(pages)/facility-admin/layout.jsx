@@ -5,7 +5,7 @@ export default function FacilityAdminLayout({ children }) {
   return (
     <>
       <FacilityAdminHeader />
-      <PayoutSetupReminder payoutSetupPath="/facility-admin/earnings/payout-setup" />
+      <PayoutSetupReminder />
       {children}
     </>
   );

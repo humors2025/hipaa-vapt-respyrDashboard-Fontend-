@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import TrainerAdminHeader from "@/components/TrainerAdminHeader";
 import SuperAdminHeader from "@/components/SuperAdminHeader";
+import PayoutSetupReminder from "@/components/earnings/PayoutSetupReminder";
 
 // Decode the role out of the access_token (JWT payload) server-side, so we can
 // keep super admins inside their own header shell when they visit the shared
@@ -46,6 +47,7 @@ export default async function TrainerAdminLayout({ children }) {
   return (
     <>
       <Header />
+      <PayoutSetupReminder />
       {children}
     </>
   );

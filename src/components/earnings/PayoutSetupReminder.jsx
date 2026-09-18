@@ -18,6 +18,10 @@ import {
  * action_required), shows a blocking popup whose CTA jumps straight into the
  * Stripe onboarding flow.
  *
+ * The payee role is read from the access_token JWT, so the same component
+ * works in the trainer, trainer-admin and facility-admin layouts (and stays
+ * quiet for non-payees like super admins, who also render those layouts).
+ *
  * Dismissal is keyed to the login session id (the `sid` claim of the
  * access_token JWT): "I'll do this later" silences it for the current login
  * only, so every fresh login shows the popup again until payouts are set up.
@@ -25,32 +29,58 @@ import {
 
 const DISMISS_KEY = "respyr_payout_reminder_dismissed_sid";
 
-// The `sid` claim of the current access token — a new value on every login,
-// stable across in-session token refreshes. Null when it can't be read (then
-// we just show the reminder rather than risk never showing it).
-function currentLoginSid() {
+// Where each payee role's payout-setup page lives. Roles not listed here
+// (super_admin, client) never see the reminder.
+const SETUP_PATHS = {
+  facility_admin: "/facility-admin/earnings/payout-setup",
+  trainer_admin: "/trainer-admin/earnings/payout-setup",
+  admin: "/trainer-admin/earnings/payout-setup",
+  trainer: "/trainer/earnings/payout-setup",
+  dietician: "/trainer/earnings/payout-setup",
+};
+
+// Claims of the current access token, or null when it can't be read (then we
+// stay quiet rather than nag someone we can't identify).
+function tokenClaims() {
   try {
     const token = Cookies.get("access_token");
     const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    const claims = JSON.parse(atob(payload));
-    return claims?.sid != null ? String(claims.sid) : null;
+    return JSON.parse(atob(payload));
   } catch {
     return null;
   }
 }
 
-export default function PayoutSetupReminder({ payoutSetupPath }) {
+// The `sid` claim — a new value on every login, stable across in-session
+// token refreshes.
+function currentLoginSid() {
+  const sid = tokenClaims()?.sid;
+  return sid != null ? String(sid) : null;
+}
+
+function payoutSetupPathForToken() {
+  const role = String(tokenClaims()?.role || "").trim().toLowerCase();
+  return SETUP_PATHS[role] || null;
+}
+
+export default function PayoutSetupReminder() {
   const pathname = usePathname();
   const [state, setState] = useState(null); // "not_started" | "action_required"
   const [busy, setBusy] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const [payoutSetupPath, setPayoutSetupPath] = useState(null);
 
-  // Don't nag on the payout-setup page itself (also covers the ?return=1
-  // redirect back from Stripe, which lands there).
-  const onSetupPage = payoutSetupPath && pathname?.startsWith(payoutSetupPath);
+  // Don't nag on the payout-setup page itself (any role's — also covers the
+  // ?return=1 redirect back from Stripe, which lands there).
+  const onSetupPage = pathname?.includes("/earnings/payout-setup");
 
   useEffect(() => {
     if (onSetupPage) return;
+    // Cookies only exist client-side, so resolve the role in the effect
+    // (never during SSR/hydration).
+    const setupPath = payoutSetupPathForToken();
+    if (!setupPath) return; // not a payee (e.g. super admin) or no token
+    setPayoutSetupPath(setupPath);
     try {
       const sid = currentLoginSid();
       // Dismissed during THIS login session → stay quiet. A new login has a
