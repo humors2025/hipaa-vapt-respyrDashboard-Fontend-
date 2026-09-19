@@ -25,9 +25,9 @@ const CheckIcon = ({ size = 10 }) => (
 const CHECKBOX_ITEMS = [
   <>I have read and agree to the <strong>NDA &amp; Device Evaluation Program Terms and Conditions</strong> above.</>,
   <>I agree that I am <strong>financially responsible</strong> for the device(s) assigned to me for the duration of this testing period.</>,
-  <>I agree to <strong>ship the Respyr device(s)</strong> back upon request once the trial / feedback period has ended, after receiving a free return shipping label from Atlas Human Systems LLC.</>,
+  <>I agree to <strong>ship the Rysflo device(s)</strong> back upon request once the trial / feedback period has ended, after receiving a free return shipping label from Atlas Human Systems LLC.</>,
   <>I agree to <strong>fill out and submit the feedback forms</strong> provided at least twice monthly.</>,
-  <>I agree to <strong>join at least one monthly video conference call</strong> (1–2 hours) with the Respyr Team to give feedback and discuss with other trainers.</>,
+  <>I agree to <strong>join at least one monthly video conference call</strong> (1–2 hours) with the Rysflo Team to give feedback and discuss with other trainers.</>,
 ]
 
 export default function Agreement({ onAccept, onDecline, userEmail }) {
