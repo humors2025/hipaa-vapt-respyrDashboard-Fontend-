@@ -66,6 +66,7 @@ const ROLE_ALIASES = {
   admin: 'trainer_admin',
   trainer_admin: 'trainer_admin',
   super_admin: 'super_admin',
+  facility_admin: 'facility_admin',
   trainer: 'trainer',
   dietician: 'trainer',
   client: 'client',
@@ -127,6 +128,9 @@ function homeForRole(role) {
     case 'trainer_admin':
       return '/trainer-admin/trainers';
 
+    case 'facility_admin':
+      return '/facility-admin/trainers';
+
     case 'trainer':
       return '/trainer/dashboard';
 
@@ -181,6 +185,8 @@ export function middleware(request) {
   const isProtectedRoute =
     pathname.startsWith('/trainer') ||
     pathname.startsWith('/trainer-admin') ||
+    pathname.startsWith('/facility-admin') ||
+    pathname.startsWith('/payout-setup') ||
     pathname.startsWith('/super-admin') ||
     pathname.startsWith('/superadmin-trainer');
 
@@ -225,6 +231,32 @@ export function middleware(request) {
      * trainer_admin-only.
      */
     if (
+      pathname.startsWith('/facility-admin') &&
+      role !== 'facility_admin' &&
+      role !== 'super_admin'
+    ) {
+      return secureRedirect(
+        homeForRole(role),
+        request
+      );
+    }
+
+    // Stripe returns every payee to /payout-setup; send them to their own
+    // earnings page (query string preserved: ?return=1 / ?refresh=1).
+    if (pathname.startsWith('/payout-setup')) {
+      const dest =
+        role === 'facility_admin'
+          ? '/facility-admin/earnings/payout-setup'
+          : role === 'trainer_admin'
+          ? '/trainer-admin/earnings/payout-setup'
+          : '/trainer/earnings/payout-setup';
+      return secureRedirect(
+        `${dest}${request.nextUrl.search || ''}`,
+        request
+      );
+    }
+
+    if (
       pathname.startsWith(
         '/trainer-admin/invites'
       )
@@ -243,7 +275,8 @@ export function middleware(request) {
       }
     } else if (
       pathname.startsWith('/trainer-admin') &&
-      role !== 'trainer_admin'
+      role !== 'trainer_admin' &&
+      role !== 'super_admin'
     ) {
       return secureRedirect(
         homeForRole(role),
@@ -258,10 +291,39 @@ export function middleware(request) {
      * trainer_admin and super_admin may also access
      * trainer pages.
      */
+    // A facility admin may use the trainer client tools, but their money and
+    // referral pages live under /facility-admin — never show owner earnings
+    // inside the trainer layout.
+    if (
+      role === 'facility_admin' &&
+      (pathname.startsWith('/trainer/earnings') ||
+        pathname.startsWith('/trainer/referrals'))
+    ) {
+      const mapped = pathname.replace('/trainer/', '/facility-admin/');
+      const known = [
+        '/facility-admin/earnings/overview',
+        '/facility-admin/earnings/payout-setup',
+        '/facility-admin/earnings/how-to-use',
+        '/facility-admin/referrals/qr',
+        '/facility-admin/referrals/members',
+        '/facility-admin/referrals/invite',
+      ];
+      const dest = known.includes(mapped)
+        ? mapped
+        : pathname.startsWith('/trainer/earnings')
+        ? '/facility-admin/earnings/overview'
+        : '/facility-admin/referrals/members';
+      return secureRedirect(
+        dest + (request.nextUrl.search || ''),
+        request
+      );
+    }
+
     if (pathname.startsWith('/trainer/')) {
       const trainerRoles = [
         'trainer',
         'trainer_admin',
+        'facility_admin',
         'super_admin',
       ];
 
@@ -317,6 +379,8 @@ export const config = {
     '/signup',
     '/trainer/:path*',
     '/trainer-admin/:path*',
+    '/facility-admin/:path*',
+    '/payout-setup',
     '/super-admin/:path*',
     '/superadmin-trainer/:path*',
   ],

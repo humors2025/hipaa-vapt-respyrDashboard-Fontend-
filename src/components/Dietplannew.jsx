@@ -70,13 +70,14 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { cn } from "@/lib/utils";
 import {
   // NEWTEST_FIXED_PAYLOAD, // old TEMP sample-week fallback, now null
   approveWeeklyFoodJsonNewTestService,
   saveCustomMealService,
   fetchDietAnalysisPlanNewTest,
+  fetchFoodLogService,
   fetchMacroSummaryByDate,
   getClientProfileDetails,
   priceShoppingListService,
@@ -84,12 +85,24 @@ import {
   searchFitChefFoodsService,
   updateDietPlanFoodNewTestService,
 } from "@/services/authService";
-import { selectDietAnalysisRequestedWeek } from "@/store/dietAnalysisSlice";
+import { selectDietAnalysisRequestedWeek, setNewTestPlan } from "@/store/dietAnalysisSlice";
 import { selectMacroSummaryData } from "@/store/macroSummarySlice";
 
 /* ============================================================ constants */
 
 const SLOTS = ["breakfast", "lunch", "snacks", "dinner"];
+
+/**
+ * Name a deleted dish is saved under. Delete does not drop the row: it turns
+ * it into this empty placeholder (zero macros, no recipe) which Save persists
+ * as an ordinary "update", so the slot survives reload exactly as the older
+ * plan screen showed it. The placeholder's own Delete button is disabled; the
+ * slot can only be refilled via "Search a swap" / "Make my meal".
+ */
+const REMOVED_PLACEHOLDER_NAME = "(empty — removed)";
+function isRemovedPlaceholder(f) {
+  return !!f && String(f.name || "").trim().toLowerCase() === REMOVED_PLACEHOLDER_NAME;
+}
 const SLOT_META = {
   breakfast: { label: "Breakfast", time: "08:00 – 09:00 AM" },
   lunch: { label: "Lunch", time: "01:00 – 02:00 PM" },
@@ -857,6 +870,7 @@ function lacksRecipeDetail(item) {
   return (
     item &&
     !item.removed &&
+    !isRemovedPlaceholder(item) &&
     !item.recipeId &&
     (item.method_steps || []).length === 0 &&
     (item.ingredients || []).length === 0 &&
@@ -867,27 +881,29 @@ function lacksRecipeDetail(item) {
 /**
  * Week-level lock derived from the plan row's `status_value`
  * (get_weekly_food_json_suggestions_weeks_newtest):
+ *   0 — open, still editable
  *   1 — approved by the dietician
  *   2 — locked by the server (e.g. week already in use / closed)
- * Both disable "Reset week" and "Approve week". Compared as a number since the
- * API may send the value as a string.
+ * Anything greater than 0 is treated as approved: it disables "Reset week",
+ * "Approve week", Delete, swaps, "Search a swap" and "Make my meal". Compared
+ * as a number since the API may send the value as a string.
  */
 function weekStatus(plan) {
   const v = Number(plan?.meta?.status_value);
   return Number.isFinite(v) ? v : null;
 }
 function isWeekApproved(plan) {
-  return weekStatus(plan) === 1;
+  const s = weekStatus(plan);
+  return s !== null && s > 0;
 }
 function isWeekLocked(plan) {
-  const s = weekStatus(plan);
-  return s === 1 || s === 2;
+  return isWeekApproved(plan);
 }
 /** Tooltip / toast reason for a locked week, or null when it is open. */
 function weekLockReason(plan) {
   const s = weekStatus(plan);
-  if (s === 1) return "This week plan is approved";
   if (s === 2) return "This week plan is locked";
+  if (s !== null && s > 0) return "This week plan is approved";
   return null;
 }
 
@@ -1556,6 +1572,25 @@ function fitchefPlanKeyFromSavedTo(savedTo) {
 
 
 /**
+ * Compact identity of every meal in a plan — per day, per slot: name, servings
+ * and portion of each non-removed food. Two plans with the same signature show
+ * the same dishes in the same amounts; macros are left out so server-side
+ * rounding never counts as an edit.
+ */
+function planSignature(days) {
+  return (days || [])
+    .map((d) =>
+      SLOTS.map((slot) =>
+        (d?.meals?.[slot] || [])
+          .filter((f) => f && !f.removed)
+          .map((f) => `${f.name}|${f.servings}|${f.portion}`)
+          .join(",")
+      ).join(";")
+    )
+    .join("\n");
+}
+
+/**
  * Response of get_weekly_food_json_suggestions_weeks_newtest → PLAN SHAPE.
  * Accepts either the full envelope ({ status, data }) or just `data`.
  */
@@ -1567,7 +1602,7 @@ export function normalizeWeeklyPlan(response) {
   const weekTargets =
     readTargets(foodJson) || readTargets(data) || readTargets(targetsFromRequest(foodJson?._request));
 
-  const days = (Array.isArray(foodJson.days) ? foodJson.days : []).map((day, di) => {
+  const buildDays = (fj) => (Array.isArray(fj?.days) ? fj.days : []).map((day, di) => {
     const meals = { breakfast: [], lunch: [], snacks: [], dinner: [] };
     const list = Array.isArray(day?.meals) ? day.meals : [];
     list.forEach((meal, mi) => {
@@ -1587,7 +1622,20 @@ export function normalizeWeeklyPlan(response) {
       meals,
     };
   });
-
+  const days = buildDays(foodJson);
+  // "Edited": the saved plan no longer matches the generator's untouched
+  // snapshot (original_food_json, returned by the read endpoint) — a food was
+  // added, swapped, deleted or re-portioned and then saved. "Reset week" copies
+  // the snapshot back over food_json, so the flag clears on the reload after it.
+  const originalJson = data?.original_food_json;
+  const differsFromOriginal =
+    originalJson && typeof originalJson === "object" && Array.isArray(originalJson.days)
+      ? planSignature(days) !== planSignature(buildDays(originalJson))
+      : false;
+  // trainer-update-weekly-food-json-newtest stamps food_json._trainer_edited_at
+  // on every save; reset-weekly-food-json-newtest restores the unstamped
+  // snapshot. Covers rows that have no original_food_json to compare against.
+  const edited = differsFromOriginal || !!foodJson?._trainer_edited_at;
   return {
     days,
     shopping: normalizeShopping(foodJson.shopping || data?.shopping),
@@ -1610,6 +1658,9 @@ export function normalizeWeeklyPlan(response) {
       week_end_date: data?.week_end_date ?? null,
       week_range: data?.week_range ?? null,
       status_value: data?.status_value ?? null,
+      // True when the stored plan differs from its originally generated version
+      // (see above). Drives the "Edited" badge together with unsaved `dirty` state.
+      edited,
       // The zip the plan was generated/priced against (fitchef_generate.py's
       // &zip=), so live re-pricing (Make My Meal, Shopping List) can match it
       // instead of falling back to the pricer's default region.
@@ -1870,7 +1921,7 @@ function deltaLabel(value, target) {
   const pct = Math.abs(diff / target) * 100;
   if (Math.abs(diff) < 1 || pct < 2) return { text: "on target", cls: "text-[#2A9D8F]", up: null };
   const up = diff > 0;
-  return { text: `${Math.abs(Math.round(diff))}g ${up ? "over" : "short"}`, cls: up ? "text-[#F4A261]" : "text-[#308BF9]", up };
+  return { text: `${Math.abs(Math.round(diff))}g ${up ? "over" : "short"}`, cls: up ? "text-[#B5363A]" : "text-[#8E5BD9]", up };
 }
 
 /**
@@ -1883,7 +1934,7 @@ function gapLabel(value, target) {
   const pct = Math.abs(diff / target) * 100;
   if (Math.abs(diff) < 1 || pct < 2) return { text: "just right", cls: "text-[#2A9D8F]", up: null };
   const up = diff > 0;
-  return { text: `${Math.abs(Math.round(diff))}g ${up ? "too much" : "more needed"}`, cls: up ? "text-[#F4A261]" : "text-[#308BF9]", up };
+  return { text: `${Math.abs(Math.round(diff))}g ${up ? "too much" : "more needed"}`, cls: up ? "text-[#B5363A]" : "text-[#8E5BD9]", up };
 }
 
 /** "piece" ↔ "pieces", "ounces" ↔ "ounce" — only for plain single-word units. */
@@ -1902,6 +1953,7 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   // week_start_date / week_end_date come from get-weekly-tab-list-newtest;
   // profileId is the ?profile_id from the URL.
   const requestedWeek = useSelector(selectDietAnalysisRequestedWeek);
+  const dispatch = useDispatch();
   // Old TEMP fallback to the fixed *_newtest sample week (NEWTEST_FIXED_PAYLOAD
   // is now null in authService):
   // const profileId = requestedWeek?.profileId ?? NEWTEST_FIXED_PAYLOAD?.profile_id ?? null;
@@ -1913,6 +1965,16 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
 
   const [plan, setPlan] = useState(() => planProp || null);
   const [original, setOriginal] = useState(() => (planProp ? structuredClone(planProp) : null));
+  // Mirror what is on screen into the dietAnalysis slice so client-details'
+  // export button can turn the current week (edits included) into a PDF.
+  // Cloned so Immer's freeze of store state never touches the object the
+  // editor keeps mutating locally.
+  useEffect(() => {
+    dispatch(setNewTestPlan(plan ? structuredClone(plan) : null));
+    return () => {
+      dispatch(setNewTestPlan(null));
+    };
+  }, [plan, dispatch]);
   const [loading, setLoading] = useState(!planProp);
   const [loadError, setLoadError] = useState(null); // { message, noData: boolean }
   const [reloadKey, setReloadKey] = useState(0);
@@ -1920,6 +1982,7 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   const detailCacheRef = useRef(new Map());
   const [saving, setSaving] = useState(false);
   const [measureOpen, setMeasureOpen] = useState(false); // "Measurements" unit reference
+  const [foodLogOpen, setFoodLogOpen] = useState(false); // "Food log" popup (what the client actually logged)
 
   const [dayIdx, setDayIdx] = useState(0);
   const [mealIdx, setMealIdx] = useState(0);
@@ -1932,6 +1995,10 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   mealIdxRef.current = mealIdx;
   const loadedWeekKeyRef = useRef(null);
   const [dirty, setDirty] = useState(false);
+  // "<profile>|<weekStart>|<weekEnd>" of the week whose edits were saved in this
+  // session, so the "Edited" badge stays on straight after Save even before the
+  // reload brings back the server's own marker. Cleared by Reset week.
+  const [savedEditsKey, setSavedEditsKey] = useState(null);
   const [toast, setToast] = useState(null);
 
   const [swapState, setSwapState] = useState(null); // { mode: "alts" | "search", foodId }
@@ -2117,6 +2184,11 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   const dayTotals = useMemo(() => (day ? sumMeals(day.meals) : EMPTY_TOTALS), [day]);
   const weekRange = plan?.meta?.week_range || (weekStart && weekEnd ? `${weekStart} – ${weekEnd}` : null);
 
+  // status_value > 0 (approved / locked): the plan can no longer be edited.
+  // Drives the disabled state of swaps / Search a swap / Make my meal / Delete.
+  const editLocked = plan ? isWeekLocked(plan) : false;
+  const editLockedReason = editLocked ? `${weekLockReason(plan)} and can no longer be edited` : "";
+
   /* ---- live shopping-list pricing (FitChef) ----
    * `food_json.shopping` is priced when the plan is generated, so a dish added
    * or swapped from Search has no price there until the backend rebuilds it.
@@ -2194,8 +2266,13 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   }
 
   function deleteFood(foodId) {
+    if (isWeekLocked(plan)) {
+      flash(`${weekLockReason(plan)} and its meals can no longer be deleted.`);
+      return;
+    }
     const f = items.find((x) => x.id === foodId);
-    if (!f) return;
+    // The empty placeholder keeps its slot; it can only be refilled via a swap.
+    if (!f || f.removed || isRemovedPlaceholder(f)) return;
     // Opens the confirmation popup; performDelete() does the work once confirmed.
     setDeleteTarget({ dayIdx, slot, foodId, name: f.name });
   }
@@ -2205,7 +2282,31 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
     const t = deleteTarget;
     setDeleteTarget(null);
     if (!t) return;
-    updateFood(t.dayIdx, t.slot, t.foodId, (fd) => ({ ...fd, removed: true }));
+    // Deleting a dish keeps the row as an empty placeholder (Save sends
+    // "update"), so the slot is still there after reload. The placeholder
+    // itself cannot be deleted (its Delete button is disabled).
+    updateFood(t.dayIdx, t.slot, t.foodId, (fd) => ({
+      ...fd,
+      name: REMOVED_PLACEHOLDER_NAME,
+      kcal_base: 0,
+      protein_g: 0,
+      carbs_g: 0,
+      fat_g: 0,
+      fiber_g: 0,
+      servings: 1,
+      portion: "1 serving",
+      prep_minutes: null,
+      image: null,
+      images: [],
+      ingredients: [],
+      method_steps: [],
+      tips: [],
+      alternatives: 0,
+      alternativeItems: [],
+      recipeId: null,
+      variantId: null,
+      hash: null,
+    }));
     flash(`Removed ${t.name}`);
   }
 
@@ -2226,6 +2327,11 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   /** `alt` is a FoodItem — a plan alternative or a FitChef search hit (see fromFitChefResult). */
   function applySwap(alt) {
     if (!swapState) return;
+    if (isWeekLocked(plan)) {
+      setSwapState(null);
+      flash(`${weekLockReason(plan)} and can no longer be edited.`);
+      return;
+    }
 
     // Empty slot: nothing to replace, so add the picked dish as a new row.
     if (swapState.foodId == null) {
@@ -2265,6 +2371,10 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   }
 
   function openMealBuilder(foodId) {
+    if (isWeekLocked(plan)) {
+      flash(`${weekLockReason(plan)} and can no longer be edited.`);
+      return;
+    }
     // The meal being replaced (at its current servings) is the target the
     // builder fits portions to and draws in the chart until foods are added.
     const current = foodId == null ? null : items.find((f) => f.id === foodId) || null;
@@ -2526,6 +2636,7 @@ const ingredients = rows.flatMap((r) =>
       }
 
       setDirty(false);
+      setSavedEditsKey(`${profileId}|${weekStart}|${weekEnd}`);
       flash(`Saved ${done} change${done === 1 ? "" : "s"}`);
       onSave?.(plan, lastResponse);
       // Reload from the server so indices/totals reflect what was persisted.
@@ -2603,6 +2714,7 @@ const ingredients = rows.flatMap((r) =>
       setSwapQuery("");
       setMealBuilder(null);
       setDirty(false);
+      setSavedEditsKey(null);
       flash(res?.message || "Week reset to the original plan");
       onUndo?.();
       // Reload from the server so the grid shows the reset row.
@@ -2745,11 +2857,23 @@ const ingredients = rows.flatMap((r) =>
                   Locked
                 </span>
               )}
-              {dirty && (
-                <span className="px-2.5 py-[5px] rounded-[5px] bg-[#F4A2611A] text-[#F4A261] text-[10px] xl:text-[11px] 2xl:text-[12px] font-semibold leading-[110%] tracking-[-0.2px]">
-                  Unsaved changes
+              {(dirty || plan?.meta?.edited || savedEditsKey === `${profileId}|${weekStart}|${weekEnd}`) && (
+                <span
+                  title={dirty ? "This week has unsaved changes" : "This week differs from its originally generated plan"}
+                  className="px-2.5 py-[5px] rounded-[5px] bg-[#F4A2611A] text-[#F4A261] text-[10px] xl:text-[11px] 2xl:text-[12px] font-semibold leading-[110%] tracking-[-0.2px]"
+                >
+                  Edited
                 </span>
               )}
+              <button
+                type="button"
+                onClick={() => setFoodLogOpen(true)}
+                disabled={!profileId}
+                title="What the client actually logged in the app"
+                className={cn(UI.btnSecondary, "px-3 py-1.5")}
+              >
+                Food log
+              </button>
             </div>
             {[clientGoal, weekRange].filter(Boolean).length > 0 && (
               <p className={UI.subtitle}>{[clientGoal, weekRange].filter(Boolean).join(" · ")}</p>
@@ -2769,9 +2893,9 @@ const ingredients = rows.flatMap((r) =>
             >
               {resetting ? "Resetting…" : "Reset week"}
             </button>
-            <button onClick={() => setShoppingOpen(true)} className={UI.btnSecondary}>
+            {/* <button onClick={() => setShoppingOpen(true)} className={UI.btnSecondary}>
               Shopping list
-            </button>
+            </button> */}
             <button
               onClick={approveWeek}
               disabled={!plan?.meta?.id || saving || resetting || approving || isWeekLocked(plan)}
@@ -2812,11 +2936,11 @@ const ingredients = rows.flatMap((r) =>
                     !active && status === "none" && "bg-white hover:bg-[#F5F7FA]",
                     active && status === "none" && "bg-[#308BF9]",
                     !active && status === "ok" && "bg-[#2A9D8F1A] hover:bg-[#2A9D8F33]",
-                    !active && status === "over" && "bg-[#F4A2611A] hover:bg-[#F4A26133]",
-                    !active && status === "under" && "bg-[#308BF91A] hover:bg-[#308BF933]",
+                    !active && status === "over" && "bg-[#B5363A1A] hover:bg-[#B5363A33]",
+                    !active && status === "under" && "bg-[#8E5BD91A] hover:bg-[#8E5BD933]",
                     active && status === "ok" && "bg-[#2A9D8F]",
-                    active && status === "over" && "bg-[#F4A261]",
-                    active && status === "under" && "bg-[#308BF9]",
+                    active && status === "over" && "bg-[#B5363A]",
+                    active && status === "under" && "bg-[#8E5BD9]",
                   )}
                 >
                   <p
@@ -2825,8 +2949,8 @@ const ingredients = rows.flatMap((r) =>
                       active && "text-white",
                       !active && status === "none" && "text-[#A1A1A1]",
                       !active && status === "ok" && "text-[#2A9D8F]",
-                      !active && status === "over" && "text-[#F4A261]",
-                      !active && status === "under" && "text-[#308BF9]",
+                      !active && status === "over" && "text-[#B5363A]",
+                      !active && status === "under" && "text-[#8E5BD9]",
                     )}
                   >
                     {d.label}
@@ -2842,11 +2966,11 @@ const ingredients = rows.flatMap((r) =>
               on target
             </span>
             <span className="flex items-center gap-1.5">
-              <i className="inline-block h-[6px] w-[6px] rounded-full bg-[#F4A261]" />
+              <i className="inline-block h-[6px] w-[6px] rounded-full bg-[#B5363A]" />
               over
             </span>
             <span className="flex items-center gap-1.5">
-              <i className="inline-block h-[6px] w-[6px] rounded-full bg-[#308BF9]" />
+              <i className="inline-block h-[6px] w-[6px] rounded-full bg-[#8E5BD9]" />
               short
             </span>
             <span className="text-[#535359]">by calories · hover a day for its numbers</span>
@@ -2891,12 +3015,16 @@ const ingredients = rows.flatMap((r) =>
               })}
             </div>
 
+
+<div className="flex flex-col max-2xl:flex-row gap-[3px]">
             {/* food cards */}
-            <div className="pt-5 pb-[15px] pl-[15px] pr-2.5 border-4 border-[#F5F7FA] rounded-[15px] flex-1 min-w-0 max-2xl:flex-none min-h-[360px] xl:min-h-[400px] 2xl:min-h-[440px] flex flex-col">
+            <div className="pt-5 pb-[15px] pl-[15px] pr-2.5 border-4 border-[#F5F7FA] rounded-[15px] flex-1 min-w-0 max-2xl:flex-none min-h-[300px] xl:min-h-[320px] 2xl:min-h-[340px] flex flex-col">
               {items.length === 0 && (
                 <div className="flex-1 flex flex-wrap items-center justify-center gap-2.5 py-10">
                   <ActionBtn
                     primary
+                    disabled={editLocked}
+                    title={editLocked ? editLockedReason : undefined}
                     onClick={() => {
                       setSwapQuery("");
                       setSwapState({ mode: "search", foodId: null });
@@ -2904,10 +3032,13 @@ const ingredients = rows.flatMap((r) =>
                   >
                     Search a swap
                   </ActionBtn>
-                  <ActionBtn onClick={() => openMealBuilder(null)}>Make my meal</ActionBtn>
+                  <ActionBtn disabled={editLocked} title={editLocked ? editLockedReason : undefined} onClick={() => openMealBuilder(null)}>
+                    Make my meal
+                  </ActionBtn>
                 </div>
               )}
               {items.length > 0 && (
+                // Each FoodCard scrolls its own body; the list itself just stacks them.
                 <div className="flex flex-col gap-5">
                   {items.map((f, i) => (
                     <FoodCard
@@ -2917,6 +3048,15 @@ const ingredients = rows.flatMap((r) =>
                       slot={slot}
                       onStepPortion={(delta) => stepPortion(f.id, delta)}
                       onDelete={() => deleteFood(f.id)}
+                      // Same disabled rule as the "Reset week" / "Approve week" buttons.
+                      deleteDisabled={!plan?.meta?.id || saving || resetting || approving || isWeekLocked(plan)}
+                      deleteDisabledReason={
+                        isWeekLocked(plan)
+                          ? `${weekLockReason(plan)} and its meals can no longer be deleted`
+                          : "Please wait for the current action to finish"
+                      }
+                      editLocked={editLocked}
+                      editLockedReason={editLockedReason}
                       onOpenSwaps={() => setSwapState({ mode: "alts", foodId: f.id })}
                       onSearchSwap={() => {
                         setSwapQuery("");
@@ -2929,6 +3069,8 @@ const ingredients = rows.flatMap((r) =>
                 </div>
               )}
             </div>
+
+          </div>
           </div>
 
           {/* --------------------------------------------------------- save bar */}
@@ -2975,6 +3117,17 @@ const ingredients = rows.flatMap((r) =>
 
       {/* ------------------------------------------- measurements reference */}
       {measureOpen && <MeasurementsDialog days={days} onClose={() => setMeasureOpen(false)} />}
+
+      {/* ------------------------------------------------------ food log */}
+      {foodLogOpen && (
+        <FoodLogDialog
+          profileId={profileId}
+          weekStart={weekStart}
+          weekEnd={weekEnd}
+          clientName={clientName}
+          onClose={() => setFoodLogOpen(false)}
+        />
+      )}
 
       {/* ------------------------------------------------ make-my-meal dialog */}
       {mealBuilder && (
@@ -3042,6 +3195,338 @@ const ingredients = rows.flatMap((r) =>
   );
 }
 
+/* ============================================================ FoodLogDialog */
+
+/**
+ * "Food log" popup — what the client actually logged in the app, read from
+ * `POST /dietitian/api/web/food-log` (fetchFoodLogService). Opens on the plan's
+ * week (weekStart..weekEnd) or today when no week is selected; the dietitian
+ * can widen / move the range with the two date pickers (server cap: 92 days).
+ *
+ * The API already returns every day in the range and all four slots (empty
+ * ones with zero totals), so this only picks a day and renders it.
+ */
+
+const FOOD_LOG_SLOTS = [
+  { key: "breakfast", label: "Breakfast" },
+  { key: "lunch", label: "Lunch" },
+  { key: "dinner", label: "Dinner" },
+  { key: "snack", label: "Snacks" },
+];
+
+const FOOD_LOG_MAX_DAYS = 92;
+
+const isYmd = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+/** Local calendar date as YYYY-MM-DD (the app's log_date is a calendar day). */
+function foodLogToday() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** "2026-09-05" → "Fri, Sep 5". */
+function foodLogDayLabel(ymd) {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  if (isNaN(d)) return ymd;
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+/** Inclusive day count between two YYYY-MM-DD strings; 0 when start > end or invalid. */
+function foodLogDaysBetween(start, end) {
+  const a = new Date(`${start}T00:00:00Z`).getTime();
+  const b = new Date(`${end}T00:00:00Z`).getTime();
+  if (isNaN(a) || isNaN(b) || a > b) return 0;
+  return Math.floor((b - a) / 86400000) + 1;
+}
+
+/** 74.3 → "74.3", 4 → "4", null → "–". */
+function foodLogG(v) {
+  if (v === null || v === undefined) return "–";
+  const n = num(v);
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+/** "2026-09-11 12:48:18" → "12:48". */
+function foodLogTime(ts) {
+  const s = String(ts || "");
+  return s.length >= 16 ? s.slice(11, 16) : "";
+}
+
+const FOOD_LOG_SOURCE_LABEL = { plan: "Plan", chef: "Chef", manual: "Manual", search: "Search", photo: "Photo" };
+
+function FoodLogDialog({ profileId, weekStart, weekEnd, clientName, onClose }) {
+  const today = foodLogToday();
+  const planWeek = isYmd(weekStart) && isYmd(weekEnd) ? { start: weekStart, end: weekEnd } : null;
+  const initial = planWeek || { start: today, end: today };
+
+  const [range, setRange] = useState(initial); // what is loaded
+  const [draft, setDraft] = useState(initial); // what the date pickers show
+  const [draftError, setDraftError] = useState(null);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [dayIdx, setDayIdx] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0);
+  // Day strip: scrolled with the arrows / wheel / visible scrollbar, and the
+  // selected day is brought into view whenever it changes.
+  const dayStripRef = useRef(null);
+  const scrollDayStrip = (dir) => dayStripRef.current?.scrollBy({ left: dir * 260, behavior: "smooth" });
+  useEffect(() => {
+    if (loading) return;
+    dayStripRef.current
+      ?.querySelector("[data-active=\"true\"]")
+      ?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  }, [dayIdx, loading]);
+
+  useEffect(() => {
+    if (!profileId) {
+      setLoading(false);
+      setError("No client selected");
+      return undefined;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchFoodLogService({ profileId, startDate: range.start, endDate: range.end })
+      .then((res) => {
+        if (cancelled) return;
+        const body = res?.data || null;
+        setData(body);
+        // Land on today when it is in the range, else the first day with
+        // anything logged, else the first day.
+        const days = Array.isArray(body?.days) ? body.days : [];
+        let idx = days.findIndex((d) => d.log_date === today);
+        if (idx < 0) idx = days.findIndex((d) => num(d?.totals?.entries) > 0);
+        setDayIdx(idx < 0 ? 0 : idx);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setData(null);
+        setError(err?.data?.message || err?.message || "Could not load the food log");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId, range.start, range.end, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const applyDraft = () => {
+    if (!isYmd(draft.start) || !isYmd(draft.end)) return setDraftError("Pick both dates");
+    const n = foodLogDaysBetween(draft.start, draft.end);
+    if (n === 0) return setDraftError("Start date must be on or before the end date");
+    if (n > FOOD_LOG_MAX_DAYS) return setDraftError(`At most ${FOOD_LOG_MAX_DAYS} days at a time`);
+    setDraftError(null);
+    setRange({ start: draft.start, end: draft.end });
+    return undefined;
+  };
+
+  const showPlanWeek = () => {
+    if (!planWeek) return;
+    setDraft(planWeek);
+    setDraftError(null);
+    setRange(planWeek);
+  };
+
+  const days = Array.isArray(data?.days) ? data.days : [];
+  const day = days[dayIdx] || null;
+  const rangeTotals = data?.totals || null;
+  const subtitle = `${clientName || "Client"} · ${range.start === range.end ? foodLogDayLabel(range.start) : `${range.start} – ${range.end}`}`;
+
+  const macroLine = (t) => (
+    <span className={cn("tabular-nums text-[#738298]", UI.small)}>
+      <span style={{ color: MACRO_COLORS.protein }}>P {foodLogG(t?.protein)}g</span>
+      {" · "}
+      <span style={{ color: MACRO_COLORS.carbs }}>C {foodLogG(t?.carbs)}g</span>
+      {" · "}
+      <span style={{ color: MACRO_COLORS.fats }}>F {foodLogG(t?.fat)}g</span>
+      {" · "}
+      <span style={{ color: MACRO_COLORS.fibre }}>Fb {foodLogG(t?.fiber)}g</span>
+    </span>
+  );
+
+  return (
+    <ModalShell title="Food log" subtitle={subtitle} onClose={onClose} widthClass="max-w-[760px]" tall>
+      {/* ------------------------------------------------------ range bar */}
+      <div className="flex flex-none flex-wrap items-center gap-2 border-b border-[#E1E6ED] px-5 py-3">
+        <input
+          type="date"
+          value={draft.start}
+          max={draft.end || undefined}
+          onChange={(e) => setDraft((d) => ({ ...d, start: e.target.value }))}
+          className={cn(UI.input, "w-auto py-1.5")}
+          aria-label="From date"
+        />
+        <span className={cn("text-[#A1A1A1]", UI.small)}>to</span>
+        <input
+          type="date"
+          value={draft.end}
+          min={draft.start || undefined}
+          onChange={(e) => setDraft((d) => ({ ...d, end: e.target.value }))}
+          className={cn(UI.input, "w-auto py-1.5")}
+          aria-label="To date"
+        />
+        <button type="button" onClick={applyDraft} disabled={loading} className={cn(UI.btnSecondary, "px-3 py-1.5")}>
+          Show
+        </button>
+        {planWeek && (range.start !== planWeek.start || range.end !== planWeek.end) && (
+          <button type="button" onClick={showPlanWeek} disabled={loading} className={cn(UI.btnSecondary, "px-3 py-1.5")}>
+            Plan week
+          </button>
+        )}
+        {draftError && <span className={cn("text-[#E76F51]", UI.small)}>{draftError}</span>}
+        {!loading && !error && rangeTotals && (
+          <span className={cn("ml-auto tabular-nums text-[#738298]", UI.small)}>
+            {num(rangeTotals.entries)} {num(rangeTotals.entries) === 1 ? "entry" : "entries"} · {Math.round(num(rangeTotals.kcal))} kcal
+            {data?.truncated ? " · showing first 2000" : ""}
+          </span>
+        )}
+      </div>
+
+      {/* ------------------------------------------------------ day tabs */}
+      {!loading && !error && days.length > 1 && (
+        <div className="flex flex-none items-center gap-2 border-b border-[#E1E6ED] px-3 py-2.5">
+          <button
+            type="button"
+            onClick={() => scrollDayStrip(-1)}
+            aria-label="Scroll days left"
+            className="shrink-0 rounded-[8px] border border-[#E1E6ED] bg-white px-2 py-1.5 text-[#535359] leading-none cursor-pointer hover:bg-[#F5F7FA] transition-colors"
+          >
+            ‹
+          </button>
+
+          {/* Visible thin scrollbar (custom-scrollbar shows it on hover); the
+              arrows and mouse-wheel also scroll it, and the selected day is
+              scrolled into view automatically. */}
+          <div ref={dayStripRef} className="custom-scrollbar flex min-w-0 flex-1 gap-1.5 overflow-x-auto scroll-smooth pb-1">
+            {days.map((d, i) => {
+              const active = i === dayIdx;
+              const logged = num(d?.totals?.entries) > 0;
+              return (
+                <button
+                  key={d.log_date}
+                  type="button"
+                  data-active={active ? "true" : "false"}
+                  onClick={() => setDayIdx(i)}
+                  className={cn(
+                    "flex shrink-0 flex-col items-start rounded-[8px] border px-3 py-1.5 text-left cursor-pointer transition-colors",
+                    active ? "border-[#308BF9] bg-[#308BF9] text-white" : "border-[#E1E6ED] bg-white text-[#252525] hover:bg-[#F5F7FA]",
+                    !logged && !active && "text-[#A1A1A1]",
+                  )}
+                >
+                  <span className={cn("font-semibold whitespace-nowrap", UI.small)}>
+                    {foodLogDayLabel(d.log_date)}
+                    {d.log_date === today ? " · today" : ""}
+                  </span>
+                  <span className={cn("tabular-nums whitespace-nowrap", UI.small, active ? "text-white/80" : "text-[#738298]")}>
+                    {logged ? `${Math.round(num(d.totals.kcal))} kcal` : "nothing logged"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => scrollDayStrip(1)}
+            aria-label="Scroll days right"
+            className="shrink-0 rounded-[8px] border border-[#E1E6ED] bg-white px-2 py-1.5 text-[#535359] leading-none cursor-pointer hover:bg-[#F5F7FA] transition-colors"
+          >
+            ›
+          </button>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------ body */}
+      <div className="min-h-0 flex-1 overflow-y-auto scroll-hide">
+        {loading && (
+          <div className={cn("flex h-[240px] items-center justify-center text-[#738298]", UI.body)}>Loading food log…</div>
+        )}
+
+        {!loading && error && (
+          <div className="flex h-[240px] flex-col items-center justify-center gap-3 px-6 text-center">
+            <p className={cn("text-[#E76F51] font-medium", UI.body)}>{error}</p>
+            {profileId && (
+              <button type="button" onClick={() => setReloadKey((k) => k + 1)} className={UI.btnSecondary}>
+                Try again
+              </button>
+            )}
+          </div>
+        )}
+
+        {!loading && !error && !day && (
+          <div className={cn("flex h-[240px] items-center justify-center text-[#738298]", UI.body)}>No food logged in this range.</div>
+        )}
+
+        {!loading && !error && day && (
+          <>
+            {/* day header */}
+            <div className="flex flex-wrap items-baseline justify-between gap-2 px-5 pb-2 pt-4">
+              <p className={cn("text-[#252525] font-semibold", UI.body)}>
+                {foodLogDayLabel(day.log_date)}
+                <span className={cn("ml-2 font-normal text-[#738298]", UI.small)}>{day.log_date}</span>
+              </p>
+              <p className={cn("tabular-nums text-[#252525] font-semibold", UI.body)}>
+                {Math.round(num(day?.totals?.kcal))} kcal <span className="ml-2 font-normal">{macroLine(day?.totals)}</span>
+              </p>
+            </div>
+
+            {num(day?.totals?.entries) === 0 && (
+              <div className={cn("mx-5 mb-4 rounded-[8px] bg-[#F5F7FA] px-4 py-3 text-[#738298]", UI.body)}>Nothing logged on this day.</div>
+            )}
+
+            {num(day?.totals?.entries) > 0 &&
+              FOOD_LOG_SLOTS.map(({ key, label }) => {
+                const slot = (day.slots || []).find((s) => s.slot === key) || { totals: {}, entries: [] };
+                const entries = Array.isArray(slot.entries) ? slot.entries : [];
+                return (
+                  <div key={key} className="border-t border-[#F5F7FA]">
+                    <div className="flex items-baseline justify-between px-5 pb-1.5 pt-3">
+                      <span className={cn("text-[#738298] font-semibold uppercase", UI.small)}>{label}</span>
+                      <span className={cn("tabular-nums text-[#738298]", UI.small)}>
+                        {entries.length ? `${Math.round(num(slot?.totals?.kcal))} kcal` : ""}
+                      </span>
+                    </div>
+
+                    {entries.length === 0 && <div className={cn("px-5 pb-3 text-[#A1A1A1]", UI.small)}>Nothing logged</div>}
+
+                    {entries.map((e) => (
+                      <div key={e.id} className="flex items-start gap-3 px-5 py-2.5">
+                        <div className="min-w-0 flex-1">
+                          <p className={UI.foodName}>
+                            {e.food_name}
+                            {e.brand ? <span className={cn("ml-1.5 font-normal text-[#738298]", UI.small)}>{e.brand}</span> : null}
+                          </p>
+                          <p className={cn("mt-0.5 text-[#738298]", UI.small)}>
+                            {num(e.quantity) !== 1 ? `${foodLogG(e.quantity)} × ` : ""}
+                            {e.serving_desc}
+                            {e.grams !== null && e.grams !== undefined ? ` · ${foodLogG(e.grams)} g` : ""}
+                            {foodLogTime(e.logged_at) ? ` · ${foodLogTime(e.logged_at)}` : ""}
+                            {e.source && (
+                              <span className="ml-1.5 rounded-[4px] bg-[#F5F7FA] px-1.5 py-[1px] text-[#535359]">
+                                {FOOD_LOG_SOURCE_LABEL[e.source] || e.source}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className={cn("tabular-nums text-[#252525] font-semibold", UI.body)}>{Math.round(num(e.kcal))} kcal</p>
+                          <p className="mt-0.5">{macroLine(e)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+          </>
+        )}
+      </div>
+    </ModalShell>
+  );
+}
+
 /* ============================================================ MacrosPanel */
 
 function MacrosPanel({ totals, targets, dayIndex = 0 }) {
@@ -3059,6 +3544,7 @@ function MacrosPanel({ totals, targets, dayIndex = 0 }) {
   const calFib = 0; // the generator doesn't count fibre either
   const calTot = calC + calF + calP || 1;
   const cal = calP + calC + calF;
+
 
   // Round each share to an integer, then nudge the largest contributor so
   // they sum to exactly 100% (handles rounding drift) — same as macroItem's
@@ -3078,35 +3564,51 @@ function MacrosPanel({ totals, targets, dayIndex = 0 }) {
     if (maxKey === "Fib") pctFib += drift;
   }
 
-  // Arcs, clockwise from 12 o'clock: Fibre → Protein → Fats → Carbs.
-  const R = 90;
+  // Ring geometry mirrors the MacrosUpdate doughnut (chart.js cutout 78%,
+  // rotation -45°): a thick band with no gaps between segments, a thin
+  // #E1E6ED hairline on both edges and a rounded cap on the END of each
+  // segment that overlaps the start of the next one.
+  const R_OUT = 117;
+  const R_IN = R_OUT * 0.78;
+  const BAND = R_OUT - R_IN;
+  const R = (R_OUT + R_IN) / 2; // stroke centre line
   const CIRC = 2 * Math.PI * R;
-  const GAP = 6;
+  const START_DEG = -45; // clockwise from 12 o'clock, like MacrosUpdate
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  // Arcs, clockwise from the start angle: Carbs → Fats → Protein → Fibre.
   const arcs = [
-    { key: "fibre", pct: pctFib, color: MACRO_COLORS.fibre },
-    { key: "protein", pct: pctP, color: MACRO_COLORS.protein },
-    { key: "fats", pct: pctF, color: MACRO_COLORS.fats },
     { key: "carbs", pct: pctC, color: MACRO_COLORS.carbs },
+    { key: "fats", pct: pctF, color: MACRO_COLORS.fats },
+    { key: "protein", pct: pctP, color: MACRO_COLORS.protein },
+    { key: "fibre", pct: pctFib, color: MACRO_COLORS.fibre },
   ];
   let cursor = 0;
   const segs = arcs.map((a) => {
-    const len = Math.max(0, (a.pct / 100) * CIRC - (a.pct > 0 ? GAP : 0));
-    const seg = { ...a, dash: `${len} ${CIRC - len}`, dashOffset: -cursor };
-    cursor += (a.pct / 100) * CIRC;
+    const len = Math.max(0, (a.pct / 100) * CIRC);
+    const endRad = toRad(START_DEG + ((cursor + a.pct) / 100) * 360 - 90);
+    const seg = {
+      ...a,
+      dash: `${len} ${CIRC - len}`,
+      dashOffset: -(cursor / 100) * CIRC,
+      // Rounded cap drawn at the segment's end (skipped for slivers thinner than the cap).
+      cap: (a.pct / 100) * CIRC >= BAND / 2 ? { x: 120 + R * Math.cos(endRad), y: 120 + R * Math.sin(endRad) } : null,
+    };
+    cursor += a.pct;
     return seg;
   });
 
-  // Bubbles sit at the midpoint angle of their own segment. Hidden below 4%
-  // — at that size two bubbles land on top of each other and read as noise.
+  // Bubbles sit on the band at the midpoint angle of their own segment.
+  // Hidden below 4% — at that size two bubbles land on top of each other
+  // and read as noise.
   let bubbleCursor = 0;
   const bubbles = arcs
     .map((a) => {
       const midPct = bubbleCursor + a.pct / 2;
       bubbleCursor += a.pct;
       if (a.pct < 4) return null;
-      const angleRad = ((midPct / 100) * 360 - 90) * (Math.PI / 180);
-      const cx = 120 + 75 * Math.cos(angleRad);
-      const cy = 120 + 75 * Math.sin(angleRad);
+      const angleRad = toRad(START_DEG + (midPct / 100) * 360 - 90);
+      const cx = 120 + R * Math.cos(angleRad);
+      const cy = 120 + R * Math.sin(angleRad);
       return { key: a.key, pct: a.pct, top: (cy / 240) * 100, left: (cx / 240) * 100 };
     })
     .filter(Boolean);
@@ -3138,22 +3640,29 @@ function MacrosPanel({ totals, targets, dayIndex = 0 }) {
 
       <div className="flex justify-center items-center py-5">
         <div className="relative w-[200px] h-[200px]">
-          <svg viewBox="0 0 240 240" className="h-full w-full -rotate-90">
-            <circle cx="120" cy="120" r={R} fill="transparent" stroke="#E1E6ED" strokeWidth="20" />
-            {segs.map((s) => (
-              <circle
-                key={s.key}
-                cx="120"
-                cy="120"
-                r={R}
-                fill="transparent"
-                stroke={s.color}
-                strokeWidth="20"
-                strokeDasharray={s.dash}
-                strokeDashoffset={s.dashOffset}
-                className="transition-all duration-500"
-              />
-            ))}
+          <svg viewBox="0 0 240 240" className="h-full w-full">
+            {/* Empty track (only visible while the day has no macros) */}
+            <circle cx="120" cy="120" r={R} fill="transparent" stroke="#E1E6ED" strokeWidth={BAND} />
+            <g transform={`rotate(${START_DEG - 90} 120 120)`}>
+              {segs.map((s) => (
+                <circle
+                  key={s.key}
+                  cx="120"
+                  cy="120"
+                  r={R}
+                  fill="transparent"
+                  stroke={s.color}
+                  strokeWidth={BAND}
+                  strokeDasharray={s.dash}
+                  strokeDashoffset={s.dashOffset}
+                  className="transition-all duration-500"
+                />
+              ))}
+            </g>
+            {segs.map((s) => (s.cap ? <circle key={`${s.key}-cap`} cx={s.cap.x} cy={s.cap.y} r={BAND / 2} fill={s.color} /> : null))}
+            {/* Hairlines on the inner and outer edge of the band */}
+            <circle cx="120" cy="120" r={R_IN} fill="transparent" stroke="#E1E6ED" strokeWidth="4" />
+            <circle cx="120" cy="120" r={R_OUT} fill="transparent" stroke="#E1E6ED" strokeWidth="4" />
           </svg>
           {bubbles.map((b) => (
             <div
@@ -3214,22 +3723,66 @@ function MacrosPanel({ totals, targets, dayIndex = 0 }) {
 
 /* ============================================================ FoodCard */
 
-function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, onSearchSwap, onMakeMeal, onShowMeasurements }) {
+function FoodCard({
+  food: f,
+  slot,
+  index,
+  onStepPortion,
+  onDelete,
+  onOpenSwaps,
+  onSearchSwap,
+  onMakeMeal,
+  onShowMeasurements,
+  // Locked (approved / locked) week or an action in flight: Delete is greyed out.
+  deleteDisabled = false,
+  deleteDisabledReason = "",
+  // Approved / locked week: swaps, Search a swap and Make my meal are greyed out.
+  editLocked = false,
+  editLockedReason = "",
+}) {
   const [showMethod, setShowMethod] = useState(false);
+  // A deleted dish shows as an empty placeholder in the normal card layout:
+  // "(empty — removed)", zero macros, no photo, servings pinned at 1. That is
+  // both the unsaved state (performDelete) and the saved one (the row comes
+  // back from the server under the placeholder name). Search a swap / Make my
+  // meal stay active so the slot can be refilled. Delete stays enabled on a
+  // placeholder (it drops the row); it is greyed out once the row is marked
+  // removed and only Save remains.
+  const removed = !!f.removed || isRemovedPlaceholder(f);
+  const view = removed
+    ? {
+        ...f,
+        name: REMOVED_PLACEHOLDER_NAME,
+        kcal_base: 0,
+        protein_g: 0,
+        carbs_g: 0,
+        fat_g: 0,
+        fiber_g: 0,
+        servings: 1,
+        portion: "1 serving",
+        prep_minutes: null,
+        image: null,
+        images: [],
+        ingredients: [],
+        method_steps: [],
+        tips: [],
+        alternatives: 0,
+      }
+    : f;
   // Per-dish sections for a Make-my-meal dish; null for an ordinary recipe.
-  const methodGroups = useMemo(() => groupMethodSteps(f.method_steps), [f.method_steps]);
-  const s = scaledFood(f);
-  const serv = f.servings || 1;
+  const methodGroups = useMemo(() => groupMethodSteps(view.method_steps), [view.method_steps]);
+  const s = scaledFood(view);
+  const serv = view.servings || 1;
   // "10 MIN · NON-VEG · BREAKFAST": prep time, diet tag(s), then the slot the
   // row sits in. Older rows may still carry the slot inside diet_type, so
   // repeats are dropped case-insensitively.
   const headerTags = [];
   const seen = new Set();
   for (const raw of [
-    f.prep_minutes ? `${f.prep_minutes} min` : null,
-    ...String(f.diet_type === "custom" ? "" : f.diet_type || "").split(","),
+    view.prep_minutes ? `${view.prep_minutes} min` : null,
+    ...String(view.diet_type === "custom" ? "" : view.diet_type || "").split(","),
     // Recipe's own meal-type label ("Snack (Evening)") when the row has one, else the slot.
-    f.meal_type || SLOT_META[slot]?.label,
+    view.meal_type || SLOT_META[slot]?.label,
   ]) {
     const tag = String(raw || "").trim();
     const key = tag.toLowerCase();
@@ -3238,39 +3791,17 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
     headerTags.push(tag);
   }
   // Stored row id (e.g. "custom-9fe60d7f39"), shown last like the older plan screen does.
-  if (f.foodId) headerTags.push(`ID ${f.foodId}`);
-
-  if (f.removed) {
-    return (
-      <article className="flex gap-[5px] opacity-70 pb-5 border-b border-[#E1E6ED] last:border-b-0 last:pb-0">
-        <div className="flex my-[3px] items-start shrink-0">
-          <div className="flex h-6 w-6 xl:h-7 xl:w-7 2xl:h-[30px] 2xl:w-[30px] items-center justify-center rounded-full bg-[#F5F7FA] text-[#A1A1A1] text-[14px]">○</div>
-          <p className="px-[9px] pt-[3px] pb-0.5 text-[#A1A1A1] text-[15px] xl:text-[16px] 2xl:text-[18px] font-bold leading-[126%] tracking-[-0.3px] tabular-nums">
-            {index + 1}
-          </p>
-        </div>
-        <div className="min-w-0 flex-1 flex flex-col gap-2.5">
-          <p className={cn(UI.foodName, "italic text-[#A1A1A1]")}>{f.name} (removed)</p>
-          <div className={cn("rounded-[10px] border border-dashed border-[#E1E6ED] bg-[#F5F7FA] px-3 py-2.5 text-[#738298]", UI.body)}>
-            This meal was removed. Use {f.alternatives > 0 ? <><b className="font-semibold text-[#252525]">{f.alternatives} swaps</b>, </> : null}
-            <b className="font-semibold text-[#252525]">Search a swap</b> or <b className="font-semibold text-[#252525]">Make my meal</b> to fill the slot.
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {f.alternatives > 0 && <ActionBtn onClick={onOpenSwaps}>{f.alternatives} swaps</ActionBtn>}
-            <ActionBtn primary onClick={onSearchSwap}>
-              Search a swap
-            </ActionBtn>
-            <ActionBtn onClick={onMakeMeal}>Make my meal</ActionBtn>
-          </div>
-        </div>
-      </article>
-    );
-  }
+  if (view.foodId) headerTags.push(`ID ${view.foodId}`);
 
   return (
-    <article className="flex gap-[5px] pb-5 border-b border-[#E1E6ED] last:border-b-0 last:pb-0">
+    // Card = scrollable body (article) + a fixed action row under it. The
+    // separator lives on the wrapper so it sits below the buttons. The body
+    // cap is sized so body + buttons fit inside the client-details panel
+    // (h-[85vh] with its own inner scroller) without scrolling the panel.
+    <div className="flex flex-col pb-5 border-b border-[#E1E6ED] last:border-b-0 last:pb-0">
+      <article className="flex gap-[5px] max-h-[200px] xl:max-h-[220px] 2xl:max-h-[240px] overflow-y-auto pr-2 [scrollbar-width:thin] [scrollbar-color:#E1E6ED_transparent]">
       <div className="flex my-[3px] items-start shrink-0">
-        <FoodThumb food={f} className="h-6 w-6 xl:h-7 xl:w-7 2xl:h-[30px] 2xl:w-[30px] rounded-full bg-[#F4A2611A] text-[14px]" />
+        <FoodThumb food={view} className="h-6 w-6 xl:h-7 xl:w-7 2xl:h-[30px] 2xl:w-[30px] rounded-full bg-[#F4A2611A] text-[14px]" />
         <p className="px-[9px] pt-[3px] pb-0.5 text-[#252525] text-[15px] xl:text-[16px] 2xl:text-[18px] font-bold leading-[126%] tracking-[-0.3px] tabular-nums">
           {index + 1}
         </p>
@@ -3278,12 +3809,12 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-col gap-1">
-          <p className={UI.foodName}>{f.name}</p>
+          <p className={UI.foodName}>{view.name}</p>
           <div className="flex flex-wrap items-center gap-[5px]">
             <p className={cn("text-[#252525] font-normal", UI.small)}>
               <span className="font-semibold tabular-nums">{s.kcal}kcal</span>
             </p>
-            {f.portion && <p className={cn("text-[#252525] font-normal", UI.small)}>{f.portion}</p>}
+            {view.portion && <p className={cn("text-[#252525] font-normal", UI.small)}>{view.portion}</p>}
           </div>
         </div>
 
@@ -3299,7 +3830,8 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
 
           <div className="flex items-start gap-3">
             <FoodThumb
-              food={f}
+              // Removed placeholder: the photo box reads "no photo" instead of the plate emoji.
+              food={removed ? { ...view, icon: <span className={cn("text-[#A1A1A1] font-normal", UI.small)}>no photo</span> } : view}
               collage
               className="h-[76px] w-[76px] rounded-[10px] border border-[#E1E6ED] bg-[#F5F7FA] text-3xl"
             />
@@ -3307,9 +3839,10 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
             <div className="min-w-0 flex-1">
               <div className="mb-1.5 flex flex-wrap items-center gap-2">
                 <span className={cn("text-[#738298] font-semibold uppercase", UI.small)}>servings</span>
-                <StepBtn label="−" disabled={serv - 0.25 < 0.25} onClick={() => onStepPortion(-1)} />
+                {/* Approved / locked week: servings can no longer be changed. */}
+                <StepBtn label="−" disabled={editLocked || removed || serv - 0.25 < 0.25} title={editLocked ? editLockedReason : undefined} onClick={() => onStepPortion(-1)} />
                 <span className={cn("min-w-[56px] text-center text-[#252525] font-semibold tabular-nums", UI.body)}>{serv}</span>
-                <StepBtn label="+" disabled={serv + 0.25 > 6} onClick={() => onStepPortion(1)} />
+                <StepBtn label="+" disabled={editLocked || removed || serv + 0.25 > 6} title={editLocked ? editLockedReason : undefined} onClick={() => onStepPortion(1)} />
                 {serv !== 1 && (
                   <span className={cn("text-[#308BF9] font-semibold", UI.small)}>
                     {s.kcal} kcal · P{Math.round(s.protein_g)} · C{Math.round(s.carbs_g)} · F{Math.round(s.fat_g)}
@@ -3317,9 +3850,9 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
                 )}
               </div>
 
-              {f.ingredients.length > 0 && (
+              {view.ingredients.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5">
-                  {f.ingredients.map((ing, i) => {
+                  {view.ingredients.map((ing, i) => {
                     const m = unitMetric(ing.unit);
                     return (
                       <span
@@ -3343,7 +3876,7 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
                 </div>
               )}
 
-              {f.method_steps.length > 0 && (
+              {view.method_steps.length > 0 && (
                 <>
                   <button
                     onClick={() => setShowMethod((v) => !v)}
@@ -3371,17 +3904,17 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
                         </div>
                       ) : (
                         <ol className={cn("mt-1.5 list-decimal pl-[18px] text-[#738298]", UI.body)}>
-                          {f.method_steps.map((step, i) => (
+                          {view.method_steps.map((step, i) => (
                             <li key={i} className="mb-1">
                               {step}
                             </li>
                           ))}
                         </ol>
                       )}
-                      {f.tips?.length > 0 && (
+                      {view.tips?.length > 0 && (
                         <div className={cn("mt-1.5 rounded-[5px] bg-[#F4A2611A] px-2.5 py-[5px] text-[#F4A261]", UI.small)}>
                           <b className="mr-1 font-semibold">Tip:</b>
-                          {f.tips.join(" ")}
+                          {view.tips.join(" ")}
                         </div>
                       )}
                     </>
@@ -3391,22 +3924,41 @@ function FoodCard({ food: f, slot, index, onStepPortion, onDelete, onOpenSwaps, 
             </div>
           </div>
 
-          <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            {f.alternatives > 0 && <ActionBtn onClick={onOpenSwaps}>{f.alternatives} swaps</ActionBtn>}
-            <ActionBtn primary onClick={onSearchSwap}>
-              Search a swap
-            </ActionBtn>
-            <ActionBtn onClick={onMakeMeal}>Make my meal</ActionBtn>
-            <button
-              onClick={onDelete}
-              className="ml-auto px-[11px] py-1 rounded-[4px] text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-normal tracking-[-0.24px] text-[#A1A1A1] cursor-pointer hover:bg-[#E76F511A] hover:text-[#E76F51] transition-colors"
-            >
-              Delete
-            </button>
-          </div>
+        
         </div>
       </div>
-    </article>
+      </article>
+
+      {/* Always visible: sits under the scrolling body, not inside it. */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        {view.alternatives > 0 && (
+          <ActionBtn onClick={onOpenSwaps} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
+            {view.alternatives} swaps
+          </ActionBtn>
+        )}
+        <ActionBtn primary onClick={onSearchSwap} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
+          Search a swap
+        </ActionBtn>
+        <ActionBtn onClick={onMakeMeal} disabled={editLocked} title={editLocked ? editLockedReason : undefined}>
+          Make my meal
+        </ActionBtn>
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={!!f.removed || isRemovedPlaceholder(f) || deleteDisabled}
+          title={
+            f.removed || isRemovedPlaceholder(f)
+              ? "This meal has already been removed"
+              : deleteDisabled
+                ? deleteDisabledReason
+                : undefined
+          }
+          className="ml-auto px-[11px] py-1 rounded-[4px] text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-normal tracking-[-0.24px] text-[#A1A1A1] cursor-pointer hover:bg-[#E76F511A] hover:text-[#E76F51] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#A1A1A1]"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -3480,15 +4032,23 @@ function StepBtn({ label, onClick, disabled, title }) {
   );
 }
 
-function ActionBtn({ children, onClick, primary }) {
+function ActionBtn({ children, onClick, primary, disabled = false, title }) {
   return (
     <button
+      type="button"
       onClick={onClick}
+      disabled={disabled}
+      title={title}
       className={cn(
         "flex items-center justify-center px-[11px] py-1.5 rounded-[4px] border text-[12px] xl:text-[13px] 2xl:text-[14px] font-semibold leading-normal tracking-[-0.24px] cursor-pointer transition-colors",
         primary
           ? "border-[#308BF9] bg-[#308BF9] text-white hover:bg-[#2678D9] hover:border-[#2678D9]"
           : "border-[#E1E6ED] bg-white text-[#308BF9] hover:bg-[#EEF4FE]",
+        // Approved / locked week: greyed out, no hover, not clickable.
+        "disabled:opacity-50 disabled:cursor-not-allowed",
+        primary
+          ? "disabled:hover:bg-[#308BF9] disabled:hover:border-[#308BF9]"
+          : "disabled:hover:bg-white",
       )}
     >
       {children}
@@ -4280,7 +4840,7 @@ const totalPrice = useMemo(() => {
                 {same ? (
                   <span className="font-semibold text-[#2A9D8F]">about the same.</span>
                 ) : (
-                  <span className={cn("font-semibold", diff > 0 ? "text-[#F4A261]" : "text-[#308BF9]")}>
+                  <span className={cn("font-semibold", diff > 0 ? "text-[#B5363A]" : "text-[#8E5BD9]")}>
                     {Math.abs(diff)} kcal {diff > 0 ? "too much" : "short"}.
                   </span>
                 )}

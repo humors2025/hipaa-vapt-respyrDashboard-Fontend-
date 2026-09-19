@@ -45,6 +45,15 @@ const MENU = [
     ],
   },
   { name: "TA Analytics",    icon: "/icons/hugeicons_note-01.svg",        path: "/super-admin/analytics" },
+  {
+    name: "Commission",
+    icon: "/icons/hugeicons_file-export.svg",
+    submenu: [
+      { name: "Facilities", path: "/super-admin/facilities" },
+      { name: "QR codes", path: "/super-admin/qr-codes" },
+      { name: "Payouts", path: "/super-admin/payouts" },
+    ],
+  },
 ];
 
 const DROPDOWN_MENU = [
@@ -63,7 +72,10 @@ export default function SuperAdminHeader() {
   const [mobileSubmenuOpen, setMobileSubmenuOpen] = useState(null);
 
   const profileRef = useRef(null);
-  const submenuRef = useRef(null);
+  // One element per dropdown, keyed by menu name. A single ref would only
+  // hold the last dropdown rendered, so pointer-down on any other dropdown's
+  // links would count as "outside" and close it before the click fired.
+  const submenuRefs = useRef({});
   const mobileMenuRef = useRef(null);
 
   useEffect(() => {
@@ -80,7 +92,10 @@ export default function SuperAdminHeader() {
       if (profileRef.current && !profileRef.current.contains(e.target)) {
         setIsDropdownOpen(false);
       }
-      if (submenuRef.current && !submenuRef.current.contains(e.target)) {
+      const insideSubmenu = Object.values(submenuRefs.current).some(
+        (el) => el && el.contains(e.target)
+      );
+      if (!insideSubmenu) {
         setOpenSubmenu(null);
       }
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) {
@@ -243,7 +258,9 @@ const handleLogout = async () => {
                   <div
                     key={m.name}
                     className="relative"
-                    ref={submenuRef}
+                    ref={(el) => {
+                      submenuRefs.current[m.name] = el;
+                    }}
                     onMouseEnter={() => setOpenSubmenu(m.name)}
                     onMouseLeave={() => setOpenSubmenu(null)}
                   >
