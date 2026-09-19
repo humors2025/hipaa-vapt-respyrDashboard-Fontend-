@@ -37,7 +37,17 @@ function Chevron({ open }) {
 }
 
 /** Month-by-month payments for one member. */
-function InvoiceHistory({ m, isOwner, currency }) {
+function InvoiceHistory({ m, isOwner, house = false, currency }) {
+  // Website (no-code) members earn nobody a commission, so the ledger has no
+  // per-invoice rows for them; their payment history lives in Stripe.
+  if (house) {
+    return (
+      <div className="px-4 py-3 text-[#535359] text-[12px]">
+        Pays {m.last_charged_minor != null ? `${formatMinor(m.last_charged_minor, currency)}/month` : "the list price"} directly to Rysflo
+        {m.renews ? ` · next renewal ${fmt(m.renews)}` : ""}. No commission applies; the payment history is in Stripe.
+      </div>
+    );
+  }
   if (!m.invoices?.length) {
     return <div className="px-4 py-3 text-[#A1A1A1] text-[12px]">No payment recorded yet — the first invoice is still settling.</div>;
   }
@@ -116,7 +126,7 @@ function MemberRow({ m, isOwner, house = false, open, onToggle, onResend, busy, 
       {open && (
         <tr className="bg-[#F9FAFC]">
           <td colSpan={isOwner ? 8 : house ? 7 : 9} className="p-0">
-            <InvoiceHistory m={m} isOwner={isOwner} currency={currency} />
+            <InvoiceHistory m={m} isOwner={isOwner} house={house} currency={currency} />
           </td>
         </tr>
       )}
