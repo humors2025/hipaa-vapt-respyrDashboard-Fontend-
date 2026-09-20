@@ -308,6 +308,14 @@ function bestQtyFor(row, others, target, lo, hi) {
  * Returns up to `limit` of { row, qty, score, kcal, p, c, f, portionText },
  * best first. `score` is 0–100: how much of the gap error the dish removes.
  */
+function suggestionPortionText(cand, qty) {
+  return cand.portionQty
+    ? `${fmtQty(cand.portionQty * qty)} ${pluralUnit(cand.portionUnit, cand.portionQty * qty)}`.trim()
+    : qty === 1
+      ? cand.portion
+      : `${fmtQty(qty)} × ${cand.portion}`;
+}
+
 function gapSuggestions(rows, candidates, target, limit = 6) {
   const tot = sumMealRows(rows);
   const errNow = gapError(tot, target);
@@ -321,14 +329,253 @@ function gapSuggestions(rows, candidates, target, limit = 6) {
     if (cand.offSlot) score *= 0.97; // in-slot dishes win ties
     score = Math.round(score);
     if (score <= 0) continue;
-    const portionText = cand.portionQty
-      ? `${fmtQty(cand.portionQty * qty)} ${pluralUnit(cand.portionUnit, cand.portionQty * qty)}`.trim()
-      : qty === 1
-        ? cand.portion
-        : `${fmtQty(qty)} × ${cand.portion}`;
-    out.push({ row: cand, qty, score, kcal: cand.kcal * qty, p: cand.p * qty, c: cand.c * qty, f: cand.f * qty, portionText });
+    out.push({
+      row: cand,
+      qty,
+      err,
+      score,
+      kcal: cand.kcal * qty,
+      p: cand.p * qty,
+      c: cand.c * qty,
+      f: cand.f * qty,
+      portionText: suggestionPortionText(cand, qty),
+    });
   }
-  return out.sort((a, b) => b.score - a.score || a.kcal - b.kcal).slice(0, limit);
+  out.sort((a, b) => b.score - a.score || a.kcal - b.kcal);
+  const singles = out.slice(0, limit);
+
+  // PAIRS, WHEN ONE DISH CANNOT DO IT. High protein with low fat often has
+  // no single dish that fits; two together frequently land it. Only tried
+  // when the best single leaves a real gap, and a pair is only offered when
+  // it clearly beats the best single — otherwise it is two dishes where one
+  // would do.
+  const best = singles[0];
+  const pairs = [];
+  if (best && best.score < 88) {
+    const inSlot = out.filter((s) => !s.row.offSlot).slice(0, 14);
+    const pool = inSlot.length >= 2 ? inSlot : out.slice(0, 14);
+    for (let i = 0; i < pool.length; i++) {
+      const a = pool[i];
+      for (let j = i + 1; j < pool.length; j++) {
+        const b = pool[j];
+        if (normName(a.row.name) === normName(b.row.name)) continue;
+        // BOTH portions are fitted together. Fixing the first dish at the
+        // portion it would take ALONE nearly fills the gap by itself, so no
+        // second dish could ever improve on it and pairs never fired.
+        let fit = null;
+        for (let qa = GAP_QTY_MIN; qa <= 3 + 1e-9; qa += 0.25) {
+          const withA = {
+            kcal: tot.kcal + a.row.kcal * qa,
+            p: tot.p + a.row.p * qa,
+            c: tot.c + a.row.c * qa,
+            f: tot.f + a.row.f * qa,
+          };
+          const { qty: qb, err } = bestQtyFor(b.row, withA, target, GAP_QTY_MIN, 3);
+          if (!fit || err < fit.err) fit = { qa, qb, err };
+        }
+        // A pair earns its place only when it is clearly better than the
+        // best single — two dishes where one would do is noise. Same rule
+        // as the trainer dashboard: at least 30% less error left over.
+        if (!fit || fit.err >= best.err * 0.7) continue;
+        pairs.push({
+          pair: true,
+          score: Math.round(100 * (1 - Math.sqrt(fit.err / errNow))),
+          kcal: a.row.kcal * fit.qa + b.row.kcal * fit.qb,
+          p: a.row.p * fit.qa + b.row.p * fit.qb,
+          c: a.row.c * fit.qa + b.row.c * fit.qb,
+          f: a.row.f * fit.qa + b.row.f * fit.qb,
+          items: [
+            { row: a.row, qty: fit.qa, portionText: suggestionPortionText(a.row, fit.qa) },
+            { row: b.row, qty: fit.qb, portionText: suggestionPortionText(b.row, fit.qb) },
+          ],
+        });
+      }
+    }
+    pairs.sort((x, y) => y.score - x.score);
+  }
+  return pairs.length ? [...pairs.slice(0, 2), ...singles.slice(0, Math.max(0, limit - 2))] : singles;
+}
+
+/* ------------------------------------------------- naming a built meal */
+
+// "1/2 Cup Shredded Cheddar" is just cheddar once it is in a title — the
+// measure sits beside the food on the row already.
+const NAME_MEASURE_HEAD =
+  /^\s*(?:[\d/.\s]+)?\s*(?:cups?|tbsps?|tablespoons?|tsps?|teaspoons?|oz|ounces?|lbs?|pounds?|g|grams?|ml|slices?|pieces?|servings?|bowls?|plates?|glass(?:es)?|scoops?|handfuls?|cans?|packs?)\s+/i;
+
+function shortDishName(raw) {
+  let t = String(raw || "").replace(/\s*\(.*?\)\s*/g, " ");
+  let prev = null;
+  while (prev !== t) {
+    prev = t;
+    t = t.replace(NAME_MEASURE_HEAD, "");
+  }
+  // a bare count, but only before a preparation word — "7 Layer Dip" keeps its seven
+  t = t.replace(/^\s*\d[\d/.\s]*\s+(?=(scrambled|boiled|fried|grilled|baked|poached|roasted|steamed|whole|large|small|mini)\b)/i, "");
+  t = t.split(",")[0];
+  return t.replace(/\s+/g, " ").replace(/^[\s\-,&]+|[\s\-,&]+$/g, "");
+}
+
+// "Vegan Smoothie with Spinach" is a smoothie — the diet shows on the card
+// already and the garnish is not what you call it. A one-word core keeps its
+// tail ("Eggs with smoked sausage" stays itself) unless the name has to be
+// cut hard to fit a platter title.
+function coreDishName(raw, hard = false) {
+  const full = String(raw || "").replace(/\s*\(.*?\)\s*/g, " ").replace(/\s+/g, " ").trim();
+  const t = full.replace(/^\s*(vegan|vegetarian|veggie|keto|paleo|homemade|classic|simple|easy)\s+/i, "");
+  const trimmed = t.replace(/\s+with\s+.*$/i, "").replace(/\s+/g, " ").trim();
+  if (trimmed.split(" ").length < 2 && !hard) return t;
+  return trimmed || t;
+}
+
+// Things in almost every dish that name none of them.
+const NAME_BACKGROUND = new Set([
+  "water", "broth", "stock", "oil", "olive oil", "coconut oil", "butter", "salt", "pepper",
+  "black pepper", "spices", "herbs", "vinegar", "flour", "baking powder", "cornstarch", "sugar",
+  "vanilla", "cinnamon", "soy sauce", "ketchup", "mustard", "mayonnaise", "cream", "milk",
+  "lemon", "lime", "garlic", "onion", "parsley", "cilantro", "basil", "seasoning", "dressing",
+  "sauce", "syrup", "honey", "yeast",
+]);
+
+// What a plate of several things is called, by the time of day.
+const NAME_PLATTER = { breakfast: "Breakfast Platter", lunch: "Lunch Plate", dinner: "Dinner Platter", snacks: "Snack Box" };
+
+// "egg" and "eggs", "cheese" and "cream cheese" — the same thing for the
+// purpose of naming a meal. Listing both reads as a mistake.
+function sameNamedFood(a, b) {
+  const norm = (x) => {
+    const s = String(x || "").trim().toLowerCase().replace(/\s+/g, " ");
+    return /s$/.test(s) && !/ss$/.test(s) ? s.slice(0, -1) : s;
+  };
+  const na = norm(a);
+  const nb = norm(b);
+  if (na === nb) return true;
+  const wa = na.split(" ");
+  const wb = nb.split(" ");
+  const subset = (x, y) => x.every((w) => y.includes(w));
+  return subset(wa, wb) || subset(wb, wa);
+}
+
+/** The one or two ingredients that make a dish what it is: heaviest first,
+ *  background dropped, its own core name when it has no usable list. */
+function mainIngredientNames(row, take = 2) {
+  const out = [];
+  for (const c of row?.contains || []) {
+    if (!c?.name) continue;
+    const nm = String(c.name).replace(/\s*\(.*?\)\s*/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+    if (!nm || NAME_BACKGROUND.has(nm)) continue;
+    out.push([num(c.grams) || num(c.qty) || 0, nm]);
+  }
+  out.sort((a, b) => b[0] - a[0]);
+  const picked = out.slice(0, take).map((x) => x[1]);
+  if (picked.length) return picked;
+  const core = coreDishName(shortDishName(row?.name), true);
+  return core ? [core.toLowerCase()] : [];
+}
+
+/**
+ * A name a person would actually say for a built meal. One dish names
+ * itself. Two read as "A with B". Three still fit as a list. Four or more
+ * are named the way a menu would name them — by what leads the plate, and
+ * what kind of meal it is: "Egg & Sausage Breakfast Platter".
+ */
+function autoMealName(rows, slot) {
+  const names = [];
+  for (const r of rows || []) {
+    const nm = shortDishName(r?.name);
+    if (nm && !names.includes(nm)) names.push(nm);
+  }
+  if (!names.length) return "";
+  if (names.length === 1) return names[0];
+
+  const hasWith = names.some((n) => n.toLowerCase().includes(" with "));
+  if (names.length === 2) {
+    const two = names[0] + (hasWith ? " & " : " with ") + names[1];
+    if (two.length <= 58) return two;
+    return `${coreDishName(names[0], true)} & ${coreDishName(names[1], true)}`;
+  }
+
+  const cores = [];
+  for (const n of names) {
+    const c = coreDishName(n, true) || n;
+    if (!cores.includes(c)) cores.push(c);
+  }
+  if (cores.length === 3) {
+    const three = `${cores[0]}, ${cores[1]} & ${cores[2]}`;
+    if (three.length <= 52) return three;
+  }
+
+  // Four or more dishes: name it by what is IN it — each dish contributes
+  // its heaviest ingredient the name does not already have.
+  const platter = NAME_PLATTER[slot] || "Plate";
+  const parts = [];
+  for (const r of rows || []) {
+    let added = 0;
+    for (const ing of mainIngredientNames(r, 6)) {
+      if (added >= 2) break;
+      if (parts.some((p) => sameNamedFood(ing, p))) continue;
+      parts.push(ing.replace(/\b\w/g, (ch) => ch.toUpperCase()));
+      added += 1;
+    }
+  }
+  if (parts.length) {
+    const joined = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} & ${parts[parts.length - 1]}` : parts[0];
+    return `${joined} ${platter}`;
+  }
+  return `${cores[0]} ${platter}`;
+}
+
+/* ------------------------------------------------------- typo tolerance */
+
+/** Edit distance, capped — the caller only cares about "1 or 2 slips". */
+function editDistance(a, b, cap = 3) {
+  if (Math.abs(a.length - b.length) > cap) return cap + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      const v = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + cost);
+      row.push(v);
+      if (v < rowMin) rowMin = v;
+    }
+    if (rowMin > cap) return cap + 1;
+    prev = row;
+  }
+  return prev[b.length];
+}
+
+/**
+ * "chiken" → "chicken", against the words of dishes already seen. Fixing
+ * only what finds nothing: a real word, or a prefix of one, is never
+ * second-guessed — "cod" stays "cod". Returns the corrected query, or null
+ * when nothing changed.
+ */
+function correctQueryWords(query, vocab) {
+  const words = String(query || "").toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length || !vocab || vocab.size === 0) return null;
+  let changed = false;
+  const fixed = words.map((w) => {
+    if (w.length < 4 || vocab.has(w)) return w;
+    for (const v of vocab) if (v.startsWith(w)) return w;
+    const maxD = w.length > 5 ? 2 : 1;
+    let best = null;
+    let bestD = maxD + 1;
+    for (const v of vocab) {
+      const d = editDistance(w, v, bestD - 1);
+      if (d < bestD) {
+        bestD = d;
+        best = v;
+      }
+    }
+    if (best && best !== w) {
+      changed = true;
+      return best;
+    }
+    return w;
+  });
+  return changed ? fixed.join(" ") : null;
 }
 
 /* ---------------------------------------------------------- FitChef search */
@@ -2000,6 +2247,10 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   mealIdxRef.current = mealIdx;
   const loadedWeekKeyRef = useRef(null);
   const [dirty, setDirty] = useState(false);
+  // Per-action undo: a snapshot of the plan before each edit, newest last,
+  // capped so a long session cannot hoard memory. Cleared whenever the plan
+  // is reloaded from the server (save, reset, week change).
+  const [undoStack, setUndoStack] = useState([]);
   // "<profile>|<weekStart>|<weekEnd>" of the week whose edits were saved in this
   // session, so the "Edited" badge stays on straight after Save even before the
   // reload brings back the server's own marker. Cleared by Reset week.
@@ -2124,6 +2375,7 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
         setPlan(next);
         setOriginal(structuredClone(next));
         setDirty(false);
+        setUndoStack([]);
         // Only jump back to Day 1 when a different client / week comes in. A
         // reload of the week already on screen (the refetch after Save, Reset
         // week or Retry) stays on the day and meal the trainer was working on,
@@ -2247,6 +2499,30 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
     setTimeout(() => setToast((cur) => (cur === message ? null : cur)), 2600);
   }
 
+  /**
+   * Snapshot the plan as it is now, before something changes it — one press
+   * of Undo takes back the LAST thing done, not the afternoon's work.
+   * Consecutive steps with the same `coalesceKey` (portion clicks on one
+   * food) fold into a single step back.
+   */
+  function pushUndo(label, coalesceKey = null) {
+    if (!plan) return;
+    setUndoStack((prev) => {
+      if (coalesceKey && prev.length && prev[prev.length - 1].key === coalesceKey) return prev;
+      return [...prev.slice(-14), { plan: structuredClone(plan), dirty, label, key: coalesceKey }];
+    });
+  }
+
+  /** Step back one action. With nothing recorded the button falls back to undo() below. */
+  function undoLast() {
+    if (!undoStack.length) return;
+    const last = undoStack[undoStack.length - 1];
+    setUndoStack((prev) => prev.slice(0, -1));
+    setPlan(last.plan);
+    setDirty(last.dirty);
+    flash(`Undid ${last.label}`);
+  }
+
   function updateFood(dIdx, slotKey, foodId, updater) {
     setPlan((prev) => {
       const next = structuredClone(prev);
@@ -2264,6 +2540,7 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   }
 
   function stepPortion(foodId, delta) {
+    pushUndo("the portion change", `portion:${foodId}`);
     updateFood(dayIdx, slot, foodId, (f) => {
       const next = Math.min(6, Math.max(0.25, (f.servings || 1) + delta * 0.25));
       return { ...f, servings: next };
@@ -2287,6 +2564,7 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
     const t = deleteTarget;
     setDeleteTarget(null);
     if (!t) return;
+    pushUndo(`the delete of ${t.name}`);
     // Deleting a dish keeps the row as an empty placeholder (Save sends
     // "update"), so the slot is still there after reload. The placeholder
     // itself cannot be deleted (its Delete button is disabled).
@@ -2347,6 +2625,7 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
 
     // Empty slot: nothing to replace, so add the picked dish as a new row.
     if (swapState.foodId == null) {
+      pushUndo(`the add of ${alt.name}`);
       addFood(dayIdx, slot, {
         ...structuredClone(alt),
         id: `d${dayIdx + 1}-${slot}-new-${Date.now()}`,
@@ -2362,6 +2641,7 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
 
     const current = items.find((x) => x.id === swapState.foodId);
 
+    pushUndo(`the swap to ${alt.name}`);
     updateFood(dayIdx, slot, swapState.foodId, () => {
       // Keep the meal we are replacing (plus the other alternatives) reachable
       // so the dietitian can swap back.
@@ -2441,8 +2721,46 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
       targetKind = "gap";
       if (!(target.kcal > 0) && !(target.p > 0)) target = null; // day already met
     }
+    // THE DAY'S SHORTFALL GOES ON LUNCH. The generator solves close but not
+    // exactly — a day asked for 146P can come back with 143. Spread across
+    // four slots nobody sees it; folding the whole difference into the lunch
+    // target gives it one honest job: close the day. Measured against the
+    // UNTOUCHED original plan, never the edited one, so trimming a meal can
+    // never grow the target it is measured against.
+    if (target && targetKind === "replace" && slot === "lunch" && day?.targets && plan?.originalDays?.[dayIdx]) {
+      const orig = plan.originalDays[dayIdx];
+      const tot = { p: 0, c: 0, f: 0 };
+      for (const sk of Object.keys(orig.meals || {})) {
+        for (const it of orig.meals[sk] || []) {
+          if (!it || it.removed || isRemovedPlaceholder(it)) continue;
+          const s = scaledFood(it);
+          tot.p += s.protein_g;
+          tot.c += s.carbs_g;
+          tot.f += s.fat_g;
+        }
+      }
+      const t = day.targets;
+      // only a SHORTFALL — if the generator overshot, asking for more would
+      // make the day worse
+      const short = {
+        p: Math.max(0, Math.round((num(t.protein_g) - tot.p) * 10) / 10),
+        c: Math.max(0, Math.round((num(t.carbs_g) - tot.c) * 10) / 10),
+        f: Math.max(0, Math.round((num(t.fat_g) - tot.f) * 10) / 10),
+      };
+      if (short.p || short.c || short.f) {
+        target = {
+          ...target,
+          p: target.p + short.p,
+          c: target.c + short.c,
+          f: target.f + short.f,
+          kcal: target.kcal + short.p * 4 + short.c * 4 + short.f * 9,
+          shortfall: short,
+        };
+      }
+    }
     // Rows start empty — the dialog adds dishes from the FitChef bank.
-    setMealBuilder({ forFoodId: foodId, replacingName, target, targetKind, name: "", rows: [], method: "", tip: "" });
+    // `named` false → the name box writes itself from what gets added.
+    setMealBuilder({ forFoodId: foodId, replacingName, target, targetKind, name: "", named: false, rows: [], method: "", tip: "" });
   }
 
   function mealBuilderTotals() {
@@ -2607,6 +2925,7 @@ const ingredients = rows.flatMap((r) =>
     }
 
     // Empty slot (no food to replace) → add; otherwise replace the chosen food.
+    pushUndo(`the custom meal ${custom.name || "save"}`);
     if (mealBuilder.forFoodId == null) addFood(dayIdx, slot, custom);
     else updateFood(dayIdx, slot, mealBuilder.forFoodId, () => custom);
     setMealBuilder(null);
@@ -2679,6 +2998,7 @@ const ingredients = rows.flatMap((r) =>
       }
 
       setDirty(false);
+      setUndoStack([]);
       setSavedEditsKey(`${profileId}|${weekStart}|${weekEnd}`);
       flash(`Saved ${done} change${done === 1 ? "" : "s"}`);
       onSave?.(plan, lastResponse);
@@ -2699,6 +3019,7 @@ const ingredients = rows.flatMap((r) =>
     if (!original) return;
     setPlan(structuredClone(original));
     setDirty(false);
+    setUndoStack([]);
     flash("Reverted to original plan");
     onUndo?.();
   }
@@ -3122,8 +3443,15 @@ const ingredients = rows.flatMap((r) =>
               <p className="text-[12px] xl:text-[13px] font-medium text-[#252525] flex-1">
                 {saving ? "Saving your changes…" : "You have unsaved changes to this plan."}
               </p>
-              <button onClick={undo} disabled={saving} className={UI.btnSecondary}>
-                Undo
+              {/* One press takes back the LAST action; with nothing recorded
+                  it falls back to reverting every unsaved change. */}
+              <button
+                onClick={undoStack.length ? undoLast : undo}
+                disabled={saving}
+                title={undoStack.length ? `Undo ${undoStack[undoStack.length - 1].label}` : "Revert every unsaved change"}
+                className={UI.btnSecondary}
+              >
+                {undoStack.length ? `Undo (${undoStack.length})` : "Undo"}
               </button>
               <button onClick={save} disabled={saving} className={cn(UI.btnPrimary, "px-5")}>
                 {saving ? "Saving…" : "Save"}
@@ -4588,12 +4916,19 @@ function macroShares(p, c, f) {
 function MakeMealDialog({ state, totals, target, slot, defaultDiet = "", zip, onChange, onClose, onSave, saving = false }) {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState([]);
-  const [meta, setMeta] = useState({ count: 0, bank: 0, inSlot: 0, page: 0, pages: 0 });
+  const [meta, setMeta] = useState({ count: 0, bank: 0, inSlot: 0, page: 0, pages: 0, corrected: null });
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(null);
   const [manual, setManual] = useState(null); // null | { ...EMPTY_MANUAL }
   const abortRef = useRef(null);
   const inputRef = useRef(null);
+  // Words of every dish seen so far (names + contains), for typo correction.
+  const vocabRef = useRef(new Set());
+  const addVocab = (text) => {
+    for (const w of String(text || "").toLowerCase().split(/[^a-z0-9]+/)) {
+      if (w.length > 2) vocabRef.current.add(w);
+    }
+  };
 
   const trimmed = query.trim();
   // 1-char queries browse the full bank instead of flashing an empty list.
@@ -4629,14 +4964,46 @@ const totalPrice = useMemo(() => {
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
-      const results = Array.isArray(data?.results) ? data.results : [];
+      let payload = data;
+      let results = Array.isArray(data?.results) ? data.results : [];
+      // A typo returns nothing, which reads as "we don't have it" rather
+      // than "you slipped". The server may correct it itself; otherwise try
+      // the vocabulary of dishes already seen ("chiken" → "chicken") and
+      // search again with the fixed words — saying so, never silently.
+      let corrected =
+        payload?.corrected && typeof payload.corrected === "object" && Object.keys(payload.corrected).length
+          ? payload.corrected
+          : null;
+      if (!corrected && !results.length && effectiveQuery && !append) {
+        const fixed = correctQueryWords(effectiveQuery, vocabRef.current);
+        if (fixed) {
+          const retry = await searchFitChefFoodsService(fixed, {
+            slot: fitchefSlot,
+            diet: defaultDiet,
+            page,
+            signal: controller.signal,
+          });
+          if (controller.signal.aborted) return;
+          const retryResults = Array.isArray(retry?.results) ? retry.results : [];
+          if (retryResults.length) {
+            payload = retry;
+            results = retryResults;
+            corrected = { [effectiveQuery]: fixed };
+          }
+        }
+      }
+      results.forEach((r) => {
+        addVocab(r?.name);
+        (Array.isArray(r?.contains) ? r.contains : []).forEach((c) => addVocab(c?.name));
+      });
       setHits((cur) => (append ? [...cur, ...results] : results));
       setMeta({
-        count: num(data?.count),
-        bank: num(data?.bank_distinct) || num(data?.bank) || num(data?.count),
-        inSlot: num(data?.in_slot),
-        page: num(data?.page),
-        pages: num(data?.pages),
+        count: num(payload?.count),
+        bank: num(payload?.bank_distinct) || num(payload?.bank) || num(payload?.count),
+        inSlot: num(payload?.in_slot),
+        page: num(payload?.page),
+        pages: num(payload?.pages),
+        corrected,
       });
     } catch (err) {
       if (err?.name === "AbortError" || controller.signal.aborted) return;
@@ -4709,8 +5076,30 @@ const totalPrice = useMemo(() => {
     [showSuggestions, canCloseGap, onTarget, state.rows, fitted, target],
   );
   function addSuggestion(s) {
+    if (s.pair) {
+      // both at once — two addRow calls would lose the first to stale state
+      onChange({
+        ...state,
+        rows: [
+          ...state.rows,
+          ...s.items.map((it) => ({ ...it.row, qty: it.qty, key: rowKey(it.row.fitchefKey || it.row.name) })),
+        ],
+      });
+      setManual(null);
+      return;
+    }
     addRow({ ...s.row, qty: s.qty });
   }
+
+  // The name writes itself from what has been added, the way a person would
+  // say it. A trainer who types their own keeps it — the field stops
+  // auto-filling the moment it is edited, and emptying it hands naming back.
+  useEffect(() => {
+    if (state.named) return;
+    const auto = autoMealName(state.rows, slot);
+    if (auto !== state.name) onChange({ ...state, name: auto });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.rows, state.named]);
 
   function addManual() {
     if (!manual?.food_name?.trim()) return;
@@ -4767,7 +5156,7 @@ const totalPrice = useMemo(() => {
       <div className="flex-none px-5 pt-4">
         <input
           value={state.name}
-          onChange={(e) => onChange({ ...state, name: e.target.value })}
+          onChange={(e) => onChange({ ...state, name: e.target.value, named: e.target.value.trim().length > 0 })}
           placeholder="Named from what you add — or type your own"
           className={UI.input}
         />
@@ -4776,7 +5165,7 @@ const totalPrice = useMemo(() => {
       {/* ------------------------------------------------ target / build chart */}
       <div className="flex-none border-b border-[#E1E6ED] px-5 pb-3 pt-4">
         <div className="flex items-center gap-5 rounded-[15px] bg-[#F5F7FA] px-4 py-4">
-          <BuilderDonut p={shown.p} c={shown.c} f={shown.f} kcal={chartKcal} />
+          <BuilderDonut p={shown.p} c={shown.c} f={shown.f} kcal={chartKcal} target={target} showingTarget={!hasRows && Boolean(target)} />
           <div className="min-w-0 flex-1">
           <div className="grid grid-cols-3 gap-4">
             {columns.map((col) => {
@@ -4833,23 +5222,52 @@ const totalPrice = useMemo(() => {
                     // Capped: the body no longer scrolls, so this list must
                     // never squeeze the dish bank below it out of view.
                     <div className="mt-2 max-h-[240px] space-y-2 overflow-y-auto pr-1 scroll-thin">
-                      {suggestions.map((s) => (
-                        <div key={s.row.key} className="flex items-center gap-3 rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2.5">
-                          <ScoreRing score={s.score} />
-                          <div className="min-w-0 flex-1 flex flex-col gap-1">
-                            <p className={cn("truncate", UI.foodName)}>{s.row.name}</p>
-                            <p className={cn("text-[#738298] font-normal", UI.small)}>
-                              {s.portionText} · {Math.round(s.kcal)} kcal ·{" "}
-                              <span className="font-semibold" style={{ color: MACRO_COLORS.protein }}>+{fmt1(s.p)}P</span>{" "}
-                              <span className="font-semibold" style={{ color: MACRO_COLORS.fats }}>+{fmt1(s.f)}F</span>{" "}
-                              <span className="font-semibold" style={{ color: MACRO_COLORS.carbs }}>+{fmt1(s.c)}C</span>
-                            </p>
+                      {suggestions.map((s) =>
+                        s.pair ? (
+                          // A PAIR IS ONE CARD. Two foods, one decision, one
+                          // Add — picking "these two together" should not be
+                          // two clicks and a hope the portions still fit.
+                          <div
+                            key={`pair-${s.items[0].row.key}-${s.items[1].row.key}`}
+                            className="flex items-center gap-3 rounded-[10px] border border-[#BBD8FD] bg-[#F6FAFF] px-3 py-2.5"
+                          >
+                            <ScoreRing score={s.score} />
+                            <div className="min-w-0 flex-1 flex flex-col gap-1">
+                              <p className="text-[#308BF9] text-[10px] font-bold uppercase tracking-wide">Two together</p>
+                              {s.items.map((it) => (
+                                <p key={it.row.key} className={cn("truncate", UI.foodName)}>
+                                  <span className="font-normal text-[#738298]">{it.portionText}</span> {it.row.name}
+                                </p>
+                              ))}
+                              <p className={cn("text-[#738298] font-normal", UI.small)}>
+                                {Math.round(s.kcal)} kcal ·{" "}
+                                <span className="font-semibold" style={{ color: MACRO_COLORS.protein }}>+{fmt1(s.p)}P</span>{" "}
+                                <span className="font-semibold" style={{ color: MACRO_COLORS.fats }}>+{fmt1(s.f)}F</span>{" "}
+                                <span className="font-semibold" style={{ color: MACRO_COLORS.carbs }}>+{fmt1(s.c)}C</span>
+                              </p>
+                            </div>
+                            <button type="button" onClick={() => addSuggestion(s)} className={cn("shrink-0", UI.btnPrimary)}>
+                              Add both
+                            </button>
                           </div>
-                          <button type="button" onClick={() => addSuggestion(s)} className={cn("shrink-0", UI.btnPrimary)}>
-                            Add
-                          </button>
-                        </div>
-                      ))}
+                        ) : (
+                          <div key={s.row.key} className="flex items-center gap-3 rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2.5">
+                            <ScoreRing score={s.score} />
+                            <div className="min-w-0 flex-1 flex flex-col gap-1">
+                              <p className={cn("truncate", UI.foodName)}>{s.row.name}</p>
+                              <p className={cn("text-[#738298] font-normal", UI.small)}>
+                                {s.portionText} · {Math.round(s.kcal)} kcal ·{" "}
+                                <span className="font-semibold" style={{ color: MACRO_COLORS.protein }}>+{fmt1(s.p)}P</span>{" "}
+                                <span className="font-semibold" style={{ color: MACRO_COLORS.fats }}>+{fmt1(s.f)}F</span>{" "}
+                                <span className="font-semibold" style={{ color: MACRO_COLORS.carbs }}>+{fmt1(s.c)}C</span>
+                              </p>
+                            </div>
+                            <button type="button" onClick={() => addSuggestion(s)} className={cn("shrink-0", UI.btnPrimary)}>
+                              Add
+                            </button>
+                          </div>
+                        ),
+                      )}
                     </div>
                   )}
                 </div>
@@ -4893,6 +5311,17 @@ const totalPrice = useMemo(() => {
               </>
             );
           })()}
+          {target?.shortfall && (
+            <>
+              {" "}
+              Includes the day's shortfall of{" "}
+              {["p", "c", "f"]
+                .filter((k) => target.shortfall[k])
+                .map((k) => `${fmt1(target.shortfall[k])}g ${{ p: "protein", c: "carbs", f: "fat" }[k]}`)
+                .join(", ")}
+              .
+            </>
+          )}
         </p>
       </div>
 
@@ -4936,6 +5365,11 @@ const totalPrice = useMemo(() => {
                       title={`${Math.round(r.kcal * r.qty)} kcal · P${Math.round(r.p * r.qty)} C${Math.round(r.c * r.qty)} F${Math.round(r.f * r.qty)}`}
                     >
                       {portionText}
+                      {/* 3× a normal serving is a plate nobody eats — say so
+                          while the trainer can still change it. */}
+                      {(r.qty > 2 || r.qty < 0.5) && (
+                        <span className="font-semibold text-[#F4A261]"> · {fmtQty(r.qty)}× the usual serving</span>
+                      )}
                     </p>
                     {contains.length > 0 && (
                       <p className={cn("truncate text-[#A1A1A1] font-semibold", UI.small)}>
@@ -5039,6 +5473,12 @@ const totalPrice = useMemo(() => {
       </div>
 
       {/* ------------------------------------------------ dish bank */}
+      {meta.corrected && (
+        <div className={cn("flex-none border-t border-[#F6DFC8] bg-[#FDF6EC] px-5 py-2 text-[#B77234]", UI.small)}>
+          Showing <b className="font-semibold">{Object.values(meta.corrected).join(" ")}</b> · you typed{" "}
+          <span className="text-[#D0A175]">{Object.keys(meta.corrected).join(" ")}</span>
+        </div>
+      )}
       <div className={cn("flex-none border-y border-[#E1E6ED] bg-[#F5F7FA] px-5 py-2", UI.sectionLabel)}>
         {meta.count > 0
           ? `${meta.count} of ${meta.bank || meta.count} foods${meta.inSlot > 0 ? ` · ${meta.inSlot} for ${slotLabel}, rest below` : ""}`
@@ -5139,35 +5579,68 @@ function ScoreRing({ score }) {
   );
 }
 
-/** Donut with the calories in the middle — same segment math as MacrosPanel, Protein → Fats → Carbs. */
-function BuilderDonut({ p, c, f, kcal }) {
-  const kcalP = num(p) * 4;
-  const kcalC = num(c) * 4;
-  const kcalF = num(f) * 9;
-  const total = kcalP + kcalC + kcalF || 1;
-  const pct = (v) => (v / total) * 100;
+/**
+ * Donut with the calories in the middle — Protein → Fats → Carbs, same order
+ * as MacrosPanel. With a `target`, TWO RINGS, one on top of the other: the
+ * pale one is the TARGET, each macro owning a slice of the circle sized by
+ * its share of the meal being replaced; the solid one is what is actually
+ * built, drawn from the same starting point. A macro that is short leaves
+ * its pale slice showing, and one that is over runs past its slice into the
+ * next macro's — "how am I doing" at a glance.
+ */
+function BuilderDonut({ p, c, f, kcal, target = null, showingTarget = false }) {
   const R = 34;
   const CIRC = 2 * Math.PI * R;
   const GAP = 4;
-  const arcs = [
-    { pct: pct(kcalP), color: MACRO_COLORS.protein },
-    { pct: pct(kcalF), color: MACRO_COLORS.fats },
-    { pct: pct(kcalC), color: MACRO_COLORS.carbs },
+  const macros = [
+    { haveK: num(p) * 4, wantK: num(target?.p) * 4, color: MACRO_COLORS.protein },
+    { haveK: num(f) * 9, wantK: num(target?.f) * 9, color: MACRO_COLORS.fats },
+    { haveK: num(c) * 4, wantK: num(target?.c) * 4, color: MACRO_COLORS.carbs },
   ];
-  let offset = 0;
-  const segs = arcs.map((a, i) => {
-    const len = Math.max(0, (a.pct / 100) * CIRC - (a.pct > 0 ? GAP : 0));
-    const seg = { ...a, key: i, dash: `${len} ${CIRC - len}`, dashOffset: -offset };
-    offset += (a.pct / 100) * CIRC;
-    return seg;
+  // the slices, from the target; with no target, from the meal itself
+  const basis = macros.map((m) => (target ? m.wantK : m.haveK));
+  const basisTotal = basis.reduce((s, x) => s + x, 0) || 1;
+  let cursor = 0;
+  const rings = macros.map((m, i) => {
+    const slice = (basis[i] / basisTotal) * CIRC;
+    const ratio = !target || showingTarget ? 1 : m.wantK > 0 ? m.haveK / m.wantK : 0;
+    const filled = Math.max(0, slice * ratio);
+    // the solid arc may run past its own slice; cap it at a full circle
+    const solid = Math.max(0, Math.min(filled - (filled > 0 ? GAP : 0), CIRC - GAP));
+    const trackLen = Math.max(0, slice - (slice > 0 ? GAP : 0));
+    const ring = {
+      key: i,
+      color: m.color,
+      trackDash: `${trackLen} ${CIRC - trackLen}`,
+      solidDash: `${solid} ${CIRC - solid}`,
+      dashOffset: -cursor,
+    };
+    cursor += slice;
+    return ring;
   });
 
   return (
     <div className="relative h-[100px] w-[100px] shrink-0">
       <svg viewBox="0 0 84 84" className="h-full w-full -rotate-90">
         <circle cx="42" cy="42" r={R} fill="transparent" stroke="#E1E6ED" strokeWidth="8" />
-        {segs.map((s) => (
-          <circle key={s.key} cx="42" cy="42" r={R} fill="transparent" stroke={s.color} strokeWidth="8" strokeDasharray={s.dash} strokeDashoffset={s.dashOffset} />
+        {/* pale first, colour over it */}
+        {target &&
+          rings.map((s) => (
+            <circle
+              key={`t-${s.key}`}
+              cx="42"
+              cy="42"
+              r={R}
+              fill="transparent"
+              stroke={s.color}
+              strokeOpacity="0.22"
+              strokeWidth="8"
+              strokeDasharray={s.trackDash}
+              strokeDashoffset={s.dashOffset}
+            />
+          ))}
+        {rings.map((s) => (
+          <circle key={s.key} cx="42" cy="42" r={R} fill="transparent" stroke={s.color} strokeWidth="8" strokeDasharray={s.solidDash} strokeDashoffset={s.dashOffset} />
         ))}
       </svg>
       <div className="absolute inset-0 flex flex-col gap-[2px] items-center justify-center leading-none pointer-events-none">
