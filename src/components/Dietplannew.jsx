@@ -1628,16 +1628,21 @@ export function normalizeWeeklyPlan(response) {
   // added, swapped, deleted or re-portioned and then saved. "Reset week" copies
   // the snapshot back over food_json, so the flag clears on the reload after it.
   const originalJson = data?.original_food_json;
-  const differsFromOriginal =
+  const originalDays =
     originalJson && typeof originalJson === "object" && Array.isArray(originalJson.days)
-      ? planSignature(days) !== planSignature(buildDays(originalJson))
-      : false;
+      ? buildDays(originalJson)
+      : null;
+  const differsFromOriginal = originalDays ? planSignature(days) !== planSignature(originalDays) : false;
   // trainer-update-weekly-food-json-newtest stamps food_json._trainer_edited_at
   // on every save; reset-weekly-food-json-newtest restores the unstamped
   // snapshot. Covers rows that have no original_food_json to compare against.
   const edited = differsFromOriginal || !!foodJson?._trainer_edited_at;
   return {
     days,
+    // The generator's untouched snapshot, in the same shape as `days`. Lets
+    // "Make my meal" on a deleted (zeroed) slot still target the dish the
+    // slot originally held, even after a save + reload.
+    originalDays,
     shopping: normalizeShopping(foodJson.shopping || data?.shopping),
     // meta: {
     //   id: data?.id ?? null,
@@ -2285,8 +2290,14 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
     // Deleting a dish keeps the row as an empty placeholder (Save sends
     // "update"), so the slot is still there after reload. The placeholder
     // itself cannot be deleted (its Delete button is disabled).
-    updateFood(t.dayIdx, t.slot, t.foodId, (fd) => ({
+    updateFood(t.dayIdx, t.slot, t.foodId, (fd) => {
+      const s = scaledFood(fd);
+      return {
       ...fd,
+      // "Make my meal" on the emptied slot still targets the deleted dish.
+      // Local-only: lost on save/reload, where the builder falls back to the
+      // day's remaining gap.
+      replacedTarget: { name: fd.name, kcal: s.kcal, p: s.protein_g, c: s.carbs_g, f: s.fat_g },
       name: REMOVED_PLACEHOLDER_NAME,
       kcal_base: 0,
       protein_g: 0,
@@ -2306,7 +2317,8 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
       recipeId: null,
       variantId: null,
       hash: null,
-    }));
+      };
+    });
     flash(`Removed ${t.name}`);
   }
 
@@ -2378,13 +2390,44 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
     // The meal being replaced (at its current servings) is the target the
     // builder fits portions to and draws in the chart until foods are added.
     const current = foodId == null ? null : items.find((f) => f.id === foodId) || null;
+    // A deleted slot's placeholder has zero macros of its own — target the
+    // dish it used to hold (kept on the placeholder by performDelete), or the
+    // day's gap when that is gone (placeholder loaded from a saved plan).
+    const removedHere = current && (current.removed || isRemovedPlaceholder(current));
     let target = null;
     let targetKind = null; // "replace" | "gap"
-    if (current) {
+    // A placeholder with no remembered dish reads as adding, not as
+    // "replacing (empty — removed)".
+    let replacingName = current && !removedHere ? current.name : "";
+    if (current && !removedHere) {
       const s = scaledFood(current);
       target = { kcal: s.kcal, p: s.protein_g, c: s.carbs_g, f: s.fat_g };
       targetKind = "replace";
-    } else if (day?.targets && (day.targets.kcal || day.targets.protein_g)) {
+    } else if (removedHere) {
+      // Deleted this session: the macros were kept on the placeholder.
+      // Deleted, saved and reloaded: read the dish this slot originally
+      // held from the generator's untouched snapshot.
+      let name = null;
+      let macros = null;
+      if (current.replacedTarget) {
+        ({ name, ...macros } = current.replacedTarget);
+      } else {
+        const before = Number.isInteger(current.origIndex)
+          ? plan?.originalDays?.[dayIdx]?.meals?.[slot]?.[current.origIndex]
+          : null;
+        if (before && !before.removed && !isRemovedPlaceholder(before)) {
+          const s = scaledFood(before);
+          name = before.name;
+          macros = { kcal: s.kcal, p: s.protein_g, c: s.carbs_g, f: s.fat_g };
+        }
+      }
+      if (macros) {
+        target = macros;
+        targetKind = "replace";
+        replacingName = name || replacingName;
+      }
+    }
+    if (!target && day?.targets && (day.targets.kcal || day.targets.protein_g)) {
       // Adding a meal: the target is what the day still needs to reach its
       // macro targets, so "Close the gap for me" has a gap to close.
       const t = day.targets;
@@ -2399,7 +2442,7 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
       if (!(target.kcal > 0) && !(target.p > 0)) target = null; // day already met
     }
     // Rows start empty — the dialog adds dishes from the FitChef bank.
-    setMealBuilder({ forFoodId: foodId, replacingName: current?.name || "", target, targetKind, name: "", rows: [], method: "", tip: "" });
+    setMealBuilder({ forFoodId: foodId, replacingName, target, targetKind, name: "", rows: [], method: "", tip: "" });
   }
 
   function mealBuilderTotals() {
@@ -4714,11 +4757,12 @@ const totalPrice = useMemo(() => {
       widthClass="max-w-[780px]"
       tall
     >
-      {/* Everything above the Save button scrolls as one body, so an open
-          suggestions panel or a long meal never pushes the add-food box, the
-          dish bank or the Save button out of the modal. The dish bank's
-          infinite scroll listens on this body. */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scroll-hide" onScroll={onListScroll}>
+      {/* The name, chart, added foods and search box are fixed; only the
+          dish bank below them scrolls (it owns the scrollbar and the
+          infinite scroll). The suggestions and added-foods lists cap and
+          scroll themselves, so they can never push the dish bank or the
+          Save button out of the modal. */}
+      <div className="flex min-h-0 flex-1 flex-col">
       {/* ------------------------------------------------ name */}
       <div className="flex-none px-5 pt-4">
         <input
@@ -4786,7 +4830,9 @@ const totalPrice = useMemo(() => {
                   {suggestions.length === 0 ? (
                     <p className={cn("mt-2 text-[#738298]", UI.body)}>Nothing in the pool closes this gap on its own.</p>
                   ) : (
-                    <div className="mt-2 max-h-[400px] space-y-2 overflow-y-auto pr-1 scroll-hide">
+                    // Capped: the body no longer scrolls, so this list must
+                    // never squeeze the dish bank below it out of view.
+                    <div className="mt-2 max-h-[240px] space-y-2 overflow-y-auto pr-1 scroll-thin">
                       {suggestions.map((s) => (
                         <div key={s.row.key} className="flex items-center gap-3 rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2.5">
                           <ScoreRing score={s.score} />
@@ -4863,11 +4909,16 @@ const totalPrice = useMemo(() => {
             )}
           </div>
         )}
-        {!hasRows ? (
-          <p className={cn("text-[#A1A1A1]", UI.body)}>Nothing added yet.</p>
-        ) : (
-          <div className="max-h-44 space-y-1 overflow-y-auto pr-1 scroll-hide">
-            {state.rows.map((r) => {
+        {/* A FIXED height, scrolling from the first food, so building the
+            meal never shrinks the dish bank below — the added list is a
+            reminder of what is on the plate, not the thing being worked
+            in. overflow-y-scroll keeps the scrollbar gutter reserved so
+            nothing shifts when the thumb appears. */}
+        <div className="h-24 space-y-1 overflow-y-scroll pr-1 scroll-thin">
+          {!hasRows ? (
+            <p className={cn("text-[#A1A1A1]", UI.body)}>Nothing added yet.</p>
+          ) : (
+            state.rows.map((r) => {
               // "1 piece" → "2 pieces" as qty changes; non-bank rows show "1½ × 1 cup".
               const portionText = r.portionQty
                 ? `${fmtQty(r.portionQty * r.qty)} ${pluralUnit(r.portionUnit, r.portionQty * r.qty)}`.trim()
@@ -4903,9 +4954,9 @@ const totalPrice = useMemo(() => {
                   <StepBtn label="+" title="More" disabled={r.qty + 0.25 > 20} onClick={() => setQty(r.key, r.qty + 0.25)} />
                 </div>
               );
-            })}
-          </div>
-        )}
+            })
+          )}
+        </div>
         <p className={cn("mt-2.5 text-[#535359]", UI.body)}>
           This meal <b className="font-semibold text-[#252525]">{fmt1(totals.p)}</b>g protein · <b className="font-semibold text-[#252525]">{fmt1(totals.c)}</b>g carbs ·{" "}
           <b className="font-semibold text-[#252525]">{fmt1(totals.f)}</b>g fat · {Math.round(totals.kcal)} kcal
@@ -4995,7 +5046,7 @@ const totalPrice = useMemo(() => {
             ? "Loading the dish bank…"
             : "Dish bank"}
       </div>
-      <div className="flex-none">
+      <div className="min-h-0 flex-1 overflow-y-auto scroll-thin" onScroll={onListScroll}>
         {fitted.map((row, i) => (
           <div key={`${row.fitchefKey || row.name}-${i}`}>
             {i === firstOffSlot && i > 0 && (
