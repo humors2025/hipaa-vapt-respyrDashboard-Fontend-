@@ -131,21 +131,28 @@ export default function SuccessContent() {
   const [tries, setTries] = useState(0);
   const codeRef = useRef(null);
 
+  // The webhook makes several Stripe calls before the code exists, so keep
+  // polling for ~90s (2s apart); after that fall back to "check your email".
+  const MAX_TRIES = 45;
+  const gaveUp = tries >= MAX_TRIES && !!st?.pending;
+
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
+    let timer = null;
     (async () => {
       try {
         const r = await fetchOrderSessionStatusService({ sessionId });
         if (cancelled) return;
         setSt(r);
-        if (r.pending && tries < 8) setTimeout(() => setTries((t) => t + 1), 1500);
+        if (r.pending && tries < MAX_TRIES) timer = setTimeout(() => setTries((t) => t + 1), 2000);
       } catch {
         if (!cancelled) setSt({ paid: true, purchase_code: null, pending: false });
       }
     })();
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [sessionId, tries]);
 
@@ -234,7 +241,13 @@ export default function SuccessContent() {
                     {code}
                   </p>
                 ) : (
-                  <p className="mt-2 text-center text-[#1F4E8C] text-[14px]">{st?.pending || !st ? "Generating your code…" : "Your code is in your email."}</p>
+                  <p className="mt-2 text-center text-[#1F4E8C] text-[14px]">
+                    {gaveUp
+                      ? "This is taking longer than usual. Your code will be in your email shortly — or refresh this page in a minute."
+                      : st?.pending || !st
+                        ? "Generating your code…"
+                        : "Your code is in your email."}
+                  </p>
                 )}
               </div>
               <div className="border-t border-dashed border-[#308BF9]/30" aria-hidden="true" />
