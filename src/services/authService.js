@@ -505,6 +505,71 @@ export const updateDietPlanFoodService = async (payload) => {
   });
 };
 
+// add / update / delete one food inside weekly_food_json_suggestions_newtest
+// (trainer-update-weekly-food-json-newtest). Payload:
+//   { action, id, dietitian_id, profile_id, day_code, meal_type,
+//     food_index?, food?, week_start_date?, week_end_date? }
+// dietitian_id must equal the JWT's dietician_id, so it is filled from the
+// access token when the caller leaves it out.
+export const updateDietPlanFoodNewTestService = async (payload) => {
+  const body = {
+    ...payload,
+    dietitian_id: payload?.dietitian_id || getDietitianIdFromAccessToken(),
+  };
+  return apiFetcher(API_ENDPOINTS.PLAN.UPDATEDIETFOODNEWTEST, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+};
+
+// "Reset week" for DietPlanNew (reset-weekly-food-json-newtest). Puts the
+// weekly_food_json_suggestions_newtest row back to its originally generated
+// plan, discarding every trainer edit (added / swapped / custom-meal foods).
+// Payload:
+//   { id, dietitian_id, profile_id, week_start_date, week_end_date }
+//   id            — row id of weekly_food_json_suggestions_newtest (plan.meta.id)
+//   dietitian_id  — must equal the JWT's dietician_id, so it is filled from the
+//                   access token when the caller leaves it out
+// Resolves to the API reply as-is ({ status, message, data } envelope).
+export const resetWeeklyFoodJsonNewTestService = async (payload) => {
+  const body = {
+    id: Number(payload?.id),
+    dietitian_id: payload?.dietitian_id || getDietitianIdFromAccessToken(),
+    profile_id: payload?.profile_id,
+    week_start_date: payload?.week_start_date,
+    week_end_date: payload?.week_end_date,
+  };
+  return apiFetcher(API_ENDPOINTS.PLAN.RESETWEEKLYFOODJSONNEWTEST, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+};
+
+// "Approve week" for DietPlanNew (food_json_suggestion_approve_plan_newtest).
+// Sets status on the weekly_food_json_suggestions_newtest row: 1 = approved,
+// 0 = un-approved. Payload:
+//   { id, dietician_id, profile_id, status }
+//   id            — row id of weekly_food_json_suggestions_newtest (plan.meta.id)
+//   dietician_id  — API spelling; must equal the JWT's dietician_id, so it is
+//                   filled from the access token when the caller leaves it out
+// Resolves to the API reply as-is:
+//   { status: "success"|"error", code, message, data?: { previous_status, new_status, changed, … } }
+export const approveWeeklyFoodJsonNewTestService = async (payload) => {
+  const body = {
+    id: Number(payload?.id),
+    dietician_id: payload?.dietician_id || payload?.dietitian_id || getDietitianIdFromAccessToken(),
+    profile_id: payload?.profile_id,
+    status: payload?.status === undefined || payload?.status === null ? 1 : Number(payload.status),
+  };
+  return apiFetcher(API_ENDPOINTS.DIETANALYSIS.APPROVALPLANNEWTEST, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+};
+
 
 
 export const fetchDietPlanJsonService = async (login_id, profile_id, diet_plan_id) => {
@@ -756,6 +821,83 @@ export const fetchDietAnalysisPlan = async (
 };
 
 
+// TEMP (testing only): fixed payload for the *_newtest endpoint so the sample
+// week can be viewed regardless of which client / week is selected. Now null:
+// the real payload is built from the URL / access token / selected week below.
+// export const NEWTEST_FIXED_PAYLOAD = {
+//   dietitian_id: "RESPYRD01",
+//   profile_id: "profile101",
+//   week_start_date: "2026-09-06",
+//   week_end_date: "2026-09-12",
+// };
+export const NEWTEST_FIXED_PAYLOAD = null;
+
+// Recipe-level weekly plan for DietPlanNew (get_weekly_food_json_suggestions_weeks_newtest).
+// Payload:
+//   profile_id      — from the page URL (?profile_id=...), arg used as fallback
+//   dietitian_id    — `dietician_id` decoded from the access_token cookie,
+//                     arg used as fallback
+//   week_start_date — from get-weekly-tab-list-newtest (selected week)
+//   week_end_date   — from get-weekly-tab-list-newtest (selected week)
+// Super-admin partner_code override applied the same way as fetchDietAnalysisPlan.
+export const fetchDietAnalysisPlanNewTest = async (
+  profileId,
+  weekStartDate,
+  weekEndDate,
+  dietitianId = null
+) => {
+  const resolvedProfileId = getProfileIdFromUrl() ?? profileId ?? null;
+  const resolvedDietitianId = getDietitianIdFromAccessToken() || dietitianId || null;
+
+  const payload = {
+    dietitian_id: resolvedDietitianId,
+    profile_id: resolvedProfileId,
+    week_start_date: weekStartDate,
+    week_end_date: weekEndDate,
+  };
+
+  return apiFetcher(API_ENDPOINTS.DIETANALYSIS.DIETANALYSISPLANNEWTEST, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(withSuperAdminPartnerCode(payload)),
+  });
+};
+
+// Client food log for DietPlanNew's "Food log" popup — what the client
+// actually logged in the app (read-only, POST /dietitian/api/web/food-log).
+// Payload: { dietitian_id, profile_id, start_date, end_date }  (or { date })
+//   dietitian_id from the access token, profile_id from the URL — same
+//   token-bound identity as fetchDietAnalysisPlanNewTest above.
+// Response: { status, message, data: { profile_id, start_date, end_date, count,
+//   totals, days: [{ log_date, totals, slots: [{ slot, totals, entries }] }] } }
+//   Every day in the range and all four slots are present; deleted rows are
+//   never returned. Range is capped at 92 days server-side.
+export const fetchFoodLogService = async ({ profileId = null, startDate = null, endDate = null, date = null } = {}) => {
+  const resolvedProfileId = getProfileIdFromUrl() ?? profileId ?? null;
+  const resolvedDietitianId = getDietitianIdFromAccessToken() || null;
+
+  const payload = {
+    dietitian_id: resolvedDietitianId,
+    profile_id: resolvedProfileId,
+  };
+  if (date) {
+    payload.date = date;
+  } else {
+    payload.start_date = startDate;
+    payload.end_date = endDate;
+  }
+
+  return apiFetcher(API_ENDPOINTS.DIETANALYSIS.FOODLOG, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(withSuperAdminPartnerCode(payload)),
+  });
+};
+
 export const fetchClientWeeklyDates = async (profileId, dietitianId) => {
   try {
     const accessToken = Cookies.get("access_token");
@@ -789,6 +931,44 @@ export const fetchClientWeeklyDates = async (profileId, dietitianId) => {
       };
     }
     // Re-throw other errors
+    throw error;
+  }
+};
+
+// Week tabs for DietPlanNew (get-weekly-tab-list-newtest).
+// Payload: { profile_id, dietitian_id }
+// Response: { status, message, total_weeks, data: [{ week_label, week_start_date, week_end_date, ... }] }
+export const fetchClientWeeklyDatesNewTest = async (profileId, dietitianId) => {
+  try {
+    const accessToken = Cookies.get("access_token");
+    // profile_id from URL, dietitian_id from the access_token (JWT-bound identity
+    // the backend requires). No partner_code override — see fetchClientProfileDatesList.
+    const resolvedProfileId = profileId ?? getProfileIdFromUrl();
+    const resolvedDietitianId = getDietitianIdFromAccessToken();
+
+    const response = await apiFetcher(API_ENDPOINTS.CLIENTPROFILE.CLIENTWEEKLYDATESNEWTEST, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        profile_id: resolvedProfileId,
+        dietitian_id: resolvedDietitianId,
+      }),
+    });
+
+    return response;
+  } catch (error) {
+    // Same "no weekly data found" handling as fetchClientWeeklyDates
+    if (error.message?.includes("No weekly data found") ||
+        error.data?.message?.includes("No weekly data found")) {
+      return {
+        status: false,
+        message: error.message || "No weekly data found for last 3 months",
+        profile_id: profileId
+      };
+    }
     throw error;
   }
 };
@@ -1412,6 +1592,108 @@ export const searchFoodService = async (query, { limit = 6, dietType = "", count
   return res.json();
 };
 
+// FitChef dish bank search (internal /api/food/fitchef → respyr.in/fitchef-dashboard/api/foods).
+// Same raw-fetch reasoning as searchFoodService: same-origin route + abortable.
+//   slot: breakfast | lunch | snack | dinner   diet: veg | vegan | non_veg | ""
+// Resolves to { results: [...], count, page, pages, query, ... } (upstream shape).
+export const searchFitChefFoodsService = async (
+  query,
+  {
+    slot = "",
+    diet = "",
+    page = 0,
+    pageSize = 60,
+    signal,
+  } = {}
+) => {
+  const params = new URLSearchParams();
+
+  params.set("q", String(query || "").trim());
+
+  if (slot) {
+    params.set("slot", slot);
+  }
+
+  if (diet) {
+    params.set("diet", diet);
+  }
+
+  if (page !== undefined && page !== null) {
+    params.set("page", String(page));
+  }
+
+  if (pageSize) {
+    params.set("page_size", String(pageSize));
+  }
+
+  return apiFetcher(
+    `${API_ENDPOINTS.FOOD.FITCHEFSEARCH}?${params.toString()}`,
+    {
+      method: "GET",
+      signal,
+    }
+  );
+};
+
+// Prices a shopping list through FitChef (internal Next.js proxy, so no bearer
+// token). `days` is [{ day, meals: [{ title, slot, ingredients: [{ name, unit,
+// units, grams }] }] }]; the reply is the aisle list with Kroger shelf prices.
+export const priceShoppingListService = async (days, { signal, zip  } = {}) => {
+  const res = await fetch(API_ENDPOINTS.FOOD.FITCHEFSHOPPING, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ days, ...(zip ? { zip } : {}) }),
+    signal,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data || data.error) {
+    throw new Error(data?.error || `Shopping pricing failed (${res.status})`);
+  }
+  return data;
+};
+
+// Registers a "Make my meal" plate built from several dish-bank foods with
+// FitChef (internal Next.js proxy → respyr.in/fitchef-dashboard/api/custom_meal).
+// payload: { profile_id, record_id, day, meal_name, name, ingredients: [{ key, grams }] }
+//   day is 0-based; meal_name is breakfast | lunch | snacks | dinner. Same shape
+//   as saveCustomMealService below, just without the bearer token.
+// Resolves to the upstream reply as-is; throws on a non-2xx or { error } reply.
+export const createFitChefCustomMealService = async (payload, { signal } = {}) => {
+  const res = await fetch(API_ENDPOINTS.FOOD.FITCHEFCUSTOMMEAL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data || data.error) {
+    throw new Error(data?.error || `Custom meal failed (${res.status})`);
+  }
+  return data;
+};
+
+// Registers a "Make my meal" plate (several dish-bank foods on one slot) with
+// the Lambda backend (POST /dietitian/api/web/custom-meal) and gets back the
+// generated meal image. Goes through apiFetcher, so the bearer token is attached.
+// payload:
+//   { profile_id, record_id, day, meal_name, name, ingredients: [{ key, grams }] }
+//   record_id  — id of the weekly_food_json_suggestions_newtest row (plan.meta.id)
+//   day        — 0-based day index in the week
+//   meal_name  — breakfast | lunch | snacks | dinner
+//   ingredients — dish-bank keys ("usa_breakfast:741") with grams on the plate
+// Resolves to the API reply as-is; throws on a non-2xx / { status: false } reply.
+export const saveCustomMealService = async (payload, { signal } = {}) => {
+  const data = await apiFetcher(API_ENDPOINTS.FOOD.CUSTOMMEAL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal,
+  });
+  if (data?.status === false) {
+    throw new Error(data?.message || data?.error || "Custom meal failed");
+  }
+  return data;
+};
 
 
 export const fetchDownstreamUsersService = async (actorUserId) => {
@@ -1719,6 +2001,13 @@ export const createAgreementUploadUrlService = async (payload) => {
 };
 
 export const uploadAgreementPdfToS3 = async (uploadUrl, file) => {
+  // UAT ONLY: the backend returns upload_url = null when agreement storage is
+  // disabled (APP_ENV=uat + SKIP_AGREEMENT_STORAGE=true on the API). Nothing to
+  // upload in that case. Production always returns a real URL.
+  if (!uploadUrl) {
+    return true;
+  }
+
   const res = await fetch(uploadUrl, {
     method: "PUT",
     headers: {

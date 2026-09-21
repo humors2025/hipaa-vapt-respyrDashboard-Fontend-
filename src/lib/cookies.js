@@ -6,7 +6,12 @@ export const cookieManager = {
     const defaultOptions = {
       expires: 7, // 7 days
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict'
+      // 'lax', not 'strict': Stripe Connect onboarding returns the user via a
+      // cross-site top-level redirect to /payout-setup. With 'strict' the
+      // browser withholds access_token on that request, so the middleware
+      // sees no session and bounces the user to login mid-flow. 'lax' still
+      // keeps the cookie off cross-site POSTs, iframes and background requests.
+      sameSite: 'lax'
     };
     
     Cookies.set(key, value, { ...defaultOptions, ...options });

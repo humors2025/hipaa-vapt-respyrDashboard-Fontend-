@@ -101,7 +101,7 @@ function CardHeader() {
     <div className="px-7 pt-5 pb-[18px] border-b border-[#e1e6ed] flex items-center gap-3">
       <RespyrIcon />
       <div className="flex-1">
-        <div className="text-[15px] font-semibold text-[#252525] tracking-[-0.02em] leading-tight">Respyr</div>
+        <div className="text-[15px] font-semibold text-[#252525] tracking-[-0.02em] leading-tight">Rysflo</div>
         <div className="text-[10px] text-[#738298] tracking-[-0.02em] mt-px">Web Portal Invitation</div>
       </div>
     </div>
@@ -469,7 +469,7 @@ payload.agreement_pdf_name =
               </svg>
             </div>
           </div>
-          <div className="text-[20px] font-semibold text-[#252525] tracking-[-0.02em] mb-1">Welcome to Respyr!</div>
+          <div className="text-[20px] font-semibold text-[#252525] tracking-[-0.02em] mb-1">Welcome to Rysflo!</div>
           <div className="text-[12px] text-[#738298] tracking-[-0.02em]">
             {roleLabel ? (
               <>

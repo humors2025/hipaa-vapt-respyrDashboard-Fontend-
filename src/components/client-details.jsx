@@ -14,7 +14,7 @@ import WeightTrackingTab from "./weight-tracking-tab";
 import TrainerDirection from "./training-direction/TrainerDirection";
 import RightSidebar from "./rightSidebar";
 import PDFLoadingModal from "./PDFLoadingModal";
-import { exportDietAnalysisPDF } from "../lib/pdfExport";
+import { exportDietAnalysisPDF, exportDietPlanPDF } from "../lib/pdfExport";
 import {
   getClientIndividualProfile,
   selectClientIndividualProfileData,
@@ -22,6 +22,7 @@ import {
 import {
   getDietAnalysisPlan,
   selectDietAnalysisData,
+  selectDietAnalysisNewTestPlan,
 } from "../store/dietAnalysisSlice";
 import {
   getMacroSummary,
@@ -30,7 +31,8 @@ import {
 import { getTrainerDirection } from "../store/trainerDirectionSlice";
 import {
   fetchClientProfileDatesList,
-  fetchClientWeeklyDates,
+  // fetchClientWeeklyDates, // old: get-weekly-tab-list
+  fetchClientWeeklyDatesNewTest, // new: get-weekly-tab-list-newtest
 } from "../services/authService";
 
 import { cookieManager } from "../lib/cookies";
@@ -61,6 +63,10 @@ export default function ClientDetails() {
   const individualProfileData = useSelector(selectClientIndividualProfileData);
 
   const dietAnalysisData = useSelector(selectDietAnalysisData);
+  // Recipe-level plan DietPlanNew currently has on screen (mirrored into the
+  // store by DietPlanNew itself). This is what the Weekly Diet Analysis tab
+  // actually renders, so it is what the export button should print.
+  const newTestPlan = useSelector(selectDietAnalysisNewTestPlan);
 
   const [profileDates, setProfileDates] = useState([]);
   const [datesLoading, setDatesLoading] = useState(false);
@@ -70,6 +76,7 @@ export default function ClientDetails() {
   const [weeklyDatesLoading, setWeeklyDatesLoading] = useState(false);
   const [weeklyDatesError, setWeeklyDatesError] = useState(null);
   const [isDietAnalysisAvailable, setIsDietAnalysisAvailable] = useState(true);
+  const dietTabDisabled = !isDietAnalysisAvailable;
   const [isLoadingWeeklyData, setIsLoadingWeeklyData] = useState(true);
   const [isPDFExporting, setIsPDFExporting] = useState(false);
 
@@ -154,16 +161,45 @@ const transformDatesToDisplay = () => {
     return "Strong";
   };
 
+  // "2026-09-06" -> "06 Sep, 2026" (built from week_start_date / week_end_date
+  // instead of relying on the API's week_range string)
+  const WEEK_MONTHS = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+  const formatWeekDate = (dateString) => {
+    if (!dateString) return "";
+    const [y, m, d] = String(dateString).split("-").map(Number);
+    if (!y || !m || !d || !WEEK_MONTHS[m - 1]) return dateString;
+    return `${String(d).padStart(2, "0")} ${WEEK_MONTHS[m - 1]}, ${y}`;
+  };
+
+  // Old mapping (get-weekly-tab-list):
+  // const transformWeeklyDatesToDisplay = () => {
+  //   if (!weeklyDates || weeklyDates.length === 0) return [];
+  //
+  //   return weeklyDates.map((weekObj) => ({
+  //     week: weekObj.week_label,
+  //     range: weekObj.week_range,
+  //     weekStartDate: weekObj.week_start_date,
+  //     weekEndDate: weekObj.week_end_date,
+  //     monthLabel: weekObj.month_label,
+  //     weekNoInMonth: weekObj.week_no_in_month,
+  //   }));
+  // };
+
+  // New mapping (get-weekly-tab-list-newtest): only week_label,
+  // week_start_date and week_end_date are bound from the response.
   const transformWeeklyDatesToDisplay = () => {
     if (!weeklyDates || weeklyDates.length === 0) return [];
 
     return weeklyDates.map((weekObj) => ({
       week: weekObj.week_label,
-      range: weekObj.week_range,
       weekStartDate: weekObj.week_start_date,
       weekEndDate: weekObj.week_end_date,
-      monthLabel: weekObj.month_label,
-      weekNoInMonth: weekObj.week_no_in_month,
+      range: `${formatWeekDate(weekObj.week_start_date)} - ${formatWeekDate(
+        weekObj.week_end_date
+      )}`,
     }));
   };
 
@@ -186,8 +222,13 @@ const transformDatesToDisplay = () => {
       return;
     }
 
-    if (!dietAnalysisData?.data?.food_json) {
-      toast.error("Diet analysis data is not available yet.");
+    const hasNewPlan = Array.isArray(newTestPlan?.days) && newTestPlan.days.length > 0;
+    // Legacy fallback: the old get-weekly-food-json shape, only relevant while
+    // the diet tab still rendered DietPlan / MacrosUpdate.
+    const hasLegacyData = !!dietAnalysisData?.data?.food_json;
+
+    if (!hasNewPlan && !hasLegacyData) {
+      toast.error("Diet plan for this week is still loading or not available yet.");
       return;
     }
 
@@ -196,7 +237,10 @@ const transformDatesToDisplay = () => {
       const clientName = profileDetails?.profile_name || "client";
       const selectedWeek = getSelectedWeekInfo();
 
-      await exportDietAnalysisPDF(clientName, selectedWeek, dietAnalysisData);
+      const ok = hasNewPlan
+        ? await exportDietPlanPDF(clientName, selectedWeek, newTestPlan)
+        : await exportDietAnalysisPDF(clientName, selectedWeek, dietAnalysisData);
+      if (!ok) toast.error("Failed to export PDF. Please try again.");
     } catch (error) {
       console.error("Export failed:", error);
       toast.error("Failed to export PDF. Please try again.");
@@ -259,7 +303,11 @@ const transformDatesToDisplay = () => {
       setIsDietAnalysisAvailable(true);
 
       try {
-        const response = await fetchClientWeeklyDates(profileId, dietitianId);
+        // Old API (get-weekly-tab-list):
+        // const response = await fetchClientWeeklyDates(profileId, dietitianId);
+
+        // New API (get-weekly-tab-list-newtest), payload { profile_id, dietitian_id }
+        const response = await fetchClientWeeklyDatesNewTest(profileId, dietitianId);
 
         if (
           response &&
@@ -378,7 +426,7 @@ const transformDatesToDisplay = () => {
   };
 
   const handleTabChange = (tab) => {
-    if (tab === "diet" && !isDietAnalysisAvailable) {
+    if (tab === "diet" && dietTabDisabled) {
       return;
     }
     setActiveTab(tab);
@@ -686,20 +734,20 @@ const transformDatesToDisplay = () => {
 
               <div
                 onClick={() => handleTabChange("diet")}
-                className={`flex items-center gap-2.5 rounded-[6px] py-[11px] px-[31px] max-xl:px-4 transition-all duration-200 ${!isDietAnalysisAvailable
+                className={`flex items-center gap-2.5 rounded-[6px] py-[11px] px-[31px] max-xl:px-4 transition-all duration-200 ${dietTabDisabled
                   ? "opacity-50 cursor-not-allowed bg-[#F5F7FA]"
                   : activeTab === "diet"
                     ? "bg-[#252525] cursor-pointer hover:bg-[#3a3a3a]"
                     : "bg-[#F5F7FA] cursor-pointer hover:bg-[#e8eaed]"
                   }`}
                 title={
-                  !isDietAnalysisAvailable
+                  dietTabDisabled
                     ? "No diet analysis data available for this client"
                     : ""
                 }
               >
                 <p
-                  className={`text-[12px] font-semibold leading-[110%] tracking-[-0.24px] ${!isDietAnalysisAvailable
+                  className={`text-[12px] font-semibold leading-[110%] tracking-[-0.24px] ${dietTabDisabled
                     ? "text-[#A1A1A1]"
                     : activeTab === "diet"
                       ? "text-white"

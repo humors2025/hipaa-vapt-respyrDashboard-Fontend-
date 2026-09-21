@@ -2,6 +2,26 @@
 
 const isDev = process.env.NODE_ENV === "development";
 
+// ---------------------------------------------------------------------------
+// Per-environment hosts. The browser Content-Security-Policy and the image
+// host allowlist must name the API the app actually talks to, otherwise the
+// browser silently blocks every request. They are derived from the same
+// setting the API client uses (see src/config/apiConfig.js), so pointing a
+// deployment at another backend is a single env var:
+//   prod : NEXT_PUBLIC_API_BASE_URL unset            -> https://api.respyr.ai
+//   uat  : NEXT_PUBLIC_API_BASE_URL=https://web.uat.respyr.ai
+// NEXT_PUBLIC_AGREEMENTS_S3_ORIGIN overrides the agreements bucket origin the
+// same way (UAT uses its own bucket). Defaults keep prod behaviour unchanged.
+// ---------------------------------------------------------------------------
+const API_BASE_URL = (
+  process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.respyr.ai"
+).replace(new RegExp("/+$"), "");
+const API_HOST = new URL(API_BASE_URL).hostname;
+const AGREEMENTS_S3_ORIGIN = (
+  process.env.NEXT_PUBLIC_AGREEMENTS_S3_ORIGIN ||
+  "https://metabolism-dashboard-termsconditions-agreements.s3.us-west-2.amazonaws.com"
+).replace(new RegExp("/+$"), "");
+
 const contentSecurityPolicy = [
   "default-src 'self'",
 
@@ -9,14 +29,14 @@ const contentSecurityPolicy = [
 
   "style-src 'self' 'unsafe-inline'",
 
-  "img-src 'self' data: blob: https://api.respyr.ai https://humorstech.com",
+  `img-src 'self' data: blob: ${API_BASE_URL} https://respyr.in https://production-us.fitchef.cloud https://humorstech.com`,
 
   "font-src 'self' data:",
 
   // "connect-src 'self' https://api.respyr.ai https://respyr.in blob: data:",
 
 
-  "connect-src 'self' https://api.respyr.ai https://respyr.in https://metabolism-dashboard-termsconditions-agreements.s3.us-west-2.amazonaws.com blob: data:",
+  `connect-src 'self' ${API_BASE_URL} https://respyr.in ${AGREEMENTS_S3_ORIGIN} blob: data:`,
 
 
   "object-src 'none'",
@@ -39,7 +59,7 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "api.respyr.ai",
+        hostname: API_HOST,
       },
     ],
   },

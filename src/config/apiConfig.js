@@ -41,7 +41,12 @@ export const API_ENDPOINTS = {
     DIETPLAN: `/${API_VERSION}/dietitian/api/web/update_diet_plan_json`,
     DIETPLANJSON: `/${API_VERSION}/dietitian/api/web/fetch_diet_json`,
     DELETEDIETPLAN: `/${API_VERSION}/dietitian/api/web/delete_diet_plan`,
-    UPDATEDIETFOOD: `/${API_VERSION}/dietitian/api/web/trainer-update-weekly-food-json`
+    UPDATEDIETFOOD: `/${API_VERSION}/dietitian/api/web/trainer-update-weekly-food-json`,
+    // Same add/update/delete contract, but against weekly_food_json_suggestions_newtest (DietPlanNew)
+    UPDATEDIETFOODNEWTEST: `/${API_VERSION}/dietitian/api/web/trainer-update-weekly-food-json-newtest`,
+    // "Reset week" for DietPlanNew — puts the weekly_food_json_suggestions_newtest
+    // row back to its originally generated plan (drops every trainer edit).
+    RESETWEEKLYFOODJSONNEWTEST: `/${API_VERSION}/dietitian/api/web/reset-weekly-food-json-newtest`
   },
   CLIENTPROFILE: {
     CLIENTPROFILEDATA: `/${API_VERSION}/dietitian/api/web/get_client_data`,
@@ -50,6 +55,9 @@ export const API_ENDPOINTS = {
     CLIENTINDIVIDUALPROFILEMASKING: `/${API_VERSION}/dietitian/api/web/get-data-points-score-all-ranges-coach-masking`,
     CLIENTPROFILEDATESLIST: `/${API_VERSION}/dietitian/api/web/get-profile-details-dates-taken`,
     CLIENTWEEKLYDATES: `/${API_VERSION}/dietitian/api/web/get-weekly-tab-list`,
+    // Week tabs for DietPlanNew — same payload/response shape as get-weekly-tab-list,
+    // but backed by weekly_food_json_suggestions_newtest
+    CLIENTWEEKLYDATESNEWTEST: `/${API_VERSION}/dietitian/api/web/get-weekly-tab-list-newtest`,
     GETCLIENTPROFILEDETAILS: `/${API_VERSION}/dietitian/api/web/get_client_profile_details`,
     GETCLIENTPROFILEDETAILSMASKED: `/${API_VERSION}/dietitian/api/web/get_client_profile_details_masked`
 
@@ -77,7 +85,13 @@ export const API_ENDPOINTS = {
   },
   DIETANALYSIS: {
     DIETANALYSISPLAN: `/${API_VERSION}/dietitian/api/web/get_weekly_food_json_suggestions_weeks`,
-    APPROVALPLAN: `/${API_VERSION}/dietitian/api/web/food_json_suggestion_approve_plan`
+    // Recipe-level weekly plan (nutrition, ingredients, method, alternatives) used by DietPlanNew
+    DIETANALYSISPLANNEWTEST: `/${API_VERSION}/dietitian/api/web/get_weekly_food_json_suggestions_weeks_newtest`,
+    APPROVALPLAN: `/${API_VERSION}/dietitian/api/web/food_json_suggestion_approve_plan`,
+    // "Approve week" for DietPlanNew — flips status on a weekly_food_json_suggestions_newtest row
+    APPROVALPLANNEWTEST: `/${API_VERSION}/dietitian/api/web/food_json_suggestion_approve_plan_newtest`,
+    // Read-only client food log (what the client actually ate) for DietPlanNew's "Food log" popup
+    FOODLOG: `/${API_VERSION}/dietitian/api/web/food-log`
   },
   MACROSANALYSIS: {
     GETMACROSUMMARY: `/${API_VERSION}/dietitian/api/web/get_macro_summary_by_date`
@@ -136,9 +150,52 @@ export const API_ENDPOINTS = {
     LISTUSERSINTERNAL: `/${API_VERSION}/dietitian/api/web/list-users`
   },
 
+  // Gym referral commission programme (facilities, splits, Stripe, ledger).
+  COMMISSION: {
+    LISTTRAINERUSERS: `/${API_VERSION}/dietitian/api/web/list-admin-trainer-users-jwt`,
+    INVITEFACILITYADMIN: `/${API_VERSION}/dietitian/api/web/admin-invite-facility-admin`,
+    LISTFACILITIES: `/${API_VERSION}/dietitian/api/web/list-facilities`,
+    SETTRAINERSPLIT: `/${API_VERSION}/dietitian/api/web/set-trainer-commission-split`,
+    REMOVEUSER: `/${API_VERSION}/dietitian/api/web/remove-user`,
+    EARNINGSSUMMARY: `/${API_VERSION}/dietitian/api/web/earnings-summary`,
+    CONNECTSTATUS: `/${API_VERSION}/dietitian/api/web/stripe-connect-status`,
+    CONNECTONBOARDINGLINK: `/${API_VERSION}/dietitian/api/web/stripe-connect-onboarding-link`,
+    CONNECTDASHBOARDLINK: `/${API_VERSION}/dietitian/api/web/stripe-connect-dashboard-link`,
+    GETRATE: `/${API_VERSION}/dietitian/api/web/get-commission-rate`,
+    SETRATE: `/${API_VERSION}/dietitian/api/web/set-commission-rate`,
+    RUNPAYOUTS: `/${API_VERSION}/dietitian/api/web/run-payouts`,
+    RUNBREATHCREDITS: `/${API_VERSION}/dietitian/api/web/run-breath-credits`,
+    LISTPAYOUTS: `/${API_VERSION}/dietitian/api/web/list-payouts`,
+    OVERVIEW: `/${API_VERSION}/dietitian/api/web/commission-overview`,
+    CREATECHECKOUTSESSION: `/${API_VERSION}/dietitian/api/web/create-checkout-session`,
+    ORDERPAGECONTEXT: `/${API_VERSION}/dietitian/api/web/order-page-context`,
+    ORDERSESSIONSTATUS: `/${API_VERSION}/dietitian/api/web/order-session-status`,
+    REFERREDMEMBERS: `/${API_VERSION}/dietitian/api/web/referred-members`,
+    RESENDPURCHASECODE: `/${API_VERSION}/dietitian/api/web/resend-purchase-code`,
+    QRGENERATE: `/${API_VERSION}/dietitian/api/web/qr-generate`,
+    QRLINK: `/${API_VERSION}/dietitian/api/web/qr-link`,
+    QRLIST: `/${API_VERSION}/dietitian/api/web/qr-list`,
+    QRASSIGN: `/${API_VERSION}/dietitian/api/web/qr-assign`,
+    QRSETUP: `/${API_VERSION}/dietitian/api/web/qr-setup`,
+    QRREVOKE: `/${API_VERSION}/dietitian/api/web/qr-revoke`,
+    INVITEREVOKE: `/${API_VERSION}/dietitian/api/web/invite-revoke`,
+    LISTTRAINERADMINS: `/${API_VERSION}/dietitian/api/web/list-trainer-admins`,
+    GETPRICING: `/${API_VERSION}/dietitian/api/web/get-pricing`,
+    SETPRICING: `/${API_VERSION}/dietitian/api/web/set-pricing`,
+  },
+
    FOOD: {
     // Internal Next.js API routes (relative — not prefixed with API_BASE_URL)
-    FOODSEARCH: "/api/food/search"
+    FOODSEARCH: "/api/food/search",
+    // FitChef dish bank (proxied to respyr.in/fitchef-dashboard/api/foods)
+     FITCHEFSEARCH: `/${API_VERSION}/dietitian/api/web/search-foods`,
+    // FitChef shopping-list pricer (internal Next.js proxy to respyr.in/fitchef-dashboard/api/shopping)
+    FITCHEFSHOPPING: "/api/food/shopping",
+    // FitChef custom meal (internal Next.js proxy to respyr.in/fitchef-dashboard/api/custom_meal)
+    FITCHEFCUSTOMMEAL: "/api/food/custom-meal",
+    // "Make my meal" plate → Lambda (respyr-metabolism-web). Registers the
+    // combination against the plan row and returns the generated meal image.
+    CUSTOMMEAL: `/${API_VERSION}/dietitian/api/web/custom-meal`,
   },
 
     LOGS: {

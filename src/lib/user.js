@@ -15,6 +15,7 @@ import { cookieManager } from "@/lib/cookies";
 export const ROLES = Object.freeze({
   SUPER_ADMIN: "super_admin",
   TRAINER_ADMIN: "trainer_admin",
+  FACILITY_ADMIN: "facility_admin",
   TRAINER: "trainer",
   CLIENT: "client",
 });
@@ -23,6 +24,7 @@ const ROLE_ALIASES = Object.freeze({
   admin: ROLES.TRAINER_ADMIN,
   trainer_admin: ROLES.TRAINER_ADMIN,
   super_admin: ROLES.SUPER_ADMIN,
+  facility_admin: ROLES.FACILITY_ADMIN,
   trainer: ROLES.TRAINER,
   dietician: ROLES.TRAINER,
   client: ROLES.CLIENT,
@@ -151,6 +153,9 @@ export function landingPathForUser(user) {
     case ROLES.TRAINER_ADMIN:
      return "/trainer-admin/trainers";
         // return "/trainer/dashboard";
+
+    case ROLES.FACILITY_ADMIN:
+      return "/facility-admin/trainers";
 
     case ROLES.TRAINER:
       return "/trainer/dashboard";
