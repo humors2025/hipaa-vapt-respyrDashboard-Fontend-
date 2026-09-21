@@ -3197,7 +3197,7 @@ const ingredients = rows.flatMap((r) =>
   }
 
   return (
-    <div className="flex max-2xl:flex-col gap-5 w-full min-w-0">
+    <div className="flex max-xl:flex-col gap-5 w-full min-w-0">
       {/* ------------------------------------------------- macros panel */}
       <MacrosPanel totals={dayTotals} targets={day.targets} dayIndex={dayIdx} />
 
@@ -3342,9 +3342,9 @@ const ingredients = rows.flatMap((r) =>
         </div>
 
         <div>
-          <div className="flex max-2xl:flex-col gap-[3px] mt-[15px]">
+          <div className="flex max-xl:flex-col gap-[3px] mt-[15px]">
             {/* meal tabs */}
-            <div className="flex flex-col max-2xl:flex-row max-2xl:overflow-x-auto scroll-hide gap-[15px] px-[15px] pt-[15px] max-2xl:pb-[15px] 2xl:pb-[54px] rounded-[15px] border-4 border-[#F5F7FA] min-w-[180px] xl:min-w-[200px] 2xl:min-w-[220px] h-fit">
+            <div className="flex flex-col max-xl:flex-row max-xl:overflow-x-auto scroll-hide gap-[15px] px-[15px] pt-[15px] max-xl:pb-[15px] xl:pb-[54px] rounded-[15px] border-4 border-[#F5F7FA] min-w-[180px] xl:min-w-[200px] 2xl:min-w-[220px] h-fit">
               {SLOTS.map((s, i) => {
                 const isActive = i === mealIdx;
                 return (
@@ -3353,9 +3353,9 @@ const ingredients = rows.flatMap((r) =>
                     onClick={() => setMealIdx(i)}
                     title={SLOT_META[s].time}
                     className={cn(
-                      "flex flex-col gap-2.5 py-2.5 pl-[15px] pr-2.5 w-full max-2xl:w-auto max-2xl:shrink-0 max-2xl:whitespace-nowrap cursor-pointer",
+                      "flex flex-col gap-2.5 py-2.5 pl-[15px] pr-2.5 w-full max-xl:w-auto max-xl:shrink-0 max-xl:whitespace-nowrap cursor-pointer",
                       isActive && "bg-[#308BF9] rounded-[10px]",
-                      !isActive && i !== 0 && "border-t max-2xl:border-t-0 max-2xl:border-l border-[#E1E6ED]",
+                      !isActive && i !== 0 && "border-t max-xl:border-t-0 max-xl:border-l border-[#E1E6ED]",
                     )}
                   >
                     <p
@@ -3380,9 +3380,9 @@ const ingredients = rows.flatMap((r) =>
             </div>
 
 
-<div className="flex flex-col max-2xl:flex-row gap-[3px]">
+<div className="flex flex-col max-xl:flex-row gap-[3px] xl:flex-1 xl:min-w-0">
             {/* food cards */}
-            <div className="pt-5 pb-[15px] pl-[15px] pr-2.5 border-4 border-[#F5F7FA] rounded-[15px] flex-1 min-w-0 max-2xl:flex-none min-h-[300px] xl:min-h-[320px] 2xl:min-h-[340px] flex flex-col">
+            <div className="pt-5 pb-[15px] pl-[15px] pr-2.5 border-4 border-[#F5F7FA] rounded-[15px] flex-1 min-w-0 max-xl:flex-none max-xl:w-full min-h-[300px] xl:min-h-[320px] 2xl:min-h-[340px] flex flex-col">
               {items.length === 0 && (
                 <div className="flex-1 flex flex-wrap items-center justify-center gap-2.5 py-10">
                   <ActionBtn
@@ -4003,7 +4003,7 @@ function MacrosPanel({ totals, targets, dayIndex = 0 }) {
   return (
     <section
       id="macros-update-container"
-      className="w-[356px] max-2xl:w-full max-2xl:shrink-0 shrink-0 h-fit pt-5 pr-1 pb-5 bg-[#F5F7FA] rounded-[15px]"
+      className="w-[356px] max-xl:w-full max-xl:shrink-0 shrink-0 h-fit pt-5 pr-1 pb-5 bg-[#F5F7FA] rounded-[15px]"
     >
       <div className="flex items-center justify-between px-[18px] pr-[10px]">
         <p className={UI.sectionLabel}>Diet Plan Macros</p>
@@ -4055,7 +4055,7 @@ function MacrosPanel({ totals, targets, dayIndex = 0 }) {
       </div>
 
       <div className="flex flex-col gap-2.5">
-        <div className="flex max-2xl:justify-center">
+        <div className="flex max-xl:justify-center">
           {legend.map((l) => {
             const delta = l.target ? deltaLabel(l.g, l.target) : null;
             return (
@@ -4209,11 +4209,13 @@ function FoodCard({
 
             <div className="min-w-0 flex-1">
               <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                <span className={cn("text-[#738298] font-semibold uppercase", UI.small)}>servings</span>
-                {/* Approved / locked week: servings can no longer be changed. */}
-                <StepBtn label="−" disabled={editLocked || removed || serv - 0.25 < 0.25} title={editLocked ? editLockedReason : undefined} onClick={() => onStepPortion(-1)} />
-                <span className={cn("min-w-[56px] text-center text-[#252525] font-semibold tabular-nums", UI.body)}>{serv}</span>
-                <StepBtn label="+" disabled={editLocked || removed || serv + 0.25 > 6} title={editLocked ? editLockedReason : undefined} onClick={() => onStepPortion(1)} />
+                <span className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+                  <span className={cn("text-[#738298] font-semibold uppercase", UI.small)}>servings</span>
+                  {/* Approved / locked week: servings can no longer be changed. */}
+                  <StepBtn label="−" disabled={editLocked || removed || serv - 0.25 < 0.25} title={editLocked ? editLockedReason : undefined} onClick={() => onStepPortion(-1)} />
+                  <span className={cn("min-w-[32px] min-[1440px]:min-w-[56px] text-center text-[#252525] font-semibold tabular-nums", UI.body)}>{serv}</span>
+                  <StepBtn label="+" disabled={editLocked || removed || serv + 0.25 > 6} title={editLocked ? editLockedReason : undefined} onClick={() => onStepPortion(1)} />
+                </span>
                 {serv !== 1 && (
                   <span className={cn("text-[#308BF9] font-semibold", UI.small)}>
                     {s.kcal} kcal · P{Math.round(s.protein_g)} · C{Math.round(s.carbs_g)} · F{Math.round(s.fat_g)}
@@ -4222,7 +4224,7 @@ function FoodCard({
               </div>
 
               {view.ingredients.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5 max-[1440px]:flex-col max-[1440px]:items-start">
                   {view.ingredients.map((ing, i) => {
                     const m = unitMetric(ing.unit);
                     return (
