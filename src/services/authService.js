@@ -1635,6 +1635,31 @@ export const searchFitChefFoodsService = async (
   );
 };
 
+// Ingredient-level search, step 1: every ingredient FitChef's recipes
+// actually use ("grilled chicken strips", "sun-dried tomato"), most-used
+// first, each with the excludable-set slug (`set`) the recipe search filters
+// on. Resolves to { ok, query, corrected, count, results: [{ key, name, unit, set, recipes }] }.
+export const searchFitChefIngredientsService = async (query, { signal } = {}) => {
+  const params = new URLSearchParams();
+  params.set("q", String(query || "").trim());
+  return apiFetcher(`${API_ENDPOINTS.FOOD.FITCHEFINGREDIENTS}?${params.toString()}`, { method: "GET", signal });
+};
+
+// Ingredient-level search, step 2: the FitChef recipes containing an
+// ingredient set, filtered to the meal's slot and scored by the day deviation
+// they leave. `user` is the FitChef plan key (plan.meta.fitchefUserId), `day`
+// and `meal` are the generator's 0-based indices for the meal being replaced.
+// Resolves to { ok, set, slot, count, results: [{ recipe_id, name, image,
+// method, ingredients, p, c, f, kcal, prep_minutes, equipment, day_deviation }] }.
+export const fitChefRecipesByIngredientService = async ({ set, user, day, meal, signal } = {}) => {
+  const params = new URLSearchParams();
+  params.set("set", String(set || ""));
+  params.set("user", String(user || ""));
+  params.set("day", String(Number(day) || 0));
+  params.set("meal", String(Number(meal) || 0));
+  return apiFetcher(`${API_ENDPOINTS.FOOD.FITCHEFRECIPESBYINGREDIENT}?${params.toString()}`, { method: "GET", signal });
+};
+
 // Prices a shopping list through FitChef (internal Next.js proxy, so no bearer
 // token). `days` is [{ day, meals: [{ title, slot, ingredients: [{ name, unit,
 // units, grams }] }] }]; the reply is the aisle list with Kroger shelf prices.
@@ -1648,26 +1673,6 @@ export const priceShoppingListService = async (days, { signal, zip  } = {}) => {
   const data = await res.json().catch(() => null);
   if (!res.ok || !data || data.error) {
     throw new Error(data?.error || `Shopping pricing failed (${res.status})`);
-  }
-  return data;
-};
-
-// Registers a "Make my meal" plate built from several dish-bank foods with
-// FitChef (internal Next.js proxy → respyr.in/fitchef-dashboard/api/custom_meal).
-// payload: { profile_id, record_id, day, meal_name, name, ingredients: [{ key, grams }] }
-//   day is 0-based; meal_name is breakfast | lunch | snacks | dinner. Same shape
-//   as saveCustomMealService below, just without the bearer token.
-// Resolves to the upstream reply as-is; throws on a non-2xx or { error } reply.
-export const createFitChefCustomMealService = async (payload, { signal } = {}) => {
-  const res = await fetch(API_ENDPOINTS.FOOD.FITCHEFCUSTOMMEAL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    signal,
-  });
-  const data = await res.json().catch(() => null);
-  if (!res.ok || !data || data.error) {
-    throw new Error(data?.error || `Custom meal failed (${res.status})`);
   }
   return data;
 };

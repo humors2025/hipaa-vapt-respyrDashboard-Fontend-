@@ -191,8 +191,10 @@ export const API_ENDPOINTS = {
      FITCHEFSEARCH: `/${API_VERSION}/dietitian/api/web/search-foods`,
     // FitChef shopping-list pricer (internal Next.js proxy to respyr.in/fitchef-dashboard/api/shopping)
     FITCHEFSHOPPING: "/api/food/shopping",
-    // FitChef custom meal (internal Next.js proxy to respyr.in/fitchef-dashboard/api/custom_meal)
-    FITCHEFCUSTOMMEAL: "/api/food/custom-meal",
+    // Ingredient-level search (Lambda → FitChef fc_ingredients / fc_recipes):
+    // pick an ingredient, then the recipes that contain it, scored for the meal.
+    FITCHEFINGREDIENTS: `/${API_VERSION}/dietitian/api/web/search-ingredients`,
+    FITCHEFRECIPESBYINGREDIENT: `/${API_VERSION}/dietitian/api/web/recipes-by-ingredient`,
     // "Make my meal" plate → Lambda (respyr-metabolism-web). Registers the
     // combination against the plan row and returns the generated meal image.
     CUSTOMMEAL: `/${API_VERSION}/dietitian/api/web/custom-meal`,
