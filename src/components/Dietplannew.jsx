@@ -5238,6 +5238,17 @@ function SwapDialog({
   });
   const hasMore = isSearch && !byIngredient && meta.pages > 0 && meta.page + 1 < meta.pages;
 
+  /**
+   * Infinite scroll, same as the dish bank in Make my meal: the next page is
+   * fetched once the list is within ~240px of the bottom, so a dietitian
+   * scanning swaps never has to stop and press a button.
+   */
+  function onListScroll(e) {
+    const el = e.currentTarget;
+    if (!hasMore || loading || loadingMore) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) runSearch(meta.page + 1);
+  }
+
   let emptyText = null;
   if (isSearch && byIngredient) {
     if (ingError) emptyText = ingError;
@@ -5363,17 +5374,20 @@ function SwapDialog({
           <span className="text-[#D0A175]">{Object.keys(meta.corrected).join(" ")}</span>
         </div>
       )}
-      <ul className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scroll-hide">
+      <ul className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scroll-hide" onScroll={onListScroll}>
         {emptyText && (
           <li className={cn("px-5 py-8 text-center font-medium", UI.body, error && isSearch ? "text-[#E76F51]" : "text-[#738298]")}>{emptyText}</li>
         )}
         {results.map((r) => (
           <SwapRow key={r.id} r={r} isSearch={isSearch} onPick={() => onPick(r.raw)} />
         ))}
-        {hasMore && (
+        {loadingMore && <li className={cn("px-5 py-3 text-center text-[#A1A1A1]", UI.small)}>Loading more…</li>}
+        {/* A trackpad flick can outrun the scroll handler on a short list;
+            the link is the way back to the next page when that happens. */}
+        {hasMore && !loadingMore && (
           <li className="border-t border-[#F5F7FA] px-5 py-3 text-center">
-            <button type="button" disabled={loadingMore} onClick={() => runSearch(meta.page + 1)} className={UI.btnSecondary}>
-              {loadingMore ? "Loading…" : `Load more (page ${meta.page + 2} of ${meta.pages})`}
+            <button type="button" onClick={() => runSearch(meta.page + 1)} className={cn("text-[#308BF9] font-semibold cursor-pointer hover:underline", UI.small)}>
+              Load more
             </button>
           </li>
         )}
