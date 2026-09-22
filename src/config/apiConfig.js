@@ -46,11 +46,7 @@ export const API_ENDPOINTS = {
     UPDATEDIETFOODNEWTEST: `/${API_VERSION}/dietitian/api/web/trainer-update-weekly-food-json-newtest`,
     // "Reset week" for DietPlanNew — puts the weekly_food_json_suggestions_newtest
     // row back to its originally generated plan (drops every trainer edit).
-    RESETWEEKLYFOODJSONNEWTEST: `/${API_VERSION}/dietitian/api/web/reset-weekly-food-json-newtest`,
-    // One step back for DietPlanNew — pops the newest server-side snapshot
-    // (taken before every trainer update / custom meal) back into the row.
-    UNDOWEEKLYFOODJSONNEWTEST: `/${API_VERSION}/dietitian/api/web/undo-weekly-food-json-newtest`,
-    UNDODEPTHWEEKLYFOODJSONNEWTEST: `/${API_VERSION}/dietitian/api/web/undo-depth-weekly-food-json-newtest`,
+    RESETWEEKLYFOODJSONNEWTEST: `/${API_VERSION}/dietitian/api/web/reset-weekly-food-json-newtest`
   },
   CLIENTPROFILE: {
     CLIENTPROFILEDATA: `/${API_VERSION}/dietitian/api/web/get_client_data`,

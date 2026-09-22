@@ -85,8 +85,6 @@ import {
   resetWeeklyFoodJsonNewTestService,
   searchFitChefFoodsService,
   searchFitChefIngredientsService,
-  undoDepthWeeklyFoodJsonNewTestService,
-  undoWeeklyFoodJsonNewTestService,
   updateDietPlanFoodNewTestService,
 } from "@/services/authService";
 import { selectDietAnalysisRequestedWeek, setNewTestPlan } from "@/store/dietAnalysisSlice";
@@ -2634,15 +2632,6 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
   const [approving, setApproving] = useState(false); // food_json_suggestion_approve_plan_newtest in flight
   const [deleteTarget, setDeleteTarget] = useState(null); // { dayIdx, slot, foodId, name } awaiting "Delete" confirmation
   const [customSaving, setCustomSaving] = useState(false); // "Make my meal" save is registering the plate with FitChef
-  // One step back on the SERVER (undo-weekly-food-json-newtest): how many
-  // saved actions can be taken back, and what the last one was. The local
-  // stack above covers unsaved edits; this survives a reload.
-  const [serverUndo, setServerUndo] = useState({ depth: 0, last: "" });
-  const [serverUndoing, setServerUndoing] = useState(false);
-  // One dashboard Save is several sequential writes; they share this token so
-  // the server folds them into ONE step back. A custom meal writes on its own
-  // and hands its token to the Save that follows, for the same reason.
-  const undoGroupRef = useRef(null);
   // What the last swap cost its slot, with the one dish that would put it
   // back — the `drift` block the trainer dashboard returns from /api/swap.
   const [driftNote, setDriftNote] = useState(null);
@@ -2804,71 +2793,6 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
       cancelled = true;
     };
   }, [planProp, profileId, weekStart, weekEnd, reloadKey]);
-
-  // How many saved steps back the server holds for this row — refreshed
-  // whenever the plan is (re)loaded, since every Save / Reset reloads.
-  useEffect(() => {
-    const id = Number(plan?.meta?.id);
-    const pid = plan?.meta?.profile_id || profileId;
-    if (!id || !pid) {
-      setServerUndo({ depth: 0, last: "" });
-      return undefined;
-    }
-    const controller = new AbortController();
-    (async () => {
-      try {
-        const res = await undoDepthWeeklyFoodJsonNewTestService({ id, profile_id: pid, dietitian_id: plan?.meta?.dietitian_id, signal: controller.signal });
-        if (!controller.signal.aborted) setServerUndo({ depth: num(res?.depth), last: typeof res?.last === "string" ? res.last : "" });
-      } catch {
-        if (!controller.signal.aborted) setServerUndo({ depth: 0, last: "" });
-      }
-    })();
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan?.meta?.id, plan?.meta?.profile_id, profileId, reloadKey]);
-
-  /** Take back the last SAVED action on the server, then reload the row. */
-  async function undoServer() {
-    if (!plan || serverUndoing || saving || resetting || approving) return;
-    if (isWeekLocked(plan)) {
-      flash(`${weekLockReason(plan)} and can no longer be edited.`);
-      return;
-    }
-    if (dirty) {
-      flash("Save or undo your unsaved changes first — the server undo steps back the last saved action.");
-      return;
-    }
-    const meta = plan.meta || {};
-    const payload = {
-      id: Number(meta.id),
-      dietitian_id: meta.dietitian_id || undefined,
-      profile_id: meta.profile_id || profileId,
-      week_start_date: meta.week_start_date || weekStart,
-      week_end_date: meta.week_end_date || weekEnd,
-    };
-    if (!payload.id || !payload.profile_id) {
-      flash("Cannot undo: this plan has no row id / profile id.");
-      return;
-    }
-    setServerUndoing(true);
-    try {
-      const res = await undoWeeklyFoodJsonNewTestService(payload);
-      const accepted = res?.ok === true || res?.status === true;
-      if (!accepted) throw new Error(res?.message || "Undo failed");
-      setSwapState(null);
-      setMealBuilder(null);
-      setDriftNote(null);
-      setUndoStack([]);
-      flash(`Undid ${res?.undid || "the last saved change"} — ${num(res?.left)} step${num(res?.left) === 1 ? "" : "s"} left`);
-      onUndo?.();
-      setReloadKey((k) => k + 1);
-    } catch (err) {
-      console.error("DietPlanNew server undo failed:", err);
-      flash("Undo failed: " + (err?.message || "unknown error"));
-    } finally {
-      setServerUndoing(false);
-    }
-  }
 
   // Days lacking their own targets borrow the client's prescribed macros so
   // the macros panel and the day tabs can compare against something.
@@ -3453,8 +3377,6 @@ const ingredients = rows.flatMap((r) =>
       if (!customProfileId || !recordId) {
         console.warn("[DietPlanNew] custom-meal skipped: plan has no profile id / record id");
       } else {
-        // the Save that follows reuses this token, so meal + save = one undo step
-        undoGroupRef.current = undoGroupRef.current || `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const payload = {
           profile_id: customProfileId,
           record_id: recordId,
@@ -3462,7 +3384,6 @@ const ingredients = rows.flatMap((r) =>
           meal_name: slot,
           name: custom.name,
           ingredients: fitchefIngredients,
-          undo_group: undoGroupRef.current,
         };
         setCustomSaving(true);
         try {
@@ -3543,18 +3464,13 @@ const ingredients = rows.flatMap((r) =>
     // the reload after saving would otherwise drop methods and ingredients.
     collectRecipeDetail(plan, detailCacheRef.current);
 
-    // one token for the whole Save (and for the custom meal that may have
-    // just written on its own), so the server records ONE step back
-    const undoGroup = undoGroupRef.current || `save-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    undoGroupRef.current = null;
-
     setSaving(true);
     let done = 0;
     let lastResponse = null;
     try {
       // The API mutates one food per call and locks the row, so send sequentially.
       for (const op of ops) {
-        const payload = { ...identity, ...op, undo_group: undoGroup };
+        const payload = { ...identity, ...op };
         const res = await updateDietPlanFoodNewTestService(payload);
         // The newtest endpoints answer { status: true|false, message, data }
         // (same envelope as the read call); older ones used ok / success.
@@ -3650,7 +3566,6 @@ const ingredients = rows.flatMap((r) =>
       setDriftNote(null);
       setDirty(false);
       setSavedEditsKey(null);
-      setServerUndo({ depth: 0, last: "" });
       flash(res?.message || "Week reset to the original plan");
       onUndo?.();
       // Reload from the server so the grid shows the reset row.
@@ -3826,22 +3741,6 @@ const ingredients = rows.flatMap((r) =>
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
-            {/* One step back on the server — the last SAVED action. Reset
-                clears it, so it can never step into a state Reset threw away. */}
-            {serverUndo.depth > 0 && !isWeekLocked(plan) && (
-              <button
-                onClick={undoServer}
-                disabled={!plan?.meta?.id || saving || resetting || approving || serverUndoing || dirty}
-                title={
-                  dirty
-                    ? "Save or undo your unsaved changes first"
-                    : `Take back the last saved change${serverUndo.last ? ` (${serverUndo.last})` : ""} — ${serverUndo.depth} step${serverUndo.depth === 1 ? "" : "s"} available`
-                }
-                className={UI.btnSecondary}
-              >
-                {serverUndoing ? "Undoing…" : `Undo last save (${serverUndo.depth})`}
-              </button>
-            )}
             <button
               onClick={resetWeek}
               disabled={!plan?.meta?.id || saving || resetting || approving || isWeekLocked(plan)}

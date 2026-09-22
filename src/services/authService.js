@@ -547,40 +547,6 @@ export const resetWeeklyFoodJsonNewTestService = async (payload) => {
   });
 };
 
-// "Undo" for DietPlanNew (undo-weekly-food-json-newtest). Steps the
-// weekly_food_json_suggestions_newtest row back ONE saved action — the swap
-// the dietitian regrets, not the whole week (that is Reset). Every trainer
-// update / custom meal snapshots the row first, server-side; this pops the
-// newest snapshot. Same payload as reset; resolves to
-// { ok, message, undid, left, weekly_json_data, food_json }.
-export const undoWeeklyFoodJsonNewTestService = async (payload) => {
-  const body = {
-    id: Number(payload?.id),
-    dietitian_id: payload?.dietitian_id || getDietitianIdFromAccessToken(),
-    profile_id: payload?.profile_id,
-    week_start_date: payload?.week_start_date,
-    week_end_date: payload?.week_end_date,
-  };
-  return apiFetcher(API_ENDPOINTS.PLAN.UNDOWEEKLYFOODJSONNEWTEST, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-};
-
-// How many saved steps back are available for a plan row, so the button can
-// say — { ok, depth, last } where `last` is the label of the newest snapshot.
-export const undoDepthWeeklyFoodJsonNewTestService = async ({ id, profile_id, dietitian_id, signal } = {}) => {
-  const params = new URLSearchParams();
-  params.set("id", String(Number(id)));
-  params.set("profile_id", String(profile_id || ""));
-  params.set("dietitian_id", dietitian_id || getDietitianIdFromAccessToken() || "");
-  return apiFetcher(`${API_ENDPOINTS.PLAN.UNDODEPTHWEEKLYFOODJSONNEWTEST}?${params.toString()}`, {
-    method: "GET",
-    signal,
-  });
-};
-
 // "Approve week" for DietPlanNew (food_json_suggestion_approve_plan_newtest).
 // Sets status on the weekly_food_json_suggestions_newtest row: 1 = approved,
 // 0 = un-approved. Payload:
