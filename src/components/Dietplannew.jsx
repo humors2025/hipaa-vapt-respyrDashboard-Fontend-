@@ -1164,6 +1164,14 @@ const hasGrams = hasNumericValue(ing?.grams);
     bankSlot:
       String(r?.slot || "").trim(),
 
+    // The bank files some dishes under several meals and folds the copies
+    // into one row; these are the other meals it was found in, so a dish
+    // appearing at dinner AND breakfast reads as deliberate, not a fault.
+    alsoIn:
+      Array.isArray(r?.also_in)
+        ? r.also_in.map((s) => String(s || "").trim()).filter(Boolean)
+        : [],
+
     cuisine:
       r?.cuisine || "",
   };
@@ -5218,6 +5226,7 @@ function SwapDialog({
       portion: r.portion,
       offSlot: Boolean(r.offSlot),
       bankSlot: r.bankSlot || "",
+      alsoIn: Array.isArray(r.alsoIn) ? r.alsoIn : [],
       ingredients: Array.isArray(r.ingredients) ? r.ingredients : [],
       method_steps: Array.isArray(r.method_steps) ? r.method_steps : [],
       tips: Array.isArray(r.tips) ? r.tips : [],
@@ -5408,7 +5417,12 @@ function SwapRow({ r, isSearch, onPick }) {
           <small className={cn("block text-[#252525] font-normal tabular-nums", UI.small)}>
             {r.kcal} kcal · P{r.protein_g} C{r.carbs_g} F{r.fat_g}
           </small>
-          {isSearch && r.portion ? <small className={cn("block text-[#738298] font-normal", UI.small)}>{r.portion}</small> : null}
+          {isSearch && (r.portion || r.alsoIn.length > 0) ? (
+            <small className={cn("block text-[#738298] font-normal", UI.small)}>
+              {r.portion}
+              {r.alsoIn.length > 0 && <span className="text-[#A1A1A1]">{r.portion ? " · " : ""}also in {r.alsoIn.join(", ")}</span>}
+            </small>
+          ) : null}
           {(r.prep_minutes || r.deviation || r.dayPct != null) && (
             <small
               className={cn("block text-[#738298] font-normal", UI.small)}
@@ -5640,6 +5654,8 @@ const hasGrams = (i) =>
     offSlot: Boolean(r?.off_slot),
     // Which meal the bank files this dish under, for the "usually snack" note.
     bankSlot: String(r?.slot || "").trim(),
+    // Other meals the bank also files it under (folded duplicates).
+    alsoIn: Array.isArray(r?.also_in) ? r.also_in.map((s) => String(s || "").trim()).filter(Boolean) : [],
     method: typeof r?.method === "string" ? r.method.split(/\r?\n/).map((s) => s.trim()).filter(Boolean) : [],
     // contains: (Array.isArray(r?.contains) ? r.contains : [])
     //   .filter((i) => i?.name)
@@ -6342,6 +6358,7 @@ const totalPrice = useMemo(() => {
                   {row.offSlot && (
                     <span className="font-semibold text-[#F4A261]"> · usually {row.bankSlot || "another meal"}</span>
                   )}
+                  {row.alsoIn.length > 0 && <span className="text-[#A1A1A1]"> · also in {row.alsoIn.join(", ")}</span>}
                 </p>
                 {row.contains.length > 0 && (
                   <div className="mt-0.5 flex flex-wrap gap-1">
