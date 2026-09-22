@@ -1159,6 +1159,11 @@ const hasGrams = hasNumericValue(ing?.grams);
     offSlot:
       Boolean(r?.off_slot),
 
+    // The slot the dish is normally served in — what "usually breakfast"
+    // names when it is offered somewhere else.
+    bankSlot:
+      String(r?.slot || "").trim(),
+
     cuisine:
       r?.cuisine || "",
   };
@@ -5212,6 +5217,7 @@ function SwapDialog({
         (r.dayDeviation != null ? { mean: r.dayDeviation, was: r.dayDeviation, each: [] } : null),
       portion: r.portion,
       offSlot: Boolean(r.offSlot),
+      bankSlot: r.bankSlot || "",
       ingredients: Array.isArray(r.ingredients) ? r.ingredients : [],
       method_steps: Array.isArray(r.method_steps) ? r.method_steps : [],
       tips: Array.isArray(r.tips) ? r.tips : [],
@@ -5395,7 +5401,7 @@ function SwapRow({ r, isSearch, onPick }) {
                 className="ml-1.5 inline-block px-2 py-[3px] rounded-[5px] bg-[#F4A2611A] text-[#F4A261] text-[10px] xl:text-[11px] font-semibold leading-[110%] tracking-[-0.2px] align-middle"
                 title="Usually served in a different meal"
               >
-                other slot
+                {r.bankSlot ? `usually ${r.bankSlot}` : "other slot"}
               </span>
             )}
           </p>
@@ -5632,6 +5638,8 @@ const hasGrams = (i) =>
     diet: r?.diet || "",
     gi: Number.isFinite(Number(r?.gi)) ? Number(r.gi) : null,
     offSlot: Boolean(r?.off_slot),
+    // Which meal the bank files this dish under, for the "usually snack" note.
+    bankSlot: String(r?.slot || "").trim(),
     method: typeof r?.method === "string" ? r.method.split(/\r?\n/).map((s) => s.trim()).filter(Boolean) : [],
     // contains: (Array.isArray(r?.contains) ? r.contains : [])
     //   .filter((i) => i?.name)
@@ -6303,7 +6311,7 @@ const totalPrice = useMemo(() => {
       <div className="min-h-0 flex-1 overflow-y-auto scroll-thin" onScroll={onListScroll}>
         {fitted.map((row, i) => (
           <div key={`${row.fitchefKey || row.name}-${i}`}>
-            {i === firstOffSlot && i > 0 && (
+            {i === firstOffSlot && (
               <div className={cn("border-b border-[#E1E6ED] bg-[#F5F7FA] px-5 py-1.5", UI.sectionLabel)}>
                 Usually served at other meals
               </div>
@@ -6328,6 +6336,12 @@ const totalPrice = useMemo(() => {
                   {row.dayDeviation !== null ? ` · day ${row.dayDeviation}%` : ""}
                   {row.gi !== null ? ` · GI ${row.gi}` : ""}
                   {row.diet ? ` · ${row.diet}` : ""}
+                  {/* The dish bank ranks other slots last rather than hiding
+                      them — a dinner that would suit this breakfast is still
+                      worth offering, as long as the row says where it belongs. */}
+                  {row.offSlot && (
+                    <span className="font-semibold text-[#F4A261]"> · usually {row.bankSlot || "another meal"}</span>
+                  )}
                 </p>
                 {row.contains.length > 0 && (
                   <div className="mt-0.5 flex flex-wrap gap-1">
