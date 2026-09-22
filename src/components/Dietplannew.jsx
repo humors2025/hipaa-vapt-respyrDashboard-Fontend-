@@ -2765,8 +2765,12 @@ export default function DietPlanNew({ plan: planProp, clientName = "Client", cli
         if (loadedWeekKeyRef.current === weekKey) {
           const dayCount = next.days.length;
           const keptDay = Math.min(dayIdxRef.current, Math.max(dayCount - 1, 0));
-          const mealCount = next.days[keptDay]?.meals?.length ?? 0;
-          const keptMeal = Math.min(mealIdxRef.current, Math.max(mealCount - 1, 0));
+          // `meals` is a slot map ({ breakfast: [], lunch: [], … }), not an
+          // array — reading `.length` off it gave undefined, so the clamp
+          // collapsed to 0 and every Save threw the trainer back to
+          // Breakfast whichever slot they were editing. The meal tabs are
+          // always the four SLOTS, so that is what bounds the index.
+          const keptMeal = Math.min(Math.max(mealIdxRef.current, 0), SLOTS.length - 1);
           setDayIdx(keptDay);
           setMealIdx(keptMeal);
         } else {
