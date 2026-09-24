@@ -188,6 +188,7 @@ export const API_ENDPOINTS = {
   // Contract: src/services/superAdminSalesService.js.
   SALES: {
     SUPERADMINSALESANALYTICS: `/${API_VERSION}/dietitian/api/web/super-admin-sales-analytics`,
+    SUPERADMINORDERS: `/${API_VERSION}/dietitian/api/web/super-admin-orders`,
   },
 
    FOOD: {
