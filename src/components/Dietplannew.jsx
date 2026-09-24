@@ -4850,49 +4850,13 @@ function FoodCard({
               )}
 
               {view.method_steps.length > 0 && (
-                <>
-                  <button
-                    onClick={() => setShowMethod((v) => !v)}
-                    className={cn("mt-2 text-[#308BF9] font-semibold uppercase cursor-pointer hover:text-[#2678D9]", UI.small)}
-                  >
-                    {showMethod ? "Hide method" : "Method"}
-                  </button>
-                  {showMethod && (
-                    <>
-                      {methodGroups ? (
-                        // Make-my-meal dish: one section per food, each with its own numbered steps.
-                        <div className="mt-1.5 space-y-2">
-                          {methodGroups.map((g, gi) => (
-                            <div key={`${gi}-${g.name}`}>
-                              {g.name && <p className={cn("mb-0.5 text-[#252525] font-semibold", UI.body)}>{g.name}</p>}
-                              <ol className={cn("list-decimal pl-[18px] text-[#738298]", UI.body)}>
-                                {g.steps.map((step, i) => (
-                                  <li key={i} className="mb-1">
-                                    {step}
-                                  </li>
-                                ))}
-                              </ol>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <ol className={cn("mt-1.5 list-decimal pl-[18px] text-[#738298]", UI.body)}>
-                          {methodSteps.map((step, i) => (
-                            <li key={i} className="mb-1">
-                              {step}
-                            </li>
-                          ))}
-                        </ol>
-                      )}
-                      {view.tips?.length > 0 && (
-                        <div className={cn("mt-1.5 rounded-[5px] bg-[#F4A2611A] px-2.5 py-[5px] text-[#F4A261]", UI.small)}>
-                          <b className="mr-1 font-semibold">Tip:</b>
-                          {view.tips.join(" ")}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </>
+                <button
+                  type="button"
+                  onClick={() => setShowMethod(true)}
+                  className={cn("mt-2 text-[#308BF9] font-semibold uppercase cursor-pointer hover:text-[#2678D9]", UI.small)}
+                >
+                  Method
+                </button>
               )}
             </div>
           </div>
@@ -4931,7 +4895,89 @@ function FoodCard({
           Delete
         </button>
       </div>
+
+      {showMethod && (
+        <MethodDialog
+          food={view}
+          groups={methodGroups}
+          steps={methodSteps}
+          servings={serv}
+          prepMinutes={prepShown}
+          onClose={() => setShowMethod(false)}
+        />
+      )}
     </div>
+  );
+}
+
+/* ============================================================ MethodDialog */
+
+/**
+ * A plan dish's method (per-dish sections for a Make-my-meal dish, otherwise
+ * the numbered steps) and its tip, in a popup. The card body is a short
+ * scroller, so a long method reads far better with the room a dialog gives it.
+ * Steps arrive already scaled to the servings on the card.
+ */
+function MethodDialog({ food: f, groups, steps, servings = 1, prepMinutes, onClose }) {
+  return (
+    <ModalShell
+      title={f.name}
+      subtitle={[
+        `${servings} serving${servings === 1 ? "" : "s"}`,
+        prepMinutes ? `${servings === 1 ? "" : "~"}${prepMinutes} min` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")}
+      onClose={onClose}
+      widthClass="max-w-[560px]"
+    >
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {f.ingredients?.length > 0 && (
+          <>
+            <p className={cn("text-[#738298] font-semibold uppercase", UI.small)}>Ingredients</p>
+            <ul className={cn("mt-1 mb-4 list-disc pl-[18px] text-[#252525]", UI.body)}>
+              {f.ingredients.map((ing, i) => (
+                <li key={i} className="mb-0.5">
+                  {fmtQty(ing.qty * servings)} {ing.unit} {ing.name}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        <p className={cn("text-[#738298] font-semibold uppercase", UI.small)}>Method</p>
+        {groups ? (
+          // Make-my-meal dish: one section per food, each with its own numbered steps.
+          <div className="mt-1.5 space-y-3">
+            {groups.map((g, gi) => (
+              <div key={`${gi}-${g.name}`}>
+                {g.name && <p className={cn("mb-0.5 text-[#252525] font-semibold", UI.body)}>{g.name}</p>}
+                <ol className={cn("list-decimal pl-[18px] text-[#738298]", UI.body)}>
+                  {g.steps.map((step, i) => (
+                    <li key={i} className="mb-1">
+                      {step}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <ol className={cn("mt-1.5 list-decimal pl-[18px] text-[#738298]", UI.body)}>
+            {steps.map((step, i) => (
+              <li key={i} className="mb-1">
+                {step}
+              </li>
+            ))}
+          </ol>
+        )}
+        {f.tips?.length > 0 && (
+          <div className={cn("mt-3 rounded-[5px] bg-[#F4A2611A] px-2.5 py-[5px] text-[#F4A261]", UI.small)}>
+            <b className="mr-1 font-semibold">Tip:</b>
+            {f.tips.join(" ")}
+          </div>
+        )}
+      </div>
+    </ModalShell>
   );
 }
 
@@ -5468,10 +5514,10 @@ function SwapRow({ r, isSearch, onPick }) {
           {hasRecipe && (
             <button
               type="button"
-              onClick={() => setShowMethod((v) => !v)}
+              onClick={() => setShowMethod(true)}
               className={cn("mt-0.5 self-start text-[#308BF9] font-semibold cursor-pointer hover:text-[#2678D9]", UI.small)}
             >
-              {showMethod ? "▾ Hide method" : "▸ Method"}
+              ▸ Method
             </button>
           )}
         </div>
@@ -5480,10 +5526,39 @@ function SwapRow({ r, isSearch, onPick }) {
         </button>
       </div>
 
-      {showMethod && hasRecipe && (
-        <div className="ml-14 mt-2.5 rounded-[10px] border border-[#E1E6ED] bg-white px-4 py-3">
+      {showMethod && hasRecipe && <RecipeDialog r={r} onClose={() => setShowMethod(false)} />}
+    </li>
+  );
+}
+
+/* ============================================================ RecipeDialog */
+
+/**
+ * A swap candidate's recipe (ingredients, numbered steps, tip) in a popup over
+ * SwapDialog — the list keeps its place while the dish is read, and a long
+ * method scrolls inside the popup instead of pushing the other rows away.
+ */
+function RecipeDialog({ r, onClose }) {
+  return (
+    <ModalShell
+      title={r.name}
+      subtitle={[
+        `${r.kcal} kcal · P${r.protein_g} C${r.carbs_g} F${r.fat_g}`,
+        r.portion || null,
+        r.prep_minutes ? `${r.prep_estimated ? "~" : ""}${r.prep_minutes} min` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")}
+      onClose={onClose}
+      widthClass="max-w-[560px]"
+      // Above SwapDialog, which opened this one.
+      zClass="z-[60]"
+    >
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="flex items-start gap-3">
+          <FoodThumb food={r} className="h-[76px] w-[76px] shrink-0 rounded-[10px] border border-[#E1E6ED] bg-[#F5F7FA] text-3xl" />
           {r.ingredients.length > 0 && (
-            <>
+            <div className="min-w-0 flex-1">
               <p className={cn("text-[#738298] font-semibold uppercase", UI.small)}>Ingredients</p>
               <ul className={cn("mt-1 list-disc pl-[18px] text-[#252525]", UI.body)}>
                 {r.ingredients.map((ing, i) => (
@@ -5492,28 +5567,28 @@ function SwapRow({ r, isSearch, onPick }) {
                   </li>
                 ))}
               </ul>
-            </>
-          )}
-          {r.method_steps.length > 0 && (
-            <>
-              <p className={cn("text-[#738298] font-semibold uppercase", UI.small, r.ingredients.length > 0 && "mt-2.5")}>Method</p>
-              <ol className={cn("mt-1 list-decimal pl-[18px] text-[#252525]", UI.body)}>
-                {r.method_steps.map((step, i) => (
-                  <li key={i} className="mb-1">
-                    {step}
-                  </li>
-                ))}
-              </ol>
-            </>
-          )}
-          {r.tips.length > 0 && (
-            <div className={cn("mt-2 rounded-[5px] border-l-2 border-[#F4A261] bg-[#F4A2611A] px-3 py-2 text-[#738298]", UI.small)}>
-              {r.tips.join(" ")}
             </div>
           )}
         </div>
-      )}
-    </li>
+        {r.method_steps.length > 0 && (
+          <>
+            <p className={cn("text-[#738298] font-semibold uppercase", UI.small, r.ingredients.length > 0 && "mt-4")}>Method</p>
+            <ol className={cn("mt-1 list-decimal pl-[18px] text-[#252525]", UI.body)}>
+              {r.method_steps.map((step, i) => (
+                <li key={i} className="mb-1">
+                  {step}
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
+        {r.tips.length > 0 && (
+          <div className={cn("mt-3 rounded-[5px] border-l-2 border-[#F4A261] bg-[#F4A2611A] px-3 py-2 text-[#738298]", UI.small)}>
+            {r.tips.join(" ")}
+          </div>
+        )}
+      </div>
+    </ModalShell>
   );
 }
 
@@ -6905,9 +6980,9 @@ function ConfirmPopup({ title, message, confirmLabel = "Confirm", cancelLabel = 
 
 /* ============================================================ ModalShell */
 
-function ModalShell({ title, subtitle, onClose, widthClass, tall = false, children }) {
+function ModalShell({ title, subtitle, onClose, widthClass, tall = false, zClass = "z-50", children }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#252525]/50 p-5" onClick={onClose}>
+    <div className={cn("fixed inset-0 flex items-center justify-center bg-[#252525]/50 p-5", zClass)} onClick={onClose}>
       <div
         className={cn(
           "flex w-full flex-col overflow-hidden rounded-[15px] border border-[#E1E6ED] bg-white shadow-[0px_4px_10px_rgba(0,0,0,0.12)]",
