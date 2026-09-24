@@ -184,6 +184,12 @@ export const API_ENDPOINTS = {
     SETPRICING: `/${API_VERSION}/dietitian/api/web/set-pricing`,
   },
 
+  // Super Admin network-wide sales analytics (website vs trainer-code purchases).
+  // Contract: src/services/superAdminSalesService.js.
+  SALES: {
+    SUPERADMINSALESANALYTICS: `/${API_VERSION}/dietitian/api/web/super-admin-sales-analytics`,
+  },
+
    FOOD: {
     // Internal Next.js API routes (relative — not prefixed with API_BASE_URL)
     FOODSEARCH: "/api/food/search",
