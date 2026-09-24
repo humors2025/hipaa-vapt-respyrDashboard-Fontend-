@@ -45,7 +45,6 @@ const MENU = [
     ],
   },
   { name: "TA Analytics",    icon: "/icons/hugeicons_note-01.svg",        path: "/super-admin/analytics" },
-  { name: "Sales Analytics", icon: "/icons/hugeicons_chart-increase.svg", path: "/super-admin/sales-analytics" },
   {
     name: "Commission",
     icon: "/icons/hugeicons_file-export.svg",
