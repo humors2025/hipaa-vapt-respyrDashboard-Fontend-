@@ -69,7 +69,7 @@ export function UpdatingPill({ show }) {
 }
 
 const SOURCE_BADGE = {
-  website: { label: "Website", cls: "bg-[#EEF4FE] text-[#308BF9]" },
+  website: { label: "Direct Website", cls: "bg-[#EEF4FE] text-[#308BF9]" },
   trainer_code: { label: "Trainer Code", cls: "bg-[#E9F7EC] text-[#2E8B45]" },
 };
 

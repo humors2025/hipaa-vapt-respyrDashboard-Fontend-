@@ -54,7 +54,7 @@ export default function SalesKpiCards({ summary, breakdown, loading }) {
     },
     { label: "Total Purchases", value: formatCount(total), hint: "New paid memberships" },
     {
-      label: "Website Purchases",
+      label: "Direct Website Purchases",
       value: formatCount(s.website_purchases),
       amount: formatMoney(b.website?.net_sales, cur),
       hint: `${formatPercent(s.website_purchases, total)} of purchases`,

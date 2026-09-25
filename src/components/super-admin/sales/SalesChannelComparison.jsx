@@ -4,7 +4,7 @@ import { SOURCE_COLORS, formatCount, formatMoney, formatPercent } from "./salesF
 import { SalesCard, SectionError, Skeleton, UpdatingPill } from "./SalesUi";
 
 const CHANNELS = [
-  { key: "website", label: "Website", hint: "Direct purchases without trainer attribution" },
+  { key: "website", label: "Direct Website", hint: "Direct purchases without trainer attribution" },
   { key: "trainer_code", label: "Trainer Code", hint: "Purchases attributed to a trainer / referral code" },
 ];
 
@@ -24,7 +24,7 @@ export default function SalesChannelComparison({ breakdown, summary, loading, up
   const totalNet = CHANNELS.reduce((s, c) => s + (Number(breakdown?.[c.key]?.net_sales) || 0), 0);
 
   return (
-    <SalesCard title="Sales Channel Performance" subtitle="Website and trainer-code sales side by side" action={<UpdatingPill show={updating} />}>
+    <SalesCard title="Sales Channel Performance" subtitle="Direct Website and trainer-code sales side by side" action={<UpdatingPill show={updating} />}>
       {error ? (
         <SectionError message={error} onRetry={onRetry} />
       ) : (

@@ -19,7 +19,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, 
 
 const SERIES = [
   { key: "total_sales", countKeys: ["website_purchases", "trainer_purchases"], label: "Total Sales", color: SOURCE_COLORS.total, dash: [5, 4], fill: false },
-  { key: "website_sales", countKeys: ["website_purchases"], label: "Website Sales", color: SOURCE_COLORS.website, fill: true },
+  { key: "website_sales", countKeys: ["website_purchases"], label: "Direct Website Sales", color: SOURCE_COLORS.website, fill: true },
   { key: "trainer_sales", countKeys: ["trainer_purchases"], label: "Trainer Code Sales", color: SOURCE_COLORS.trainer_code, fill: true },
 ];
 

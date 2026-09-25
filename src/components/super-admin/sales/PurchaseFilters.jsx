@@ -4,7 +4,7 @@ import { humanizeStatus } from "./salesFormat";
 
 const SOURCE_TABS = [
   { value: "all", label: "All" },
-  { value: "website", label: "Website" },
+  { value: "website", label: "Direct Website" },
   { value: "trainer_code", label: "Trainer Code" },
 ];
 

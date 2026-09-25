@@ -9,7 +9,7 @@ import { SalesCard, SectionError, Skeleton, UpdatingPill } from "./SalesUi";
 ChartJS.register(ArcElement, Tooltip);
 
 const SOURCES = [
-  { key: "website", label: "Website", hint: "Direct website purchase" },
+  { key: "website", label: "Direct Website", hint: "Direct website purchase" },
   { key: "trainer_code", label: "Trainer Code", hint: "Attributed to a trainer code" },
 ];
 
