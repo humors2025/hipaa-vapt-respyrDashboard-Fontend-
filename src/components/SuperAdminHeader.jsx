@@ -52,6 +52,8 @@ const MENU = [
       { name: "Facilities", path: "/super-admin/facilities" },
       { name: "QR codes", path: "/super-admin/qr-codes" },
       { name: "Payouts", path: "/super-admin/payouts" },
+      { name: "Sales Analytics", path: "/super-admin/sales-analytics" },
+      { name: "Orders & Payments", path: "/super-admin/orders" },
     ],
   },
 ];
