@@ -3701,7 +3701,7 @@ const ingredients = rows.flatMap((r) =>
   }
 
   return (
-    <div className="flex max-xl:flex-col gap-5 w-full min-w-0">
+    <div className="flex max-[1440px]:flex-col gap-5 w-full min-w-0">
       {/* ------------------------------------------------- macros panel */}
       <MacrosPanel
         totals={dayTotals}
@@ -4557,7 +4557,7 @@ function MacrosPanel({ totals, targets, dayIndex = 0, rebalance = null, onRebala
   return (
     <section
       id="macros-update-container"
-      className="w-[356px] max-xl:w-full max-xl:shrink-0 shrink-0 h-fit pt-5 pr-1 pb-5 bg-[#F5F7FA] rounded-[15px]"
+      className="w-[356px] max-[1440px]:w-full max-[1440px]:shrink-0 shrink-0 h-fit pt-5 pr-1 pb-5 bg-[#F5F7FA] rounded-[15px]"
     >
       <div className="flex items-center justify-between px-[18px] pr-[10px]">
         <p className={UI.sectionLabel}>Diet Plan Macros</p>
@@ -4609,7 +4609,7 @@ function MacrosPanel({ totals, targets, dayIndex = 0, rebalance = null, onRebala
       </div>
 
       <div className="flex flex-col gap-2.5">
-        <div className="flex max-xl:justify-center">
+        <div className="flex max-[1440px]:justify-center">
           {legend.map((l) => {
             const delta = l.target ? deltaLabel(l.g, l.target) : null;
             return (
