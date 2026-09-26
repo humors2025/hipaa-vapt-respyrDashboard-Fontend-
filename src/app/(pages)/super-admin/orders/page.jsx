@@ -31,6 +31,33 @@ function errorMessage(err, fallback) {
 
 const Dash = () => <span className="text-[#A1A1A1]">—</span>;
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Status badge + note for a shipping row. The backend already reports "expired"
+// for an active plan whose current_period_end has passed; the same rule is
+// applied here so the badge never says Active past the end date.
+function describePlan(r) {
+  let status = String(r.subscription_status || "").toLowerCase() || null;
+  const end = r.current_period_end ? new Date(r.current_period_end) : null;
+  const endMs = end && !Number.isNaN(end.getTime()) ? end.getTime() : null;
+  const running = status === "active" || status === "trialing" || status === "past_due";
+  if (running && endMs !== null && endMs <= Date.now()) status = "expired";
+
+  let note = null;
+  if (status === "cancelled" || status === "canceled") {
+    note = r.canceled_at ? { text: `Cancelled ${formatDate(r.canceled_at)}`, tone: "text-[#B5363A]" } : null;
+  } else if (status === "expired" && endMs !== null) {
+    note = { text: `Ended ${formatDate(r.current_period_end)}`, tone: "text-[#535359]" };
+  } else if (running && endMs !== null) {
+    const daysLeft = Math.ceil((endMs - Date.now()) / DAY_MS);
+    note =
+      daysLeft <= 7
+        ? { text: `Ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`, tone: "text-[#A66B00]" }
+        : { text: `Renews ${formatDate(r.current_period_end)}`, tone: "text-[#A1A1A1]" };
+  }
+  return { status, note };
+}
+
 const th = "py-2.5 px-2.5 font-semibold whitespace-nowrap";
 const td = "py-2.5 px-2.5";
 
@@ -72,7 +99,7 @@ function ShippingTable({ rows, ...shell }) {
     <TableShell
       {...shell}
       empty={!rows?.length}
-      minWidth="min-w-[980px]"
+      minWidth="min-w-[1100px]"
       head={
         <>
           <th scope="col" className={th}>Purchased</th>
@@ -81,6 +108,7 @@ function ShippingTable({ rows, ...shell }) {
           <th scope="col" className={th}>Phone</th>
           <th scope="col" className={th}>Address</th>
           <th scope="col" className={th}>Code</th>
+          <th scope="col" className={th}>Plan period</th>
           <th scope="col" className={th}>Subscription</th>
         </>
       }
@@ -88,6 +116,7 @@ function ShippingTable({ rows, ...shell }) {
       {rows?.map((r) => {
         const a = r.ship_to || {};
         const cityLine = [a.city, a.state, a.postal_code].filter(Boolean).join(", ");
+        const plan = describePlan(r);
         return (
           <tr key={r.id} className="border-t border-[#F5F7FA] align-top">
             <td className={`${td} text-[#535359] whitespace-nowrap`}>{formatDate(r.purchased_at, true)}</td>
@@ -112,8 +141,19 @@ function ShippingTable({ rows, ...shell }) {
             <td className={`${td} whitespace-nowrap`}>
               {r.partner_code ? <span className="font-mono text-[11px] text-[#535359]">{r.partner_code}</span> : <Dash />}
             </td>
+            <td className={`${td} text-[#535359] whitespace-nowrap`}>
+              {r.current_period_start || r.current_period_end ? (
+                <>
+                  <div>{formatDate(r.current_period_start)}</div>
+                  <div className="text-[#A1A1A1] text-[11px]">to {formatDate(r.current_period_end)}</div>
+                </>
+              ) : (
+                <Dash />
+              )}
+            </td>
             <td className={td}>
-              <StatusBadge status={r.subscription_status} />
+              <StatusBadge status={plan.status} />
+              {plan.note && <div className={`text-[11px] mt-1 whitespace-nowrap ${plan.note.tone}`}>{plan.note.text}</div>}
             </td>
           </tr>
         );
