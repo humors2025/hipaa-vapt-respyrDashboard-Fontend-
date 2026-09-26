@@ -6,7 +6,9 @@
 //
 // shipping → { status, addresses: [ { id, purchased_at (ISO UTC), customer: { name, email },
 //              ship_to: { name, phone, line1, line2, city, state, postal_code, country },
-//              partner_code, subscription_status, stripe_subscription_id } ],
+//              partner_code, subscription_status (active | expired | cancelled | …; "expired" is
+//              derived when an active plan's current_period_end has passed), stripe_status,
+//              current_period_start, current_period_end, canceled_at, stripe_subscription_id } ],
 //              pagination: { page, limit, total, total_pages } }
 // payments → { status, payments: [ { id, date, customer: { name, email }, partner_code,
 //              type: "first_payment" | "renewal" | …, period_start, period_end, currency,
