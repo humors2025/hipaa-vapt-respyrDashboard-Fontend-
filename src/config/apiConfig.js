@@ -155,6 +155,7 @@ export const API_ENDPOINTS = {
     LISTTRAINERUSERS: `/${API_VERSION}/dietitian/api/web/list-admin-trainer-users-jwt`,
     INVITEFACILITYADMIN: `/${API_VERSION}/dietitian/api/web/admin-invite-facility-admin`,
     LISTFACILITIES: `/${API_VERSION}/dietitian/api/web/list-facilities`,
+    FACILITYPEOPLE: `/${API_VERSION}/dietitian/api/web/super-admin-facility-people`,
     SETTRAINERSPLIT: `/${API_VERSION}/dietitian/api/web/set-trainer-commission-split`,
     REMOVEUSER: `/${API_VERSION}/dietitian/api/web/remove-user`,
     EARNINGSSUMMARY: `/${API_VERSION}/dietitian/api/web/earnings-summary`,

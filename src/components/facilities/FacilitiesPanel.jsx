@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { listFacilitiesService, inviteFacilityAdminService, listQrService, setupQrService, revokeInviteService, formatMinor } from "@/services/commissionService";
 import { inviteTrainerClientService, superAdminInviteTrainerService, resendUserInviteService } from "@/services/authService";
 import ConfirmDialog from "./ConfirmDialog";
+import FacilityDetailsDialog from "./FacilityDetailsDialog";
+import FacilityPeopleDialog, { FacilityPeopleList } from "./FacilityPeopleDialog";
 
 /**
  * Facilities (gyms / studios) — shared by trainer admin (their own) and super
@@ -29,20 +31,32 @@ const EMPTY = { type: "facility", qrId: "", firstName: "", lastName: "", email: 
 const NO_STICKER = "__none__";
 // Mirrors the API's per-recipient cooldown (EMAIL_RESEND_COOLDOWN_SECONDS, default 60).
 const RESEND_COOLDOWN_SECONDS = 60;
+// Facilities per page (list-facilities `limit`).
+const PAGE_SIZE = 10;
 
-function Card({ label, value, hint, accent }) {
+function Card({ label, value, hint, accent, onClick }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className={`rounded-[10px] p-5 flex flex-col gap-1 ${accent ? "bg-[#308BF9] text-white" : "bg-white border border-[#E1E6ED]"}`}>
+    <Tag
+      {...(onClick && { type: "button", onClick, "aria-pressed": !!accent })}
+      className={`rounded-[10px] p-5 flex flex-col gap-1 text-left border ${accent ? "bg-[#308BF9] border-[#308BF9] text-white" : "bg-white border-[#E1E6ED]"} ${onClick ? "cursor-pointer" : ""} ${onClick && !accent ? "hover:border-[#308BF9]" : ""}`}
+    >
       <div className={`text-[12px] ${accent ? "opacity-80" : "text-[#535359]"}`}>{label}</div>
       <div className={`text-[28px] font-bold ${accent ? "" : "text-[#252525]"}`}>{value}</div>
       <div className={`text-[11px] ${accent ? "opacity-80" : "text-[#A1A1A1]"}`}>{hint}</div>
-    </div>
+    </Tag>
   );
 }
 
 export default function FacilitiesPanel({ isSuperAdmin = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  // Super admin: the Facilities / Trainers / Active members cards are tabs;
+  // the selected one is blue and picks the list shown below them.
+  const [tab, setTab] = useState("facilities"); // "facilities" | "trainers" | "members"
+  // Bumped on every successful load so Refresh also reloads the open list.
+  const [reloadTick, setReloadTick] = useState(0);
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -51,6 +65,12 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   const [revokingId, setRevokingId] = useState(null);
   const [confirmRevoke, setConfirmRevoke] = useState(null); // pending invite awaiting "Are you sure?"
   const [resendingId, setResendingId] = useState(null);
+  // Super admin: facility row clicked → detail popup.
+  const [openFacility, setOpenFacility] = useState(null);
+  const closeFacility = useCallback(() => setOpenFacility(null), []);
+  // Super admin: Trainers / Active members count clicked → list popup.
+  const [peopleTarget, setPeopleTarget] = useState(null); // { facility, view: "trainers" | "members" }
+  const closePeople = useCallback(() => setPeopleTarget(null), []);
   // Seconds left before "Resend" is allowed again, per invite — set after a
   // successful send (server cooldown) or from a 429's retry_after_seconds.
   const [cooldowns, setCooldowns] = useState({});
@@ -65,13 +85,20 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await listFacilitiesService());
+      const res = await listFacilitiesService({ page, limit: PAGE_SIZE });
+      // Rows were removed and this page is now past the end: step back.
+      if (res?.pagination && page > res.pagination.total_pages) {
+        setPage(res.pagination.total_pages);
+        return;
+      }
+      setData(res);
+      setReloadTick((n) => n + 1);
     } catch (err) {
       toast.error(err?.message || "Failed to load facilities");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page]);
 
   // Stickers the caller holds that are not set up yet — offered in the form.
   const loadStickers = useCallback(async () => {
@@ -85,8 +112,11 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  useEffect(() => {
     loadStickers();
-  }, [load, loadStickers]);
+  }, [loadStickers]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const isFacility = form.type === "facility";
@@ -190,9 +220,9 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
 
       {t && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card label="Facilities" value={t.facilities} hint={`${t.pending_invites} invite${t.pending_invites === 1 ? "" : "s"} pending`} accent />
-          <Card label="Trainers" value={t.trainers} hint="Across all facilities" />
-          <Card label="Active members" value={t.active_subscriptions} hint="Referred subscriptions" />
+          <Card label="Facilities" value={t.facilities} hint={`${t.pending_invites} invite${t.pending_invites === 1 ? "" : "s"} pending`} accent={tab === "facilities"} onClick={isSuperAdmin ? () => setTab("facilities") : undefined} />
+          <Card label="Trainers" value={t.trainers} hint="Across all facilities" accent={tab === "trainers"} onClick={isSuperAdmin ? () => setTab("trainers") : undefined} />
+          <Card label="Active members" value={t.active_subscriptions} hint="Referred subscriptions" accent={tab === "members"} onClick={isSuperAdmin ? () => setTab("members") : undefined} />
           <Card label="Commission owed" value={formatMinor(t.owed_minor)} hint="Pending + on hold" />
         </div>
       )}
@@ -280,6 +310,15 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
         </div>
       )}
 
+      {tab !== "facilities" ? (
+        <div className="flex flex-col gap-2">
+          <h2 className="text-[#252525] text-[14px] font-bold">
+            {tab === "trainers" ? "Trainers" : "Active members"} <span className="text-[#A1A1A1] font-semibold">· All facilities</span>
+          </h2>
+          <FacilityPeopleList key={`${tab}-${reloadTick}`} facility={null} view={tab} />
+        </div>
+      ) : (
+      <>
       {loading && !data ? (
         <div className="text-[#A1A1A1] text-[13px]">Loading&hellip;</div>
       ) : (data?.facilities?.length || 0) === 0 ? (
@@ -303,15 +342,41 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
               {data.facilities.map((f) => {
                 const p = PAYOUT[f.payout_status] || PAYOUT.not_started;
                 return (
-                  <tr key={f.id} className="border-t border-[#F5F7FA]">
-                    <td className="py-2.5 px-4 text-[#252525] font-semibold">{f.name}</td>
+                  <tr
+                    key={f.id}
+                    className={`border-t border-[#F5F7FA] ${isSuperAdmin ? "cursor-pointer hover:bg-[#F5F7FA]" : ""}`}
+                    onClick={isSuperAdmin ? () => setOpenFacility(f) : undefined}
+                  >
+                    <td className="py-2.5 px-4 font-semibold">
+                      {isSuperAdmin ? (
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setOpenFacility(f); }} className="text-[#308BF9] hover:underline text-left cursor-pointer">
+                          {f.name}
+                        </button>
+                      ) : (
+                        <span className="text-[#252525]">{f.name}</span>
+                      )}
+                    </td>
                     <td className="py-2.5 px-4">
                       <div className="text-[#252525]">{f.owner_name || "—"}</div>
                       <div className="text-[#A1A1A1] text-[11px]">{f.owner_user_id}</div>
                     </td>
                     <td className="py-2.5 px-4 text-[#535359] font-mono">{f.partner_code}</td>
-                    <td className="py-2.5 px-4 text-right text-[#252525]">{f.trainers_count}</td>
-                    <td className="py-2.5 px-4 text-right text-[#252525]">{f.active_subscriptions}</td>
+                    {[["trainers", f.trainers_count], ["members", f.active_subscriptions]].map(([view, n]) => (
+                      <td key={view} className="py-2.5 px-4 text-right text-[#252525]">
+                        {isSuperAdmin ? (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setPeopleTarget({ facility: f, view }); }}
+                            className="text-[#308BF9] font-semibold hover:underline cursor-pointer"
+                            title={view === "trainers" ? "View trainers" : "View active members"}
+                          >
+                            {n}
+                          </button>
+                        ) : (
+                          n
+                        )}
+                      </td>
+                    ))}
                     <td className="py-2.5 px-4 text-right text-[#252525] font-semibold">{formatMinor(f.owed_minor)}</td>
                     <td className="py-2.5 px-4 text-right text-[#535359]">{formatMinor(f.paid_minor)}</td>
                     <td className="py-2.5 px-4">
@@ -322,6 +387,25 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {data?.pagination && data.pagination.total_pages > 1 && (
+        <div className="flex items-center justify-between gap-3 text-[12px] text-[#535359] -mt-3">
+          <span>
+            {(data.pagination.page - 1) * data.pagination.limit + 1}–{Math.min(data.pagination.page * data.pagination.limit, data.pagination.total)} of {data.pagination.total} facilities
+          </span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={loading || data.pagination.page <= 1} className="rounded-full bg-white border border-[#E1E6ED] px-3 py-1 font-semibold disabled:opacity-50 cursor-pointer">
+              Previous
+            </button>
+            <span>
+              Page {data.pagination.page} of {data.pagination.total_pages}
+            </span>
+            <button type="button" onClick={() => setPage((p) => Math.min(data.pagination.total_pages, p + 1))} disabled={loading || data.pagination.page >= data.pagination.total_pages} className="rounded-full bg-white border border-[#E1E6ED] px-3 py-1 font-semibold disabled:opacity-50 cursor-pointer">
+              Next
+            </button>
+          </div>
         </div>
       )}
 
@@ -374,6 +458,13 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
           </div>
         </div>
       )}
+      </>
+      )}
+
+      {isSuperAdmin && (
+        <FacilityDetailsDialog facility={openFacility} onClose={closeFacility} onShowPeople={(view) => setPeopleTarget({ facility: openFacility, view })} suspendEscape={!!peopleTarget} />
+      )}
+      {isSuperAdmin && <FacilityPeopleDialog target={peopleTarget} onClose={closePeople} />}
 
       <ConfirmDialog
         open={!!confirmRevoke}
