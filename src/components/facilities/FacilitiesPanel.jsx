@@ -8,7 +8,7 @@ import { listFacilitiesService, inviteFacilityAdminService, listQrService, setup
 import { inviteTrainerClientService, superAdminInviteTrainerService, resendUserInviteService } from "@/services/authService";
 import ConfirmDialog from "./ConfirmDialog";
 import FacilityDetailsDialog from "./FacilityDetailsDialog";
-import FacilityPeopleDialog from "./FacilityPeopleDialog";
+import FacilityPeopleDialog, { FacilityPeopleList } from "./FacilityPeopleDialog";
 
 /**
  * Facilities (gyms / studios) — shared by trainer admin (their own) and super
@@ -38,12 +38,12 @@ function Card({ label, value, hint, accent, onClick }) {
   const Tag = onClick ? "button" : "div";
   return (
     <Tag
-      {...(onClick && { type: "button", onClick })}
-      className={`rounded-[10px] p-5 flex flex-col gap-1 text-left ${accent ? "bg-[#308BF9] text-white" : "bg-white border border-[#E1E6ED]"} ${onClick ? "cursor-pointer hover:border-[#308BF9] hover:bg-[#F5F9FF]" : ""}`}
+      {...(onClick && { type: "button", onClick, "aria-pressed": !!accent })}
+      className={`rounded-[10px] p-5 flex flex-col gap-1 text-left border ${accent ? "bg-[#308BF9] border-[#308BF9] text-white" : "bg-white border-[#E1E6ED]"} ${onClick ? "cursor-pointer" : ""} ${onClick && !accent ? "hover:border-[#308BF9]" : ""}`}
     >
       <div className={`text-[12px] ${accent ? "opacity-80" : "text-[#535359]"}`}>{label}</div>
-      <div className={`text-[28px] font-bold ${accent ? "" : onClick ? "text-[#308BF9]" : "text-[#252525]"}`}>{value}</div>
-      <div className={`text-[11px] ${accent ? "opacity-80" : "text-[#A1A1A1]"}`}>{hint}{onClick && <span className="text-[#308BF9]"> · View list</span>}</div>
+      <div className={`text-[28px] font-bold ${accent ? "" : "text-[#252525]"}`}>{value}</div>
+      <div className={`text-[11px] ${accent ? "opacity-80" : "text-[#A1A1A1]"}`}>{hint}</div>
     </Tag>
   );
 }
@@ -52,6 +52,11 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  // Super admin: the Facilities / Trainers / Active members cards are tabs;
+  // the selected one is blue and picks the list shown below them.
+  const [tab, setTab] = useState("facilities"); // "facilities" | "trainers" | "members"
+  // Bumped on every successful load so Refresh also reloads the open list.
+  const [reloadTick, setReloadTick] = useState(0);
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -87,6 +92,7 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
         return;
       }
       setData(res);
+      setReloadTick((n) => n + 1);
     } catch (err) {
       toast.error(err?.message || "Failed to load facilities");
     } finally {
@@ -214,10 +220,9 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
 
       {t && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card label="Facilities" value={t.facilities} hint={`${t.pending_invites} invite${t.pending_invites === 1 ? "" : "s"} pending`} accent />
-          {/* Super admin: the two totals open the full list (facility: null = all). */}
-          <Card label="Trainers" value={t.trainers} hint="Across all facilities" onClick={isSuperAdmin ? () => setPeopleTarget({ facility: null, view: "trainers" }) : undefined} />
-          <Card label="Active members" value={t.active_subscriptions} hint="Referred subscriptions" onClick={isSuperAdmin ? () => setPeopleTarget({ facility: null, view: "members" }) : undefined} />
+          <Card label="Facilities" value={t.facilities} hint={`${t.pending_invites} invite${t.pending_invites === 1 ? "" : "s"} pending`} accent={tab === "facilities"} onClick={isSuperAdmin ? () => setTab("facilities") : undefined} />
+          <Card label="Trainers" value={t.trainers} hint="Across all facilities" accent={tab === "trainers"} onClick={isSuperAdmin ? () => setTab("trainers") : undefined} />
+          <Card label="Active members" value={t.active_subscriptions} hint="Referred subscriptions" accent={tab === "members"} onClick={isSuperAdmin ? () => setTab("members") : undefined} />
           <Card label="Commission owed" value={formatMinor(t.owed_minor)} hint="Pending + on hold" />
         </div>
       )}
@@ -305,6 +310,15 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
         </div>
       )}
 
+      {tab !== "facilities" ? (
+        <div className="flex flex-col gap-2">
+          <h2 className="text-[#252525] text-[14px] font-bold">
+            {tab === "trainers" ? "Trainers" : "Active members"} <span className="text-[#A1A1A1] font-semibold">· All facilities</span>
+          </h2>
+          <FacilityPeopleList key={`${tab}-${reloadTick}`} facility={null} view={tab} />
+        </div>
+      ) : (
+      <>
       {loading && !data ? (
         <div className="text-[#A1A1A1] text-[13px]">Loading&hellip;</div>
       ) : (data?.facilities?.length || 0) === 0 ? (
@@ -443,6 +457,8 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
             </table>
           </div>
         </div>
+      )}
+      </>
       )}
 
       {isSuperAdmin && (

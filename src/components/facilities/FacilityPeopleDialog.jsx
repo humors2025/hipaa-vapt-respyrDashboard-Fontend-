@@ -5,10 +5,11 @@ import { X } from "lucide-react";
 import { listFacilityPeopleService, formatMinor } from "@/services/commissionService";
 
 /**
- * Super admin › Facilities › click a facility's Trainers or Active members
- * count: lists the rows behind that number. `target` is { facility, view }
- * with view "trainers" | "members"; facility null = every facility (the
- * total cards), which adds a Facility column. Escape / overlay / × close it.
+ * Super admin › Facilities: the trainers or active members behind a count.
+ * FacilityPeopleList renders the list (also used inline by the Trainers /
+ * Active members tabs); the default export wraps it in a popup for one
+ * facility's counts. facility null = every facility, which adds a Facility
+ * column. Escape / overlay / × close the popup.
  */
 
 const STATUS = {
@@ -28,24 +29,130 @@ const fmtDate = (iso) => {
 const TH = "py-2.5 px-3 font-semibold whitespace-nowrap";
 const TD = "py-2.5 px-3 whitespace-nowrap";
 
-export default function FacilityPeopleDialog({ target, onClose }) {
+export function FacilityPeopleList({ facility, view, onCount }) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState(null);
-  const facilityId = target?.facility?.id ?? null;
-  const view = target?.view;
+  const facilityId = facility?.id ?? null;
 
   useEffect(() => {
     if (!view) return undefined;
     let cancelled = false;
     setItems(null);
     setError(null);
+    onCount?.(null);
     listFacilityPeopleService({ facilityId, view })
-      .then((res) => !cancelled && setItems(res.items || []))
+      .then((res) => {
+        if (cancelled) return;
+        setItems(res.items || []);
+        onCount?.((res.items || []).length);
+      })
       .catch((err) => !cancelled && setError(err?.message || "Could not load list"));
     return () => {
       cancelled = true;
     };
+    // onCount is a setter from the parent; refetch only when the target changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facilityId, view]);
+
+  const isTrainers = view === "trainers";
+  const all = !facility;
+  const facilityCell = (row) =>
+    all && <td className={`${TD} text-[#252525]`}>{row.facility_name || "—"}</td>;
+
+  return (
+    <>
+      {error ? (
+        <div className="rounded-[10px] bg-[#FCEAEB] text-[#B5363A] text-[12px] px-4 py-3">{error}</div>
+      ) : !items ? (
+        <div className="text-[#A1A1A1] text-[13px] py-10 text-center">Loading&hellip;</div>
+      ) : items.length === 0 ? (
+        <div className="rounded-[10px] border border-dashed border-[#E1E6ED] p-6 text-[#A1A1A1] text-[12px] text-center">
+          {`No ${isTrainers ? "active trainers" : "active members"} in ${all ? "any facility" : "this facility"}.`}
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-[10px] border border-[#E1E6ED]">
+          {isTrainers ? (
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="bg-[#F5F7FA] text-[#535359] text-left">
+                  <th className={TH}>Trainer</th>
+                  {all && <th className={TH}>Facility</th>}
+                  <th className={TH}>Phone</th>
+                  <th className={TH}>Code</th>
+                  <th className={`${TH} text-right`}>Split</th>
+                  <th className={`${TH} text-right`}>Active members</th>
+                  <th className={TH}>Status</th>
+                  <th className={TH}>Joined</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((t) => (
+                  <tr key={t.user_id} className="border-t border-[#F5F7FA]">
+                    <td className={TD}>
+                      <div className="text-[#252525]">{t.name || "—"}</div>
+                      <div className="text-[#A1A1A1] text-[11px]">{t.user_id}</div>
+                    </td>
+                    {facilityCell(t)}
+                    <td className={`${TD} text-[#535359]`}>{t.phone || "—"}</td>
+                    <td className={`${TD} font-mono text-[#535359]`}>{t.partner_code || "—"}</td>
+                    <td className={`${TD} text-right text-[#252525]`}>{t.commission_split_pct}%</td>
+                    <td className={`${TD} text-right text-[#252525]`}>{t.active_members}</td>
+                    <td className={TD}>
+                      <span className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 ${STATUS[t.status] || "bg-[#F5F7FA] text-[#535359]"}`}>{label(t.status)}</span>
+                    </td>
+                    <td className={`${TD} text-[#A1A1A1]`}>{fmtDate(t.joined_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="bg-[#F5F7FA] text-[#535359] text-left">
+                  <th className={TH}>Member</th>
+                  {all && <th className={TH}>Facility</th>}
+                  <th className={TH}>Plan</th>
+                  <th className={`${TH} text-right`}>Price</th>
+                  <th className={TH}>Status</th>
+                  <th className={TH}>Plan period</th>
+                  <th className={TH}>Code used</th>
+                  <th className={TH}>App linked</th>
+                  <th className={TH}>Purchased</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((m) => (
+                  <tr key={m.id} className="border-t border-[#F5F7FA]">
+                    <td className={TD}>
+                      <div className="text-[#252525]">{m.name || "—"}</div>
+                      <div className="text-[#A1A1A1] text-[11px]">{m.email || "—"}</div>
+                    </td>
+                    {facilityCell(m)}
+                    <td className={`${TD} text-[#535359]`}>{m.plan_code}</td>
+                    <td className={`${TD} text-right text-[#252525]`}>{formatMinor(m.amount_minor, m.currency)}</td>
+                    <td className={TD}>
+                      <span className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 ${STATUS[m.status] || "bg-[#F5F7FA] text-[#535359]"}`}>{label(m.status)}</span>
+                    </td>
+                    <td className={`${TD} text-[#535359]`}>{m.current_period_start ? `${fmtDate(m.current_period_start)} – ${fmtDate(m.current_period_end)}` : "—"}</td>
+                    <td className={TD}>
+                      <div className="font-mono text-[#535359]">{m.partner_code || "—"}</div>
+                      <div className="text-[#A1A1A1] text-[11px]">{[m.code_owner_name, m.qr_id && `QR ${m.qr_id}`].filter(Boolean).join(" · ")}</div>
+                    </td>
+                    <td className={`${TD} text-[#535359]`}>{m.app_linked ? "Yes" : "No"}</td>
+                    <td className={`${TD} text-[#A1A1A1]`}>{fmtDate(m.purchased_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+export default function FacilityPeopleDialog({ target, onClose }) {
+  const [count, setCount] = useState(null);
 
   useEffect(() => {
     if (!target) return undefined;
@@ -56,11 +163,8 @@ export default function FacilityPeopleDialog({ target, onClose }) {
 
   if (!target) return null;
 
-  const isTrainers = view === "trainers";
-  const title = isTrainers ? "Trainers" : "Active members";
+  const title = target.view === "trainers" ? "Trainers" : "Active members";
   const all = !target.facility;
-  const facilityCell = (row) =>
-    all && <td className={`${TD} text-[#252525]`}>{row.facility_name || "—"}</td>;
 
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={`${all ? "All facilities" : target.facility.name} ${title}`}>
@@ -70,7 +174,7 @@ export default function FacilityPeopleDialog({ target, onClose }) {
           <div className="min-w-0">
             <h2 className="text-[#252525] text-[18px] font-bold leading-tight">
               {title}
-              {items && <span className="ml-1.5 text-[#A1A1A1] font-semibold">({items.length})</span>}
+              {count != null && <span className="ml-1.5 text-[#A1A1A1] font-semibold">({count})</span>}
             </h2>
             <div className="text-[#535359] text-[12px] mt-1">
               {all ? "All facilities" : <>{target.facility.name} · <span className="font-mono">{target.facility.partner_code}</span></>}
@@ -82,92 +186,7 @@ export default function FacilityPeopleDialog({ target, onClose }) {
         </div>
 
         <div className="overflow-y-auto px-6 py-5">
-          {error ? (
-            <div className="rounded-[10px] bg-[#FCEAEB] text-[#B5363A] text-[12px] px-4 py-3">{error}</div>
-          ) : !items ? (
-            <div className="text-[#A1A1A1] text-[13px] py-10 text-center">Loading&hellip;</div>
-          ) : items.length === 0 ? (
-            <div className="rounded-[10px] border border-dashed border-[#E1E6ED] p-6 text-[#A1A1A1] text-[12px] text-center">
-              {`No ${isTrainers ? "active trainers" : "active members"} in ${all ? "any facility" : "this facility"}.`}
-            </div>
-          ) : (
-            <div className="overflow-x-auto rounded-[10px] border border-[#E1E6ED]">
-              {isTrainers ? (
-                <table className="w-full text-[12px]">
-                  <thead>
-                    <tr className="bg-[#F5F7FA] text-[#535359] text-left">
-                      <th className={TH}>Trainer</th>
-                      {all && <th className={TH}>Facility</th>}
-                      <th className={TH}>Phone</th>
-                      <th className={TH}>Code</th>
-                      <th className={`${TH} text-right`}>Split</th>
-                      <th className={`${TH} text-right`}>Active members</th>
-                      <th className={TH}>Status</th>
-                      <th className={TH}>Joined</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((t) => (
-                      <tr key={t.user_id} className="border-t border-[#F5F7FA]">
-                        <td className={TD}>
-                          <div className="text-[#252525]">{t.name || "—"}</div>
-                          <div className="text-[#A1A1A1] text-[11px]">{t.user_id}</div>
-                        </td>
-                        {facilityCell(t)}
-                        <td className={`${TD} text-[#535359]`}>{t.phone || "—"}</td>
-                        <td className={`${TD} font-mono text-[#535359]`}>{t.partner_code || "—"}</td>
-                        <td className={`${TD} text-right text-[#252525]`}>{t.commission_split_pct}%</td>
-                        <td className={`${TD} text-right text-[#252525]`}>{t.active_members}</td>
-                        <td className={TD}>
-                          <span className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 ${STATUS[t.status] || "bg-[#F5F7FA] text-[#535359]"}`}>{label(t.status)}</span>
-                        </td>
-                        <td className={`${TD} text-[#A1A1A1]`}>{fmtDate(t.joined_at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <table className="w-full text-[12px]">
-                  <thead>
-                    <tr className="bg-[#F5F7FA] text-[#535359] text-left">
-                      <th className={TH}>Member</th>
-                      {all && <th className={TH}>Facility</th>}
-                      <th className={TH}>Plan</th>
-                      <th className={`${TH} text-right`}>Price</th>
-                      <th className={TH}>Status</th>
-                      <th className={TH}>Plan period</th>
-                      <th className={TH}>Code used</th>
-                      <th className={TH}>App linked</th>
-                      <th className={TH}>Purchased</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((m) => (
-                      <tr key={m.id} className="border-t border-[#F5F7FA]">
-                        <td className={TD}>
-                          <div className="text-[#252525]">{m.name || "—"}</div>
-                          <div className="text-[#A1A1A1] text-[11px]">{m.email || "—"}</div>
-                        </td>
-                        {facilityCell(m)}
-                        <td className={`${TD} text-[#535359]`}>{m.plan_code}</td>
-                        <td className={`${TD} text-right text-[#252525]`}>{formatMinor(m.amount_minor, m.currency)}</td>
-                        <td className={TD}>
-                          <span className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 ${STATUS[m.status] || "bg-[#F5F7FA] text-[#535359]"}`}>{label(m.status)}</span>
-                        </td>
-                        <td className={`${TD} text-[#535359]`}>{m.current_period_start ? `${fmtDate(m.current_period_start)} – ${fmtDate(m.current_period_end)}` : "—"}</td>
-                        <td className={TD}>
-                          <div className="font-mono text-[#535359]">{m.partner_code || "—"}</div>
-                          <div className="text-[#A1A1A1] text-[11px]">{[m.code_owner_name, m.qr_id && `QR ${m.qr_id}`].filter(Boolean).join(" · ")}</div>
-                        </td>
-                        <td className={`${TD} text-[#535359]`}>{m.app_linked ? "Yes" : "No"}</td>
-                        <td className={`${TD} text-[#A1A1A1]`}>{fmtDate(m.purchased_at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
+          <FacilityPeopleList facility={target.facility} view={target.view} onCount={setCount} />
         </div>
       </div>
     </div>
