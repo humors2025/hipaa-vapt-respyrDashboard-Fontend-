@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { cookieManager } from "@/lib/cookies";
 import { toast } from "sonner";
 import { logoutService } from "@/services/authService";
+import { decodeAccessTokenRole } from "@/components/Header";
 
 const MonoIcon = ({ src, size = 20, color = "#A1A1A1", alt = "" }) => (
   <span
@@ -44,6 +45,9 @@ const MENU = [
 // "ta_analytics_enabled" cookie to "1" only when there is at least one group.
 const TA_ANALYTICS_PATH = "/trainer-admin/analytics";
 
+// Earnings is hidden for trainer admins whose token role is "admin".
+const EARNINGS_PATH = "/trainer-admin/earnings";
+
 export default function TrainerAdminHeader() {
   const pathname = usePathname();
   const router = useRouter();
@@ -53,6 +57,8 @@ export default function TrainerAdminHeader() {
   // (js-cookie is client-only) so the first render matches the server and we
   // avoid a hydration mismatch. Defaults to hidden until the flag is confirmed.
   const [showAnalytics, setShowAnalytics] = useState(false);
+  // Same pattern: hidden until the token role is read on the client.
+  const [showEarnings, setShowEarnings] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const mobileMenuRef = useRef(null);
@@ -77,11 +83,14 @@ export default function TrainerAdminHeader() {
 
   useEffect(() => {
     setShowAnalytics(cookieManager.get("ta_analytics_enabled") === "1");
+    setShowEarnings(decodeAccessTokenRole() !== "admin");
   }, []);
 
-  const menu = showAnalytics
-    ? MENU
-    : MENU.filter((m) => m.path !== TA_ANALYTICS_PATH);
+  const menu = MENU.filter(
+    (m) =>
+      (showAnalytics || m.path !== TA_ANALYTICS_PATH) &&
+      (showEarnings || m.path !== EARNINGS_PATH)
+  );
 
   // const handleLogout = () => {
   //   try {
