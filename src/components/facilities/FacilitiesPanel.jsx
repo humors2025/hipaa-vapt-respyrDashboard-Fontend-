@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { listFacilitiesService, inviteFacilityAdminService, listQrService, setupQrService, revokeInviteService, formatMinor } from "@/services/commissionService";
 import { inviteTrainerClientService, superAdminInviteTrainerService, resendUserInviteService } from "@/services/authService";
 import ConfirmDialog from "./ConfirmDialog";
+import FacilityDetailsDialog from "./FacilityDetailsDialog";
 
 /**
  * Facilities (gyms / studios) — shared by trainer admin (their own) and super
@@ -51,6 +52,9 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   const [revokingId, setRevokingId] = useState(null);
   const [confirmRevoke, setConfirmRevoke] = useState(null); // pending invite awaiting "Are you sure?"
   const [resendingId, setResendingId] = useState(null);
+  // Super admin: facility row clicked → detail popup.
+  const [openFacility, setOpenFacility] = useState(null);
+  const closeFacility = useCallback(() => setOpenFacility(null), []);
   // Seconds left before "Resend" is allowed again, per invite — set after a
   // successful send (server cooldown) or from a 429's retry_after_seconds.
   const [cooldowns, setCooldowns] = useState({});
@@ -303,8 +307,20 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
               {data.facilities.map((f) => {
                 const p = PAYOUT[f.payout_status] || PAYOUT.not_started;
                 return (
-                  <tr key={f.id} className="border-t border-[#F5F7FA]">
-                    <td className="py-2.5 px-4 text-[#252525] font-semibold">{f.name}</td>
+                  <tr
+                    key={f.id}
+                    className={`border-t border-[#F5F7FA] ${isSuperAdmin ? "cursor-pointer hover:bg-[#F5F7FA]" : ""}`}
+                    onClick={isSuperAdmin ? () => setOpenFacility(f) : undefined}
+                  >
+                    <td className="py-2.5 px-4 font-semibold">
+                      {isSuperAdmin ? (
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setOpenFacility(f); }} className="text-[#308BF9] hover:underline text-left cursor-pointer">
+                          {f.name}
+                        </button>
+                      ) : (
+                        <span className="text-[#252525]">{f.name}</span>
+                      )}
+                    </td>
                     <td className="py-2.5 px-4">
                       <div className="text-[#252525]">{f.owner_name || "—"}</div>
                       <div className="text-[#A1A1A1] text-[11px]">{f.owner_user_id}</div>
@@ -374,6 +390,8 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
           </div>
         </div>
       )}
+
+      {isSuperAdmin && <FacilityDetailsDialog facility={openFacility} onClose={closeFacility} />}
 
       <ConfirmDialog
         open={!!confirmRevoke}

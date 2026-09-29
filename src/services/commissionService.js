@@ -19,6 +19,10 @@ const post = (endpoint, body = {}) =>
 export const listFacilitiesService = () =>
   post(API_ENDPOINTS.COMMISSION.LISTFACILITIES);
 
+// Super admin: everything about one facility, for the Facilities detail popup.
+export const fetchFacilityDetailsService = (facilityId) =>
+  post(API_ENDPOINTS.COMMISSION.FACILITYDETAILS, { facility_id: facilityId });
+
 export const inviteFacilityAdminService = ({ firstName, lastName, email, phone, facilityName }) =>
   post(API_ENDPOINTS.COMMISSION.INVITEFACILITYADMIN, {
     first_name: firstName,
