@@ -16,8 +16,13 @@ const post = (endpoint, body = {}) =>
 
 // ── Facilities (trainer-admin / super-admin) ─────────────────────────────────
 
-export const listFacilitiesService = () =>
-  post(API_ENDPOINTS.COMMISSION.LISTFACILITIES);
+// Pass { page, limit } for one page (response then has `pagination`); no args = every facility.
+export const listFacilitiesService = (paging) =>
+  post(API_ENDPOINTS.COMMISSION.LISTFACILITIES, paging || {});
+
+// Super admin: the trainers or active members behind a facility's counts.
+export const listFacilityPeopleService = ({ facilityId, view }) =>
+  post(API_ENDPOINTS.COMMISSION.FACILITYPEOPLE, { facility_id: facilityId, view });
 
 export const inviteFacilityAdminService = ({ firstName, lastName, email, phone, facilityName }) =>
   post(API_ENDPOINTS.COMMISSION.INVITEFACILITYADMIN, {

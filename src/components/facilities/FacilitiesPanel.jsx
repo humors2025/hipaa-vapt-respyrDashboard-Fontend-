@@ -8,6 +8,7 @@ import { listFacilitiesService, inviteFacilityAdminService, listQrService, setup
 import { inviteTrainerClientService, superAdminInviteTrainerService, resendUserInviteService } from "@/services/authService";
 import ConfirmDialog from "./ConfirmDialog";
 import FacilityDetailsDialog from "./FacilityDetailsDialog";
+import FacilityPeopleDialog from "./FacilityPeopleDialog";
 
 /**
  * Facilities (gyms / studios) — shared by trainer admin (their own) and super
@@ -30,6 +31,8 @@ const EMPTY = { type: "facility", qrId: "", firstName: "", lastName: "", email: 
 const NO_STICKER = "__none__";
 // Mirrors the API's per-recipient cooldown (EMAIL_RESEND_COOLDOWN_SECONDS, default 60).
 const RESEND_COOLDOWN_SECONDS = 60;
+// Facilities per page (list-facilities `limit`).
+const PAGE_SIZE = 10;
 
 function Card({ label, value, hint, accent }) {
   return (
@@ -44,6 +47,7 @@ function Card({ label, value, hint, accent }) {
 export default function FacilitiesPanel({ isSuperAdmin = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -55,6 +59,9 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   // Super admin: facility row clicked → detail popup.
   const [openFacility, setOpenFacility] = useState(null);
   const closeFacility = useCallback(() => setOpenFacility(null), []);
+  // Super admin: Trainers / Active members count clicked → list popup.
+  const [peopleTarget, setPeopleTarget] = useState(null); // { facility, view: "trainers" | "members" }
+  const closePeople = useCallback(() => setPeopleTarget(null), []);
   // Seconds left before "Resend" is allowed again, per invite — set after a
   // successful send (server cooldown) or from a 429's retry_after_seconds.
   const [cooldowns, setCooldowns] = useState({});
@@ -69,13 +76,19 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await listFacilitiesService());
+      const res = await listFacilitiesService({ page, limit: PAGE_SIZE });
+      // Rows were removed and this page is now past the end: step back.
+      if (res?.pagination && page > res.pagination.total_pages) {
+        setPage(res.pagination.total_pages);
+        return;
+      }
+      setData(res);
     } catch (err) {
       toast.error(err?.message || "Failed to load facilities");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page]);
 
   // Stickers the caller holds that are not set up yet — offered in the form.
   const loadStickers = useCallback(async () => {
@@ -89,8 +102,11 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  useEffect(() => {
     loadStickers();
-  }, [load, loadStickers]);
+  }, [loadStickers]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const isFacility = form.type === "facility";
@@ -326,8 +342,22 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
                       <div className="text-[#A1A1A1] text-[11px]">{f.owner_user_id}</div>
                     </td>
                     <td className="py-2.5 px-4 text-[#535359] font-mono">{f.partner_code}</td>
-                    <td className="py-2.5 px-4 text-right text-[#252525]">{f.trainers_count}</td>
-                    <td className="py-2.5 px-4 text-right text-[#252525]">{f.active_subscriptions}</td>
+                    {[["trainers", f.trainers_count], ["members", f.active_subscriptions]].map(([view, n]) => (
+                      <td key={view} className="py-2.5 px-4 text-right text-[#252525]">
+                        {isSuperAdmin ? (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setPeopleTarget({ facility: f, view }); }}
+                            className="text-[#308BF9] font-semibold hover:underline cursor-pointer"
+                            title={view === "trainers" ? "View trainers" : "View active members"}
+                          >
+                            {n}
+                          </button>
+                        ) : (
+                          n
+                        )}
+                      </td>
+                    ))}
                     <td className="py-2.5 px-4 text-right text-[#252525] font-semibold">{formatMinor(f.owed_minor)}</td>
                     <td className="py-2.5 px-4 text-right text-[#535359]">{formatMinor(f.paid_minor)}</td>
                     <td className="py-2.5 px-4">
@@ -338,6 +368,25 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {data?.pagination && data.pagination.total_pages > 1 && (
+        <div className="flex items-center justify-between gap-3 text-[12px] text-[#535359] -mt-3">
+          <span>
+            {(data.pagination.page - 1) * data.pagination.limit + 1}–{Math.min(data.pagination.page * data.pagination.limit, data.pagination.total)} of {data.pagination.total} facilities
+          </span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={loading || data.pagination.page <= 1} className="rounded-full bg-white border border-[#E1E6ED] px-3 py-1 font-semibold disabled:opacity-50 cursor-pointer">
+              Previous
+            </button>
+            <span>
+              Page {data.pagination.page} of {data.pagination.total_pages}
+            </span>
+            <button type="button" onClick={() => setPage((p) => Math.min(data.pagination.total_pages, p + 1))} disabled={loading || data.pagination.page >= data.pagination.total_pages} className="rounded-full bg-white border border-[#E1E6ED] px-3 py-1 font-semibold disabled:opacity-50 cursor-pointer">
+              Next
+            </button>
+          </div>
         </div>
       )}
 
@@ -391,7 +440,10 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
         </div>
       )}
 
-      {isSuperAdmin && <FacilityDetailsDialog facility={openFacility} onClose={closeFacility} />}
+      {isSuperAdmin && (
+        <FacilityDetailsDialog facility={openFacility} onClose={closeFacility} onShowPeople={(view) => setPeopleTarget({ facility: openFacility, view })} suspendEscape={!!peopleTarget} />
+      )}
+      {isSuperAdmin && <FacilityPeopleDialog target={peopleTarget} onClose={closePeople} />}
 
       <ConfirmDialog
         open={!!confirmRevoke}

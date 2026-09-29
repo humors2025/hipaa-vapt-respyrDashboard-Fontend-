@@ -35,15 +35,16 @@ function Row({ name, children }) {
   );
 }
 
-export default function FacilityDetailsDialog({ facility, onClose }) {
+export default function FacilityDetailsDialog({ facility, onClose, onShowPeople, suspendEscape = false }) {
   const open = !!facility;
 
   useEffect(() => {
-    if (!open) return undefined;
+    // Escape is left to the Trainers / Active members list while it is open.
+    if (!open || suspendEscape) return undefined;
     const onKey = (e) => e.key === "Escape" && onClose?.();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, suspendEscape]);
 
   if (!open) return null;
 
@@ -68,16 +69,30 @@ export default function FacilityDetailsDialog({ facility, onClose }) {
 
         <div className="grid grid-cols-2 gap-3">
           {[
-            ["Trainers", f.trainers_count],
-            ["Active members", f.active_subscriptions],
+            ["Trainers", f.trainers_count, "trainers"],
+            ["Active members", f.active_subscriptions, "members"],
             ["Commission owed", formatMinor(f.owed_minor)],
             ["Commission paid", formatMinor(f.paid_minor)],
-          ].map(([k, v]) => (
-            <div key={k} className="rounded-[10px] border border-[#E1E6ED] p-3">
-              <div className="text-[11px] text-[#535359]">{k}</div>
-              <div className="text-[18px] font-bold text-[#252525]">{v}</div>
-            </div>
-          ))}
+          ].map(([k, v, view]) =>
+            view && onShowPeople ? (
+              // Trainers / Active members open the list behind the number.
+              <button
+                key={k}
+                type="button"
+                onClick={() => onShowPeople(view)}
+                className="rounded-[10px] border border-[#E1E6ED] p-3 text-left hover:border-[#308BF9] hover:bg-[#F5F9FF] cursor-pointer"
+              >
+                <div className="text-[11px] text-[#535359]">{k}</div>
+                <div className="text-[18px] font-bold text-[#308BF9]">{v}</div>
+                <div className="text-[10px] text-[#308BF9]">View list</div>
+              </button>
+            ) : (
+              <div key={k} className="rounded-[10px] border border-[#E1E6ED] p-3">
+                <div className="text-[11px] text-[#535359]">{k}</div>
+                <div className="text-[18px] font-bold text-[#252525]">{v}</div>
+              </div>
+            )
+          )}
         </div>
 
         <div className="rounded-[10px] border border-[#E1E6ED] px-4 py-1">
