@@ -34,13 +34,17 @@ const RESEND_COOLDOWN_SECONDS = 60;
 // Facilities per page (list-facilities `limit`).
 const PAGE_SIZE = 10;
 
-function Card({ label, value, hint, accent }) {
+function Card({ label, value, hint, accent, onClick }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className={`rounded-[10px] p-5 flex flex-col gap-1 ${accent ? "bg-[#308BF9] text-white" : "bg-white border border-[#E1E6ED]"}`}>
+    <Tag
+      {...(onClick && { type: "button", onClick })}
+      className={`rounded-[10px] p-5 flex flex-col gap-1 text-left ${accent ? "bg-[#308BF9] text-white" : "bg-white border border-[#E1E6ED]"} ${onClick ? "cursor-pointer hover:border-[#308BF9] hover:bg-[#F5F9FF]" : ""}`}
+    >
       <div className={`text-[12px] ${accent ? "opacity-80" : "text-[#535359]"}`}>{label}</div>
-      <div className={`text-[28px] font-bold ${accent ? "" : "text-[#252525]"}`}>{value}</div>
-      <div className={`text-[11px] ${accent ? "opacity-80" : "text-[#A1A1A1]"}`}>{hint}</div>
-    </div>
+      <div className={`text-[28px] font-bold ${accent ? "" : onClick ? "text-[#308BF9]" : "text-[#252525]"}`}>{value}</div>
+      <div className={`text-[11px] ${accent ? "opacity-80" : "text-[#A1A1A1]"}`}>{hint}{onClick && <span className="text-[#308BF9]"> · View list</span>}</div>
+    </Tag>
   );
 }
 
@@ -211,8 +215,9 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
       {t && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card label="Facilities" value={t.facilities} hint={`${t.pending_invites} invite${t.pending_invites === 1 ? "" : "s"} pending`} accent />
-          <Card label="Trainers" value={t.trainers} hint="Across all facilities" />
-          <Card label="Active members" value={t.active_subscriptions} hint="Referred subscriptions" />
+          {/* Super admin: the two totals open the full list (facility: null = all). */}
+          <Card label="Trainers" value={t.trainers} hint="Across all facilities" onClick={isSuperAdmin ? () => setPeopleTarget({ facility: null, view: "trainers" }) : undefined} />
+          <Card label="Active members" value={t.active_subscriptions} hint="Referred subscriptions" onClick={isSuperAdmin ? () => setPeopleTarget({ facility: null, view: "members" }) : undefined} />
           <Card label="Commission owed" value={formatMinor(t.owed_minor)} hint="Pending + on hold" />
         </div>
       )}

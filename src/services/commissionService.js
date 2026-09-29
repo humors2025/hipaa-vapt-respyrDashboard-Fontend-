@@ -20,9 +20,10 @@ const post = (endpoint, body = {}) =>
 export const listFacilitiesService = (paging) =>
   post(API_ENDPOINTS.COMMISSION.LISTFACILITIES, paging || {});
 
-// Super admin: the trainers or active members behind a facility's counts.
+// Super admin: the trainers or active members behind a facility's counts;
+// facilityId omitted = every facility (the total cards).
 export const listFacilityPeopleService = ({ facilityId, view }) =>
-  post(API_ENDPOINTS.COMMISSION.FACILITYPEOPLE, { facility_id: facilityId, view });
+  post(API_ENDPOINTS.COMMISSION.FACILITYPEOPLE, facilityId ? { facility_id: facilityId, view } : { view });
 
 export const inviteFacilityAdminService = ({ firstName, lastName, email, phone, facilityName }) =>
   post(API_ENDPOINTS.COMMISSION.INVITEFACILITYADMIN, {
