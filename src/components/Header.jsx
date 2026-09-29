@@ -31,7 +31,7 @@ const MonoIcon = ({ src, size = 20, color = "#A1A1A1", alt = "" }) => (
   />
 );
 
-function decodeAccessTokenRole() {
+export function decodeAccessTokenRole() {
   try {
     const token = cookieManager.get("access_token");
     if (!token || typeof token !== "string") return null;
@@ -104,7 +104,8 @@ const hideHeaderPaths = [
           { name: "Dashboard", icon: "/icons/hugeicons_home-05.svg", path: "/trainer/dashboard" },
           // Referrals is trainer-only: facility admins have their own section.
           ...(userRole === "trainer" ? [{ name: "Referrals", icon: "/icons/hugeicons_view.svg", path: "/trainer/referrals" }] : []),
-          { name: "Earnings", icon: "/icons/hugeicons_award-01.svg", path: "/trainer/earnings" },
+          // Earnings is hidden for trainer admins (token role "admin").
+          ...(userRole !== "admin" ? [{ name: "Earnings", icon: "/icons/hugeicons_award-01.svg", path: "/trainer/earnings" }] : []),
           { name: "Settings", icon: "/icons/hugeicons_settings-03.svg", path: "/trainer/settings" },
         ]
       : [];
