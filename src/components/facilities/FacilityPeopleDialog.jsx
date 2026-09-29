@@ -28,31 +28,44 @@ const fmtDate = (iso) => {
 
 const TH = "py-2.5 px-3 font-semibold whitespace-nowrap";
 const TD = "py-2.5 px-3 whitespace-nowrap";
+// Rows per page (super-admin-facility-people `limit`).
+const PAGE_SIZE = 10;
 
 export function FacilityPeopleList({ facility, view, onCount }) {
   const [items, setItems] = useState(null);
+  const [pagination, setPagination] = useState(null);
   const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
   const facilityId = facility?.id ?? null;
+
+  // A different list starts again at page 1, without showing the old rows.
+  useEffect(() => {
+    setPage(1);
+    setItems(null);
+    setPagination(null);
+  }, [facilityId, view]);
 
   useEffect(() => {
     if (!view) return undefined;
     let cancelled = false;
-    setItems(null);
+    setLoading(true);
     setError(null);
-    onCount?.(null);
-    listFacilityPeopleService({ facilityId, view })
+    listFacilityPeopleService({ facilityId, view, page, limit: PAGE_SIZE })
       .then((res) => {
         if (cancelled) return;
         setItems(res.items || []);
-        onCount?.((res.items || []).length);
+        setPagination(res.pagination || null);
+        onCount?.(res.total ?? (res.items || []).length);
       })
-      .catch((err) => !cancelled && setError(err?.message || "Could not load list"));
+      .catch((err) => !cancelled && setError(err?.message || "Could not load list"))
+      .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-    // onCount is a setter from the parent; refetch only when the target changes.
+    // onCount is a setter from the parent; refetch only when the list or page changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facilityId, view]);
+  }, [facilityId, view, page]);
 
   const isTrainers = view === "trainers";
   const all = !facility;
@@ -145,6 +158,24 @@ export function FacilityPeopleList({ facility, view, onCount }) {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+      {pagination && pagination.total_pages > 1 && (
+        <div className="flex items-center justify-between gap-3 text-[12px] text-[#535359] mt-3">
+          <span>
+            {(pagination.page - 1) * pagination.limit + 1}–{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
+          </span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={loading || pagination.page <= 1} className="rounded-full bg-white border border-[#E1E6ED] px-3 py-1 font-semibold disabled:opacity-50 cursor-pointer">
+              Previous
+            </button>
+            <span>
+              Page {pagination.page} of {pagination.total_pages}
+            </span>
+            <button type="button" onClick={() => setPage((p) => Math.min(pagination.total_pages, p + 1))} disabled={loading || pagination.page >= pagination.total_pages} className="rounded-full bg-white border border-[#E1E6ED] px-3 py-1 font-semibold disabled:opacity-50 cursor-pointer">
+              Next
+            </button>
+          </div>
         </div>
       )}
     </>

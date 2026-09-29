@@ -22,8 +22,13 @@ export const listFacilitiesService = (paging) =>
 
 // Super admin: the trainers or active members behind a facility's counts;
 // facilityId omitted = every facility (the total cards).
-export const listFacilityPeopleService = ({ facilityId, view }) =>
-  post(API_ENDPOINTS.COMMISSION.FACILITYPEOPLE, facilityId ? { facility_id: facilityId, view } : { view });
+// Pass page/limit for one page (response then has `pagination`).
+export const listFacilityPeopleService = ({ facilityId, view, page, limit }) =>
+  post(API_ENDPOINTS.COMMISSION.FACILITYPEOPLE, {
+    ...(facilityId && { facility_id: facilityId }),
+    view,
+    ...(page != null && { page, limit }),
+  });
 
 export const inviteFacilityAdminService = ({ firstName, lastName, email, phone, facilityName }) =>
   post(API_ENDPOINTS.COMMISSION.INVITEFACILITYADMIN, {
