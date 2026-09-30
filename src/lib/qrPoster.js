@@ -75,6 +75,69 @@ function withTimeout(promise, ms) {
 }
 
 /**
+ * The three claims carried on rysflo.com's hero, minus the price. Icons are the
+ * site's own 24px paths, stroked onto the canvas through Path2D so the poster
+ * and the website say the same thing in the same marks.
+ */
+const FEATURES = [
+  {
+    label: "Device included",
+    paths: [
+      "M3.5 7.5 12 3.2l8.5 4.3v9L12 20.8 3.5 16.5v-9Z",
+      "M3.5 7.5 12 11.8l8.5-4.3M12 11.8v9",
+    ],
+  },
+  {
+    label: "AI meal plans",
+    paths: [
+      "M3.4 11.2h17.2a8.6 8.6 0 0 1-17.2 0Z",
+      "M9.2 8.1c0-1.3 1.2-1.9 1.2-3.1M12 7.7c0-1.5 1.4-2.1 1.4-3.4M14.8 8.1c0-1.1 1-1.7 1-2.7",
+    ],
+  },
+  {
+    label: "HIPAA compliant",
+    paths: [
+      "M12 2.6 4.4 5.9v5.5c0 4.7 3.1 8.4 7.6 10 4.5-1.6 7.6-5.3 7.6-10V5.9L12 2.6Z",
+      "M8.7 11.9l2.3 2.3 4.3-4.6",
+    ],
+  },
+];
+
+/** Stroke a 24x24 icon with its top-left at (x, y). */
+function icon(ctx, paths, x, y, size, color) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(size / 24, size / 24);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.6;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  for (const d of paths) ctx.stroke(new Path2D(d));
+  ctx.restore();
+}
+
+/** One centred row of icon + label, returning the height it used. */
+function featureRow(ctx, y, { size = 56, gap = 22, between = 110, color = SOFT } = {}) {
+  ctx.font = font(size, 500);
+  const items = FEATURES.map((f) => ({
+    ...f,
+    w: size + gap + ctx.measureText(f.label).width,
+  }));
+  const total = items.reduce((a, it) => a + it.w, 0) + between * (items.length - 1);
+  let x = W / 2 - total / 2;
+  ctx.textAlign = "left";
+  for (const it of items) {
+    icon(ctx, it.paths, x, y - size * 0.82, size, color);
+    ctx.fillStyle = color;
+    ctx.font = font(size, 500);
+    ctx.fillText(it.label, x + size + gap, y);
+    x += it.w + between;
+  }
+  ctx.textAlign = "center";
+  return size;
+}
+
+/**
  * @param {HTMLCanvasElement} qrCanvas  the QR already rendered on the page
  * @param {object} opts  { code?, facilityName?, stickerId?, url, kind }
  *
@@ -162,13 +225,15 @@ export async function buildQrPoster(qrCanvas, { code, stickerId, url, kind = "fa
   ctx.drawImage(qrCanvas, cardX + pad, cardY + pad, qrSize, qrSize);
   ctx.imageSmoothingEnabled = true;
 
-  // ── call to action ────────────────────────────────────────────────────────
-  y = cardY + card + 130;
-  line(ctx, "Point your phone camera at the code", y, { size: 66, weight: 500 });
+  // ── call to action ──────────────────────────────────────────────
+  y = cardY + card + 120;
+  line(ctx, "Point your phone camera at the code", y, { size: 60, weight: 500 });
 
-  // ── price band ────────────────────────────────────────────────────────────
-  y += 110;
-  const bandH = 230;
+  // ── promise band ───────────────────────────────────────────────
+  // Deliberately no price. These sheets go on a wall and stay there, and the
+  // price is the thing most likely to change underneath them.
+  y += 80;
+  const bandH = 160;
   const btn = ctx.createLinearGradient(0, y, 0, y + bandH);
   btn.addColorStop(0, BLUE);
   btn.addColorStop(1, BLUE_HI);
@@ -176,15 +241,18 @@ export async function buildQrPoster(qrCanvas, { code, stickerId, url, kind = "fa
   roundRect(ctx, 250, y, W - 500, bandH, 46);
   ctx.fill();
 
-  line(ctx, "$29 a month with this code", y + 95, { size: 76, weight: 600, color: PAPER });
-  line(ctx, "Normally $49 \u00b7 device included \u00b7 nothing upfront", y + 172, { size: 48, color: "rgba(255,255,255,0.86)" });
+  line(ctx, "See what your metabolism says", y + 102, { size: 76, weight: 600, color: PAPER });
   y += bandH;
+
+  // ── what they get ──────────────────────────────────────────────
+  y += 110;
+  y += featureRow(ctx, y);
 
   // ── footer ────────────────────────────────────────────────
   // No gym name and no partner code: the printed sheet is identical before and
   // after the sticker is mapped, so one print run serves every partner. The id
   // below is an inventory mark for the field team, not a code for the member.
-  y += 92;
+  y += 100;
   ctx.fillStyle = "rgba(255,255,255,0.10)";
   ctx.fillRect(250, y, W - 500, 2);
   y += 78;
