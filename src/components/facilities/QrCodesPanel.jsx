@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
-import { UserRound, Users, X } from "lucide-react";
+import { Download, UserRound, Users, X } from "lucide-react";
+import { buildQrPoster } from "@/lib/qrPoster";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   listQrService,
@@ -38,6 +39,85 @@ function StatusPill({ q }) {
   if (q.status !== "assigned" || !q.partner_code) return <span className="inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 bg-[#FFF4E0] text-[#A66B00]">not set up</span>;
   if (q.target_status === "pending") return <span className="inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 bg-[#EEF4FE] text-[#308BF9]">live · invite pending</span>;
   return <span className="inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 bg-[#E5F6EE] text-[#1F7A4A]">live</span>;
+}
+
+/**
+ * Clicking a sticker's QR shows the exact poster that sticker prints as, built
+ * by the same buildQrPoster the print sheet uses, so the preview never drifts
+ * from what ends up on the wall.
+ */
+function PosterPreview({ sticker, onClose }) {
+  const qrRef = useRef(null);
+  const [url, setUrl] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const cv = qrRef.current?.querySelector("canvas");
+      if (!cv) return;
+      try {
+        const png = await buildQrPoster(cv, { stickerId: sticker.id, url: stickerUrl(sticker.id), kind: "facility" });
+        if (alive) setUrl(png);
+      } catch {
+        if (alive) setFailed(true);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [sticker.id]);
+
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="relative bg-white rounded-[16px] shadow-[0_16px_48px_rgba(37,37,37,0.18)] w-full max-w-[460px] max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3">
+          <div className="min-w-0">
+            <div className="text-[#252525] text-[15px] font-bold">Sticker <span className="font-mono">{sticker.id}</span></div>
+            <div className="text-[#535359] text-[12px] mt-0.5 truncate">{sticker.target_label || "Not set up yet"}</div>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close" className="rounded-full p-1.5 text-[#A1A1A1] hover:bg-[#F5F7FA] hover:text-[#535359] cursor-pointer">
+            <X className="size-4" />
+          </button>
+        </div>
+
+        {/* Off-screen source canvas the poster is drawn from. */}
+        <div ref={qrRef} className="absolute -left-[9999px] top-0" aria-hidden="true">
+          <QRCodeCanvas value={stickerUrl(sticker.id)} size={1000} level="M" includeMargin />
+        </div>
+
+        <div className="px-5 overflow-y-auto">
+          {url ? (
+            <img src={url} alt={`Rysflo poster for sticker ${sticker.id}`} className="w-full rounded-[8px] border border-[#E1E6ED]" />
+          ) : (
+            <div className="w-full aspect-[2480/3508] rounded-[8px] bg-[#0f1114] flex items-center justify-center text-[#818a97] text-[12px]">
+              {failed ? "Could not build the poster." : "Building poster…"}
+            </div>
+          )}
+          <div className="text-[#A1A1A1] text-[11px] break-all mt-2">{stickerUrl(sticker.id)}</div>
+        </div>
+
+        <div className="flex justify-end gap-2 px-5 py-3 mt-2 border-t border-[#F5F7FA]">
+          <button type="button" onClick={onClose} className="rounded-[10px] border border-[#E1E6ED] bg-white text-[#535359] text-[12px] font-semibold px-4 py-2 hover:bg-[#F5F7FA] cursor-pointer">Close</button>
+          <a
+            href={url || undefined}
+            download={`rysflo-poster-${sticker.id}.png`}
+            aria-disabled={!url}
+            className={`inline-flex items-center gap-1.5 rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 ${url ? "cursor-pointer" : "opacity-50 pointer-events-none"}`}
+          >
+            <Download className="size-3.5" />
+            Download poster
+          </a>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function SetupForm({ sticker, onDone, onCancel }) {
@@ -118,6 +198,7 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
   const [filter, setFilter] = useState("all");
   const [setupId, setSetupId] = useState(null);
   const [preview, setPreview] = useState(null);
+  const closePreview = useCallback(() => setPreview(null), []);
   const [busy, setBusy] = useState(false);
   const [showAllocation, setShowAllocation] = useState(false); // super admin: who holds how many stickers
   const [revokingId, setRevokingId] = useState(null);
@@ -398,17 +479,7 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
         </div>
       )}
 
-      {preview && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setPreview(null)}>
-          <div className="bg-white rounded-[16px] p-6 flex flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
-            <QRCodeCanvas value={stickerUrl(preview.id)} size={240} includeMargin />
-            <div className="text-[#252525] text-[20px] font-bold font-mono tracking-[3px]">{preview.id}</div>
-            <div className="text-[#535359] text-[12px]">{preview.target_label || "Not set up yet"}</div>
-            <div className="text-[#A1A1A1] text-[11px] break-all">{stickerUrl(preview.id)}</div>
-            <button type="button" onClick={() => setPreview(null)} className="text-[12px] text-[#308BF9] font-semibold cursor-pointer">Close</button>
-          </div>
-        </div>
-      )}
+      {preview && <PosterPreview sticker={preview} onClose={closePreview} />}
     </div>
   );
 }
