@@ -139,6 +139,15 @@ export const fetchPricingService = () => post(API_ENDPOINTS.COMMISSION.GETPRICIN
 export const setPricingService = ({ listPrice, referredPrice, note }) =>
   post(API_ENDPOINTS.COMMISSION.SETPRICING, { list_price: listPrice, referred_price: referredPrice, note: note || undefined });
 
+// ── Settings Google Authenticator gate (super admin) ───────────────────────────────────
+
+export const fetchSettingsLockStatusService = () => post(API_ENDPOINTS.COMMISSION.SETTINGSLOCKSTATUS);
+export const requestSettingsCodeService = () => post(API_ENDPOINTS.COMMISSION.SETTINGSLOCKREQUEST);
+export const verifySettingsCodeService = ({ code }) => post(API_ENDPOINTS.COMMISSION.SETTINGSLOCKVERIFY, { code });
+export const startSettingsMfaSetupService = () => post(API_ENDPOINTS.COMMISSION.SETTINGSMFASETUP);
+export const confirmSettingsMfaSetupService = ({ code }) => post(API_ENDPOINTS.COMMISSION.SETTINGSMFACONFIRM, { code });
+export const verifySettingsMfaService = ({ code }) => post(API_ENDPOINTS.COMMISSION.SETTINGSMFAVERIFY, { code });
+
 // ── Formatting helpers shared by the earnings pages ──────────────────────────
 
 export function formatMinor(minor, currency = "USD") {

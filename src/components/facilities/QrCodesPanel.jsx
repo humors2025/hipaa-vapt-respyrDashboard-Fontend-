@@ -210,7 +210,16 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
               : "Your stickers. Set one up when you put it on a wall: choose Business or Personal trainer, enter the details, and it's live — the invite goes out automatically."}
           </p>
         </div>
-        <button type="button" onClick={load} disabled={loading} className="rounded-full bg-[#EEF4FE] text-[#308BF9] text-[11px] font-semibold px-3 py-1.5 disabled:opacity-60 cursor-pointer">{loading ? "Loading…" : "Refresh"}</button>
+        <div className="flex items-center gap-2">
+          {/* Trainer admins print the posters they carry into the field. Super
+              admins reach the same sheet through Generate & print. */}
+          {!isSuperAdmin && (
+            <a href="/trainer-admin/stickers/print" target="_blank" rel="noreferrer" className="rounded-full bg-[#308BF9] text-white text-[11px] font-semibold px-3 py-1.5 cursor-pointer">
+              Print posters
+            </a>
+          )}
+          <button type="button" onClick={load} disabled={loading} className="rounded-full bg-[#EEF4FE] text-[#308BF9] text-[11px] font-semibold px-3 py-1.5 disabled:opacity-60 cursor-pointer">{loading ? "Loading…" : "Refresh"}</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">

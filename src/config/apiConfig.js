@@ -183,6 +183,12 @@ export const API_ENDPOINTS = {
     LISTTRAINERADMINS: `/${API_VERSION}/dietitian/api/web/list-trainer-admins`,
     GETPRICING: `/${API_VERSION}/dietitian/api/web/get-pricing`,
     SETPRICING: `/${API_VERSION}/dietitian/api/web/set-pricing`,
+    SETTINGSLOCKSTATUS: `/${API_VERSION}/dietitian/api/web/settings-lock-status`,
+    SETTINGSLOCKREQUEST: `/${API_VERSION}/dietitian/api/web/settings-lock-request`,
+    SETTINGSLOCKVERIFY: `/${API_VERSION}/dietitian/api/web/settings-lock-verify`,
+    SETTINGSMFASETUP: `/${API_VERSION}/dietitian/api/web/settings-mfa-setup`,
+    SETTINGSMFACONFIRM: `/${API_VERSION}/dietitian/api/web/settings-mfa-confirm`,
+    SETTINGSMFAVERIFY: `/${API_VERSION}/dietitian/api/web/settings-mfa-verify`,
   },
 
   // Super Admin network-wide sales analytics (website vs trainer-code purchases).
