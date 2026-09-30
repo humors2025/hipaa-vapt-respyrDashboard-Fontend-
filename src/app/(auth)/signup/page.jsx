@@ -18,6 +18,7 @@ import {
   uploadAgreementPdfToS3,
 } from "@/services/authService";
 import Agreement from "@/components/agreement";
+import FacilityAdminAgreement from "@/components/facilityAdminAgreement";
 import { logClientEvent } from "@/lib/clientLogger";
  
  
@@ -130,7 +131,8 @@ function SignupForm() {
   const [pwError, setPwError] = useState("");
   const [cfError, setCfError] = useState("");
  
-  // Gate: user must accept the Device Evaluation Agreement before the
+  // Gate: user must accept the agreement for their role (referral partner
+  // terms for facility_admin, Device Evaluation Agreement otherwise) before the
   // password / signup form is shown. The signed agreement is captured as a
   // PDF (File) by the Agreement step and submitted with the invite acceptance.
   const [agreed, setAgreed] = useState(false);
@@ -395,7 +397,7 @@ payload.agreement_pdf_name =
         <div className="px-7 py-9 text-center">
           <div className="text-[20px] font-semibold text-[#252525] tracking-[-0.02em] mb-1">Agreement declined</div>
           <div className="text-[12px] text-[#738298] tracking-[-0.02em] mb-5">
-            You must accept the Device Evaluation Agreement to create your account.
+            You must accept the {role === "facility_admin" ? "referral partner terms" : "Device Evaluation Agreement"} to create your account.
           </div>
           <button
             type="button"
@@ -411,8 +413,11 @@ payload.agreement_pdf_name =
 
   /* ----- Agreement gate (must accept before signup form) ----- */
   if (!agreed) {
+    // Facility admins sign the referral partner terms; every other role keeps
+    // the Device Evaluation Agreement.
+    const AgreementStep = role === "facility_admin" ? FacilityAdminAgreement : Agreement;
     return (
-      <Agreement
+      <AgreementStep
         userEmail={email}
         onAccept={(pdf) => {
           setAgreementPdf(pdf);

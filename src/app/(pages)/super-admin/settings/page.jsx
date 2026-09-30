@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { fetchCommissionRateService, setCommissionRateService, fetchPricingService, setPricingService, formatMinor } from "@/services/commissionService";
+import SettingsLockGate, { isSettingsLocked } from "./SettingsLockGate";
 
 /**
  * Super admin › Settings. Today: the platform commission rate (Rysflo -> facility).
@@ -16,7 +17,7 @@ function fmt(v) {
   return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }) + " UTC";
 }
 
-function PricingSection() {
+function PricingSection({ onLocked }) {
   const [data, setData] = useState(null);
   const [list, setList] = useState("");
   const [referred, setReferred] = useState("");
@@ -60,6 +61,7 @@ function PricingSection() {
       setNote("");
       load();
     } catch (err) {
+      if (isSettingsLocked(err)) return onLocked();
       toast.error(err?.message || "Could not update pricing");
     } finally {
       setBusy(false);
@@ -104,6 +106,10 @@ function PricingSection() {
 }
 
 export default function SuperAdminSettingsPage() {
+  return <SettingsLockGate>{(relock) => <SettingsContent onLocked={relock} />}</SettingsLockGate>;
+}
+
+function SettingsContent({ onLocked }) {
   const [data, setData] = useState(null);
   const [rate, setRate] = useState("");
   const [effective, setEffective] = useState("");
@@ -145,6 +151,7 @@ export default function SuperAdminSettingsPage() {
       setNote("");
       load();
     } catch (err) {
+      if (isSettingsLocked(err)) return onLocked();
       toast.error(err?.message || "Could not update rate");
     } finally {
       setBusy(false);
@@ -160,7 +167,7 @@ export default function SuperAdminSettingsPage() {
         <p className="text-[#535359] text-[13px] mt-1">Platform-wide configuration for the referral programme.</p>
       </div>
 
-      <PricingSection />
+      <PricingSection onLocked={onLocked} />
 
       <section className="bg-white rounded-[15px] p-6 flex flex-col gap-4 max-w-[720px]">
         <div>
