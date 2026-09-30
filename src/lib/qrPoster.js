@@ -118,11 +118,18 @@ export async function buildQrPoster(qrCanvas, { code, stickerId, url, kind = "fa
     line(ctx, "rysflo", y, { size: 130, weight: 600 });
   }
 
-  // ── headline ──────────────────────────────────────────────────────────────
-  y = 640;
-  line(ctx, "MEASURED, NOT GUESSED", y, { size: 46, weight: 600, color: BLUE, spacing: 10 });
+  // Sits with the logo rather than the headline: it says what Rysflo is, to a
+  // reader who has never heard of it and is walking past a gym wall.
+  y = 400;
+  line(ctx, "Metabolism tracker for everyday gym members", y, {
+    size: 54,
+    weight: 500,
+    color: BLUE,
+    spacing: 2,
+  });
 
-  y += 170;
+  // ── headline ──────────────────────────────────────────────────────────────
+  y = 810;
   line(ctx, "See what your body", y, { size: 158, weight: 600 });
   y += 185;
   line(ctx, "is running on", y, { size: 158, weight: 600 });
