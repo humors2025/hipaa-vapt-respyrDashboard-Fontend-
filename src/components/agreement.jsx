@@ -23,15 +23,13 @@ const CheckIcon = ({ size = 10 }) => (
 )
 
 const CHECKBOX_ITEMS = [
-  <>I have read and agree to the <strong>NDA &amp; Device Evaluation Program Terms and Conditions</strong> above.</>,
-  <>I agree that I am <strong>financially responsible</strong> for the device(s) assigned to me for the duration of this testing period.</>,
-  <>I agree to <strong>ship the Respyr device(s)</strong> back upon request once the trial / feedback period has ended, after receiving a free return shipping label from Atlas Human Systems LLC.</>,
-  <>I agree to <strong>fill out and submit the feedback forms</strong> provided at least twice monthly.</>,
-  <>I agree to <strong>join at least one monthly video conference call</strong> (1–2 hours) with the Respyr Team to give feedback and discuss with other trainers.</>,
+  <>I have read and agree to the <strong>Rysflo Referral Partner Terms</strong> above.</>,
+  <>I understand commission is <strong>20% of what each member actually pays</strong>, every month they stay subscribed, and that <strong>nothing is payable if a member is refunded</strong>.</>,
+  <>I will not make <strong>medical claims</strong> about Rysflo, and I understand it is a wellness product, not a medical device.</>,
 ]
 
 export default function Agreement({ onAccept, onDecline, userEmail }) {
-  const [checks, setChecks] = useState(Array(5).fill(false))
+  const [checks, setChecks] = useState(Array(3).fill(false))
   const [selectAll, setSelectAll] = useState(false)
   const [scrolledToBottom, setScrolledToBottom] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -90,7 +88,7 @@ export default function Agreement({ onAccept, onDecline, userEmail }) {
     // Title
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(12)
-    writeLines(pdf.splitTextToSize('DEVICE EVALUATION PROGRAM TERMS AND CONDITIONS', maxWidth))
+    writeLines(pdf.splitTextToSize('RYSFLO REFERRAL PARTNER TERMS', maxWidth))
     y += lineHeight
 
     // Body
@@ -145,10 +143,10 @@ export default function Agreement({ onAccept, onDecline, userEmail }) {
         <RespyrIcon />
         <div className="flex-1">
           <div id="tcTitle" className="text-[15px] font-semibold text-[#252525] tracking-[-0.02em] leading-tight">
-            Device Evaluation Agreement
+            Rysflo Referral Partner Terms
           </div>
           <div className="text-[10px] text-[#738298] tracking-[-0.02em] mt-px">
-            Please read and accept before continuing
+            How your referral commission works. Please read before continuing.
           </div>
         </div>
       </div>
@@ -183,96 +181,84 @@ export default function Agreement({ onAccept, onDecline, userEmail }) {
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             <polyline points="14 2 14 8 20 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          DEVICE EVALUATION PROGRAM TERMS AND CONDITIONS
+          RYSFLO REFERRAL PARTNER TERMS
         </div>
 
         <div className="tc-scroll max-h-[260px] overflow-y-auto px-[22px] py-[18px] scroll-smooth" onScroll={handleScroll}>
           <div className="text-[11px] text-[#535359] leading-[1.7] tracking-[-0.02em]">
             <p className="text-[10px] text-[#738298] mb-3 px-2.5 py-2 bg-[#f5f7fa] rounded-[6px] border-l-[3px] border-[#308bf9]">
-              Effective Date: The date on which Physical Trainer (&ldquo;PT&rdquo;) enrolls in the Device Evaluation Program and accepts these Terms and Conditions.
+              Effective from the date you accept these terms and join the Rysflo Referral Programme.
             </p>
 
             <p className="text-[11px] font-medium text-[#252525] mb-3.5 px-3 py-2.5 bg-[#fff8ed] border border-[#e48326]/20 rounded-[8px]">
-              PLEASE READ THESE TERMS CAREFULLY. By selecting the checkbox indicating acceptance of these Terms and Conditions and enrolling in the Device Evaluation Program, PT agrees to be bound by these Terms and Conditions. If PT does not agree to these Terms and Conditions, PT may not enroll in the Device Evaluation Program or receive any Devices. These Terms and Conditions constitute a legally binding agreement between Atlas Sales Partners (&ldquo;Atlas Sales Partners&rdquo;) and the enrolling Physical Trainer (&ldquo;PT&rdquo;).
+              In short: you refer members, and Rysflo pays you 20% of what each of them pays, every month they stay. Please read the detail below before you accept.
             </p>
 
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">1. PURPOSE</h3>
+            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">1. WHAT YOU EARN</h3>
             <p className="mb-2">
-              Atlas Sales Partners agrees to provide PT with one or more wellness devices (&ldquo;Devices&rdquo;) solely for a temporary evaluation and testing period. PT may use the Devices personally and/or permit use by PT&apos;s customers solely for evaluation purposes consistent with this Agreement. This Agreement does not transfer ownership of any Device to PT or any customer.
+              Rysflo pays you <strong>20% of the amount each member you refer actually pays</strong>, for <strong>every month they stay subscribed</strong>. There is no cap and no end date &mdash; if a member stays for three years, you are paid for three years.
+            </p>
+            <p className="mb-2">
+              &ldquo;Actually pays&rdquo; means the amount charged after any discount or credit. Members earn up to $6 a month off their bill by taking daily readings, so a month with the full credit is charged at $23 and your commission that month is $4.60 rather than $5.80. The rate may change in future; any change applies only to payments after we tell you.
             </p>
 
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">2. TEST PERIOD</h3>
+            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">2. WHEN A MEMBER COUNTS AS YOURS</h3>
             <p className="mb-2">
-              The evaluation period shall begin on the Effective Date and continue for sixty (60) calendar days (&ldquo;Test Period&rdquo;) unless terminated earlier pursuant to this Agreement. Any extension of the Test Period must be agreed to in writing by both Parties. No verbal extension shall be valid.
+              A member is yours when they sign up through your QR code or referral code, or when they enter your code in the app. Attribution is recorded at the moment of purchase and does not move afterwards. If two codes could apply, the one used at purchase wins.
             </p>
 
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">3. DEVICE CUSTODY, CARE, AND RETURN</h3>
+            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">3. REFUNDS AND CANCELLATIONS</h3>
             <p className="mb-2">
-              <strong>3.1 Custody and Responsibility</strong><br />
-              PT acknowledges that all Devices remain the sole property of Atlas Sales Partners at all times. PT shall exercise reasonable care in the custody, handling, storage, and use of the Devices. PT agrees to keep Devices in clean, safe conditions; use them per instructions; prevent misuse; restrict use to PT and PT&apos;s customers under PT&apos;s supervision.
+              <strong>If a member is refunded, no commission is payable on the refunded payment.</strong> Every member has 30 days to return the device for a full refund; if they do, you earn nothing on that member. The same applies to any later refund or chargeback.
             </p>
             <p className="mb-2">
-              <strong>3.2 Condition of Devices</strong><br />
-              PT shall return all Devices in substantially the same condition as received, excluding reasonable wear and tear. PT shall promptly notify Atlas Sales Partners of any loss, malfunction, damage, or suspected defect.
-            </p>
-            <p className="mb-2">
-              <strong>3.3 No Alterations</strong><br />
-              PT shall not alter, disassemble, reverse engineer, repair, relabel, or modify any Device without Atlas Sales Partners&apos;s prior written consent.
+              If we have already paid you commission on a payment that is later refunded, we recover it &mdash; either by reversing the transfer or by deducting it from your next payout.
             </p>
 
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">4. APPROVED CLAIMS AND REPRESENTATIONS</h3>
+            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">4. HOW AND WHEN YOU ARE PAID</h3>
             <p className="mb-2">
-              PT agrees that any statements regarding the Devices shall strictly conform to the claims, indications, warnings, limitations, and instructions provided by Atlas Sales Partners. PT shall not make unauthorized medical, therapeutic, diagnostic, or performance claims, nor provide guarantees regarding health outcomes.
+              Payouts are made monthly through Stripe. To be paid you must complete Stripe&rsquo;s onboarding, which collects your bank details and tax information (W-9) and issues your 1099 at year end. Rysflo never sees or stores your bank details.
+            </p>
+            <p className="mb-2">
+              A payout is made once your balance reaches <strong>$25</strong>. Below that, the balance carries over to the following month. Commission accrues whether or not you have completed Stripe onboarding, but cannot be paid until you have.
             </p>
 
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">5. CUSTOMER FEEDBACK AND PUBLIC COMMUNICATIONS</h3>
+            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">5. GYMS AND THEIR TRAINERS</h3>
             <p className="mb-2">
-              <strong>5.1 No Public Reviews or Statements</strong><br />
-              During the Test Period and thereafter unless authorized in writing, PT shall not post, publish, or permit publication of reviews, testimonials, performance claims, ratings, photos, videos, social media posts, public comments, or promotional statements regarding the Devices.
+              If you are a gym, the 20% is paid to the gym. You decide what share, from 0% to 100%, each of your trainers receives for members who sign up under that trainer&rsquo;s own code, and you can change it at any time from your dashboard. A change applies to commission not yet paid out. Members who sign up under the gym&rsquo;s own QR code are 100% the gym&rsquo;s.
             </p>
             <p className="mb-2">
-              <strong>5.2 Private Feedback to Atlas Sales Partners</strong><br />
-              All feedback, observations, complaints, and evaluation results shall be communicated privately to Atlas Sales Partners via email, written report, phone call, or verbal discussion.
+              Trainers are paid by Rysflo directly out of the gym&rsquo;s 20%, at the share the gym has set. Rysflo does not decide that share and is not a party to any separate arrangement between a gym and its trainers.
             </p>
 
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">6. CUSTOMER HEALTH INFORMATION AND PRIVACY</h3>
+            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">6. WHAT YOU MAY AND MAY NOT SAY</h3>
             <p className="mb-2">
-              PT acknowledges that customer health-related information may be visible through the Device portal. PT agrees to access customer information only as necessary; keep it confidential; use reasonable care to protect customer privacy. The Device portal is designed to be HIPAA-compliant.
+              Rysflo is a <strong>wellness product. It is not a medical device</strong> and is not intended to diagnose, treat, cure or prevent any disease. You must not claim otherwise, promise health outcomes, or present readings as a diagnosis. Describe what it measures and let the readings speak.
             </p>
 
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">7. DEFECTIVE DEVICES AND RETURN SHIPPING</h3>
+            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">7. YOUR CODES AND QR MATERIAL</h3>
             <p className="mb-2">
-              PT shall promptly notify Atlas Sales Partners of any Device believed to be defective, damaged, or unsafe. Returned Devices shall be securely packaged. Atlas Sales Partners shall provide a prepaid return shipping label and bear reasonable return shipping costs.
+              Your referral code and any printed QR codes we issue remain Rysflo&rsquo;s. Use them to promote Rysflo honestly; do not alter them, sell them, or use them in paid advertising that bids on the Rysflo brand. Do not use them to refer yourself.
             </p>
 
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">8. DISCLAIMER</h3>
+            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">8. MEMBER INFORMATION</h3>
             <p className="mb-2">
-              PT acknowledges that the Devices are being provided for evaluation purposes only. Except as expressly stated in writing, Atlas Sales Partners makes no warranties, express or implied, including warranties of merchantability or fitness for a particular purpose.
+              Your dashboard shows the name, email and payment history of members who signed up through you. It does not show their health readings. Treat what you can see as confidential, use it only to support those members, and do not sell or share it.
             </p>
 
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">9. LIMITATION OF LIABILITY</h3>
+            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">9. ENDING THIS ARRANGEMENT</h3>
             <p className="mb-2">
-              To the maximum extent permitted by law, neither Party shall be liable to the other for any indirect, incidental, consequential, special, or punitive damages. Atlas Sales Partners&apos;s aggregate liability shall not exceed the value of the Devices provided.
+              Either of us may end your participation at any time, with notice. Commission already earned and not yet paid is still paid to you, subject to the $25 minimum and to any refunds. Commission stops accruing on new payments from the date participation ends.
             </p>
 
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">10. TERMINATION</h3>
+            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">10. THE RELATIONSHIP BETWEEN US</h3>
             <p className="mb-2">
-              Atlas Sales Partners may terminate this Agreement immediately upon written notice if PT breaches any material provision. Upon termination or expiration, PT shall promptly cease use of the Devices and return them per Section 7.
+              This is a referral arrangement, not employment, agency, franchise or partnership. You are responsible for your own taxes on what you earn. You may not sign anything or make commitments on Rysflo&rsquo;s behalf.
             </p>
 
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">11. GOVERNING LAW</h3>
-            <p className="mb-2">
-              This Agreement shall be governed by and construed in accordance with the laws of the State of Texas, without regard to conflict of law principles.
-            </p>
-
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">12. ENTIRE AGREEMENT</h3>
-            <p className="mb-2">
-              This Agreement constitutes the entire agreement between the Parties and supersedes all prior discussions or understandings. Any amendment must be in writing and signed by both Parties.
-            </p>
-
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">13. ELECTRONIC ACCEPTANCE</h3>
+            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">11. ELECTRONIC ACCEPTANCE</h3>
             <p>
-              PT acknowledges that selecting the acceptance checkbox constitutes PT&apos;s electronic signature and acceptance of this Agreement. Electronic acceptance shall have the same force and effect as a handwritten signature.
+              Ticking the boxes below is your electronic signature and has the same effect as signing by hand. A copy of what you accepted is saved with your account.
             </p>
           </div>
         </div>
