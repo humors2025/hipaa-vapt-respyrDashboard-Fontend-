@@ -18,6 +18,7 @@ import {
   uploadAgreementPdfToS3,
 } from "@/services/authService";
 import Agreement from "@/components/agreement";
+import FacilityAdminAgreement from "@/components/facilityAdminAgreement";
 import { logClientEvent } from "@/lib/clientLogger";
  
  
@@ -395,7 +396,7 @@ payload.agreement_pdf_name =
         <div className="px-7 py-9 text-center">
           <div className="text-[20px] font-semibold text-[#252525] tracking-[-0.02em] mb-1">Agreement declined</div>
           <div className="text-[12px] text-[#738298] tracking-[-0.02em] mb-5">
-            You must accept the Device Evaluation Agreement to create your account.
+            You must accept the {role === "facility_admin" ? "Referral Partner Terms" : "Device Evaluation Agreement"} to create your account.
           </div>
           <button
             type="button"
@@ -411,8 +412,11 @@ payload.agreement_pdf_name =
 
   /* ----- Agreement gate (must accept before signup form) ----- */
   if (!agreed) {
+    // Facility admins sign the referral partner terms; every other role keeps
+    // the Device Evaluation Agreement.
+    const AgreementStep = role === "facility_admin" ? FacilityAdminAgreement : Agreement;
     return (
-      <Agreement
+      <AgreementStep
         userEmail={email}
         onAccept={(pdf) => {
           setAgreementPdf(pdf);
