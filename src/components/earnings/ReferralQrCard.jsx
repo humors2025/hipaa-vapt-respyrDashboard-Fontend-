@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
 import { fetchEarningsSummaryService } from "@/services/commissionService";
+import { buildQrPoster } from "@/lib/qrPoster";
 
 /**
  * The referral QR code for the signed-in payee. Shared by trainer, facility
@@ -24,24 +25,93 @@ const ORDER_BASE = process.env.NEXT_PUBLIC_ORDER_BASE_URL || "https://rysflo.com
 const STICKER_BASE = process.env.NEXT_PUBLIC_STICKER_BASE_URL || "https://rysflo.com/buy/?q=";
 const joinUrl = (base, id) => (/[?=&]$/.test(base) ? base : base.replace(/\/+$/, "") + "/") + encodeURIComponent(id);
 
-function QrBlock({ value, filename, size = 220 }) {
+function QrBlock({ value, filename, size = 220, poster = null }) {
   const ref = useRef(null);
-  const download = () => {
-    const canvas = ref.current?.querySelector("canvas");
-    if (!canvas) return;
+  const [preview, setPreview] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  const downloadPlain = () => {
+    const cv = ref.current?.querySelector("canvas");
+    if (!cv) return;
     const a = document.createElement("a");
-    a.href = canvas.toDataURL("image/png");
+    a.href = cv.toDataURL("image/png");
     a.download = filename;
     a.click();
   };
+
+  // The poster builds itself as soon as the QR is on the page. A trainer admin
+  // who has just had a sticker assigned should find the printable sheet already
+  // waiting, not a button that makes one.
+  //
+  // It is drawn from the canvas this component already rendered, so the QR is
+  // never re-encoded or resampled. Child effects run before the parent's, so
+  // QRCodeCanvas has finished drawing by the time this runs.
+  const posterKey = poster ? JSON.stringify(poster) : null;
+  useEffect(() => {
+    if (!posterKey) return;
+    let alive = true;
+    setPreview(null);
+    setFailed(false);
+    (async () => {
+      const cv = ref.current?.querySelector("canvas");
+      if (!cv) return;
+      try {
+        const url = await buildQrPoster(cv, JSON.parse(posterKey));
+        if (alive) setPreview(url);
+      } catch {
+        // The QR itself still downloads, so this is a degraded state, not an error.
+        if (alive) setFailed(true);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [value, posterKey]);
+
+  const downloadPoster = () => {
+    if (!preview) return;
+    const a = document.createElement("a");
+    a.href = preview;
+    a.download = filename.replace(/\.png$/, "") + "-poster.png";
+    a.click();
+  };
+
   return (
-    <div className="flex flex-col items-center gap-2 self-center md:self-start">
+    <div className="flex flex-col items-center gap-3 self-center md:self-start">
       <div ref={ref} className="bg-white rounded-[10px] border border-[#E1E6ED] p-4">
         <QRCodeCanvas value={value} size={size} level="M" includeMargin />
       </div>
-      <button type="button" onClick={download} className="rounded-[10px] bg-[#EEF4FE] text-[#308BF9] text-[12px] font-semibold px-4 py-2 cursor-pointer">
-        Download PNG
-      </button>
+
+      {poster && preview && (
+        <img
+          src={preview}
+          alt="Printable Rysflo poster with this QR code"
+          className="w-[240px] rounded-[10px] border border-[#E1E6ED]"
+        />
+      )}
+
+      {poster && !preview && !failed && (
+        <p className="text-[11px] text-[#A1A1A1]">Preparing the printable poster…</p>
+      )}
+
+      <div className="flex flex-col gap-2 w-full">
+        {poster && preview && (
+          <button
+            type="button"
+            onClick={downloadPoster}
+            className="rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 cursor-pointer"
+          >
+            Download poster (A4, print ready)
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={downloadPlain}
+          className="rounded-[10px] bg-[#EEF4FE] text-[#308BF9] text-[12px] font-semibold px-4 py-2 cursor-pointer"
+        >
+          Download QR only
+        </button>
+      </div>
     </div>
   );
 }
@@ -111,7 +181,7 @@ export default function ReferralQrCard({ title = "Your referral QR code", subtit
                   const surl = joinUrl(STICKER_BASE, st.id);
                   return (
                     <div key={st.id} className="flex flex-col md:flex-row gap-6 items-start">
-                      <QrBlock value={surl} filename={`rysflo-sticker-${st.id}.png`} />
+                      <QrBlock value={surl} filename={`rysflo-sticker-${st.id}.png`} poster={{ code, stickerId: st.id, url: surl, kind: "facility" }} />
                       <div className="flex flex-col gap-3 flex-1 min-w-0">
                         <div>
                           <div className={LABEL}>Sticker ID</div>
@@ -166,7 +236,7 @@ export default function ReferralQrCard({ title = "Your referral QR code", subtit
             null
           ) : codeQr ? (
             <div className="flex flex-col md:flex-row gap-6 items-start">
-              <QrBlock value={url} filename={`rysflo-${code}.png`} />
+              <QrBlock value={url} filename={`rysflo-${code}.png`} poster={{ code, url, kind: codeQr ? "trainer" : "facility" }} />
               <div className="flex flex-col gap-3 flex-1 min-w-0">
                 <div>
                   <div className={LABEL}>Your code</div>
