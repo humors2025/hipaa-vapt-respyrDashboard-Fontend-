@@ -23,33 +23,98 @@ const CheckIcon = ({ size = 10 }) => (
 )
 
 const CHECKBOX_ITEMS = [
-  <>I have read and agree to the <strong>Rysflo Referral Partner Terms</strong> above.</>,
-  <>I understand commission is <strong>20% of what each member pays</strong>, every month they stay subscribed, and that a member who <strong>cancels in the first 30 days is refunded, so nothing is payable</strong> on them.</>,
-  <>I will not make <strong>medical claims</strong> about Rysflo, and I understand it is a wellness product, not a medical device.</>,
+  'I have read and agree to these terms.',
+  'I understand I earn nothing on a member who is refunded.',
+  'I will not claim Rysflo diagnoses or treats anything.',
+]
+
+// The clauses, as data. Sentence case: these are read by a gym owner on a phone,
+// not filed by a legal department.
+const TERMS = [
+  {
+    title: 'What you earn',
+    body: [
+      'Rysflo pays you 20% of what each member you refer pays, for every month they stay subscribed. There is no cap and no end date.',
+      'Commission is on the amount actually charged. Members cut their bill by taking daily readings, so a month with the full credit earns you 20% of the lower figure. If the rate ever changes we tell you first, and the change applies only to payments after that.',
+    ],
+  },
+  {
+    title: 'Which members are yours',
+    body: [
+      'A member is yours if they sign up through your QR code or enter your code. This is recorded when they pay and does not move afterwards.',
+    ],
+  },
+  {
+    title: 'If a member cancels',
+    body: [
+      'A member can cancel within 30 days and we refund them in full. You earn nothing on a member who is refunded, and if we have already paid you, we deduct it from your next payout.',
+      'After 30 days, cancelling simply stops future commission. What you have already earned stays yours. The same applies to any later refund or chargeback.',
+    ],
+  },
+  {
+    title: 'How you are paid',
+    body: [
+      'Monthly, through Stripe. You complete Stripe\u2019s onboarding once \u2014 bank details and W-9, with your 1099 issued at year end. Rysflo never sees your bank details.',
+      'We pay out once your balance reaches $25; below that it rolls over. Commission builds up whether or not you have finished Stripe onboarding, but cannot be paid until you have.',
+    ],
+  },
+  {
+    title: 'Gyms and trainers',
+    body: [
+      'If you are a gym, the 20% is paid to you. You set what share of it each trainer gets, anything from 0% to 100%, for members who sign up under that trainer\u2019s code, and you can change it any time from your dashboard. A change applies to commission not yet paid out. Members who use the gym\u2019s own code are 100% the gym\u2019s.',
+      'Rysflo pays trainers directly out of the gym\u2019s 20%, at the share the gym has set. We do not set that share or take part in any separate arrangement between a gym and its trainers.',
+    ],
+  },
+  {
+    title: 'What you may not claim',
+    body: [
+      'Rysflo is a wellness product, not a medical device. Do not say it diagnoses, treats, cures or prevents anything, do not promise health outcomes, and do not present a reading as a diagnosis.',
+    ],
+  },
+  {
+    title: 'Your codes and printed material',
+    body: [
+      'Codes and QR posters we issue stay ours. Do not alter them, sell them, bid on the Rysflo brand in paid ads, or refer yourself.',
+    ],
+  },
+  {
+    title: 'Member information',
+    body: [
+      'You see the name, email and payment history of members who signed up through you. You do not see their readings. Keep it confidential, use it only to support those members, and do not sell or share it.',
+    ],
+  },
+  {
+    title: 'Ending this',
+    body: [
+      'Either of us can end it at any time, with notice. Commission already earned is still paid, subject to the $25 minimum and to any refunds. Nothing new accrues after that.',
+    ],
+  },
+  {
+    title: 'The relationship',
+    body: [
+      'This is a referral arrangement, not employment, agency or partnership. You handle your own taxes on what you earn, and you cannot commit Rysflo to anything.',
+    ],
+  },
+  {
+    title: 'Acceptance',
+    body: [
+      'Ticking the boxes below is your signature. A copy of what you accepted is saved with your account.',
+    ],
+  },
 ]
 
 export default function Agreement({ onAccept, onDecline, userEmail }) {
   const [checks, setChecks] = useState(Array(3).fill(false))
-  const [selectAll, setSelectAll] = useState(false)
   const [scrolledToBottom, setScrolledToBottom] = useState(false)
   const [generating, setGenerating] = useState(false)
 
   // The T&C section (header + full terms) is snapshotted into a PDF on accept.
   const termsRef = useRef(null)
 
-  const allChecked = checks.every(Boolean)
-
-  function handleSelectAll() {
-    const next = !selectAll
-    setSelectAll(next)
-    setChecks(Array(5).fill(next))
-    logClientEvent('agreement_select_all_click', { checked: next, user_email: userEmail || undefined }, 'Terms and condition page')
-  }
+  const allChecked = checks.every(Boolean) && scrolledToBottom
 
   function handleItemCheck(idx) {
-    const next = checks.map((v, i) => (i === idx ? !v : v))
-    setChecks(next)
-    setSelectAll(next.every(Boolean))
+    setChecks(checks.map((v, i) => (i === idx ? !v : v)))
   }
 
   function handleScroll(e) {
@@ -104,7 +169,7 @@ export default function Agreement({ onAccept, onDecline, userEmail }) {
     }
 
     const blob = pdf.output('blob')
-    return new File([blob], 'device-evaluation-agreement.pdf', { type: 'application/pdf' })
+    return new File([blob], 'rysflo-referral-partner-terms.pdf', { type: 'application/pdf' })
   }
 
   function handleDecline() {
@@ -132,200 +197,127 @@ export default function Agreement({ onAccept, onDecline, userEmail }) {
     }
   }
 
+
   return (
     <div
-      className="w-full max-w-[680px] max-h-[94vh] overflow-y-auto bg-white rounded-[15px] border border-[#e1e6ed] shadow-modal animate-modal-in"
+      className="w-full max-w-[680px] max-h-[94vh] flex flex-col bg-white rounded-[15px] border border-[#e1e6ed] shadow-modal animate-modal-in overflow-hidden"
       role="dialog"
       aria-modal="true"
       aria-labelledby="tcTitle"
     >
-      <div className="px-7 pt-5 pb-[18px] border-b border-[#e1e6ed] flex items-center gap-3">
+      {/* Header. Sentence case and one line of purpose — the site never shouts. */}
+      <div className="flex items-start gap-3.5 px-5 sm:px-7 pt-6 pb-5 border-b border-[#e1e6ed]">
         <RespyrIcon />
-        <div className="flex-1">
-          <div id="tcTitle" className="text-[15px] font-semibold text-[#252525] tracking-[-0.02em] leading-tight">
-            Rysflo Referral Partner Terms
-          </div>
-          <div className="text-[10px] text-[#738298] tracking-[-0.02em] mt-px">
-            How your referral commission works. Please read before continuing.
-          </div>
+        <div className="min-w-0">
+          <h1 id="tcTitle" className="text-[21px] font-medium text-[#252525] tracking-[-0.055em] leading-[1.2] m-0">
+            Referral partner terms
+          </h1>
+          <p className="text-[13.5px] text-[#738298] leading-[1.5] mt-1 mb-0">
+            Step 1 of 2. Read these, then set your password.
+          </p>
         </div>
       </div>
 
-      <div className="flex items-center px-7 py-[14px] pb-4 bg-[#f5f7fa] border-b border-[#e1e6ed]">
-        <div className="flex items-center gap-[7px] flex-shrink-0">
-          <div className="w-[22px] h-[22px] rounded-full bg-[#3faf58] flex items-center justify-center">
-            <CheckIcon size={9} />
-          </div>
-          <span className="text-[11px] font-medium text-[#252525] tracking-[-0.02em] whitespace-nowrap">
-            Review Agreement
-          </span>
-        </div>
-
-        <div className="flex-1 h-[2px] bg-[#e1e6ed] rounded-full mx-2.5 overflow-hidden">
-          <div className="h-full w-0 bg-[#3faf58] rounded-full" />
-        </div>
-
-        <div className="flex items-center gap-[7px] flex-shrink-0">
-          <div className="w-[22px] h-[22px] rounded-full bg-[#e1e6ed] flex items-center justify-center text-[10px] font-semibold text-[#a1a1a1]">
-            2
-          </div>
-          <span className="text-[11px] font-medium text-[#a1a1a1] tracking-[-0.02em] whitespace-nowrap">
-            Set Password
-          </span>
+      {/* The deal, stated once and large. A partner opens this screen to find
+          out what they are paid; everything below is the detail on it. */}
+      <div className="px-5 sm:px-7 pt-6 pb-5 bg-[#f5f7fa] border-b border-[#e1e6ed]">
+        <p className="text-[52px] leading-[0.95] font-semibold text-[#252525] tracking-[-0.055em] m-0">
+          20%
+        </p>
+        <p className="text-[15.5px] leading-[1.5] text-[#535359] mt-2 mb-0 max-w-[46ch]">
+          of what every member you refer pays, every month they stay subscribed
+        </p>
+        <div className="flex flex-wrap gap-x-6 gap-y-1.5 mt-4 text-[13px] text-[#738298]">
+          <span>No cap, no end date</span>
+          <span>Paid monthly through Stripe</span>
         </div>
       </div>
 
-      <div ref={termsRef} className="mx-7 mt-5 border border-[#e1e6ed] rounded-[10px] overflow-hidden relative">
-        <div className="flex items-center gap-2 px-[18px] py-3 bg-[#f5f7fa] border-b border-[#e1e6ed] text-[10px] font-semibold text-[#535359] tracking-[0.04em]">
-          <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            <polyline points="14 2 14 8 20 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          RYSFLO REFERRAL PARTNER TERMS
-        </div>
+      <div ref={termsRef} className="tc-scroll flex-1 min-h-[200px] overflow-y-auto" onScroll={handleScroll}>
+        {/* Terms. Numbered because these are clauses people will cite back to us,
+            not because a numbered list looks orderly. */}
+        <div className="px-5 sm:px-7 py-7">
+          <p className="text-[13px] text-[#738298] leading-[1.6] m-0 mb-7">
+            Effective from the date you accept and join the Rysflo referral programme.
+          </p>
 
-        <div className="tc-scroll max-h-[260px] overflow-y-auto px-[22px] py-[18px] scroll-smooth" onScroll={handleScroll}>
-          <div className="text-[11px] text-[#535359] leading-[1.7] tracking-[-0.02em]">
-            <p className="text-[10px] text-[#738298] mb-3 px-2.5 py-2 bg-[#f5f7fa] rounded-[6px] border-l-[3px] border-[#308bf9]">
-              Effective from the date you accept these terms and join the Rysflo Referral Programme.
-            </p>
-
-            <p className="text-[11px] font-medium text-[#252525] mb-3.5 px-3 py-2.5 bg-[#fff8ed] border border-[#e48326]/20 rounded-[8px]">
-              In short: you refer members, Rysflo pays you 20% of what they pay, every month they stay.
-            </p>
-
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">1. WHAT YOU EARN</h3>
-            <p className="mb-2">
-              <strong>20% of what each member you refer pays, every month they stay subscribed.</strong> No cap, no end date.
-            </p>
-            <p className="mb-2">
-              Commission is on the amount actually charged. Members cut up to $6 a month off their bill by taking daily readings, so a $29 month billed at $23 pays you $4.60. If the rate ever changes, we tell you first, and the change applies only to payments after that.
-            </p>
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">2. WHICH MEMBERS ARE YOURS</h3>
-            <p className="mb-2">
-              A member is yours if they sign up through your QR code or enter your code. This is recorded when they pay and does not move afterwards.
-            </p>
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">3. IF A MEMBER CANCELS</h3>
-            <p className="mb-2">
-              A member can cancel within 30 days and we refund them in full. <strong>You earn nothing on a member who is refunded.</strong> If we have already paid you, we deduct it from your next payout.
-            </p>
-            <p className="mb-2">
-              After 30 days, cancelling simply stops future commission. What you have already earned stays yours. The same applies to any later refund or chargeback.
-            </p>
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">4. HOW YOU ARE PAID</h3>
-            <p className="mb-2">
-              Monthly, through Stripe. You complete Stripe&rsquo;s onboarding once &mdash; bank details and W-9, with your 1099 issued at year end. Rysflo never sees your bank details.
-            </p>
-            <p className="mb-2">
-              We pay out once your balance reaches <strong>$25</strong>; below that it rolls over. Commission builds up whether or not you have finished Stripe onboarding, but cannot be paid until you have.
-            </p>
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">5. GYMS AND TRAINERS</h3>
-            <p className="mb-2">
-              If you are a gym, the 20% is paid to you. You set what share of it each trainer gets &mdash; anything from 0% to 100% &mdash; for members who sign up under that trainer&rsquo;s code, and you can change it any time from your dashboard. A change applies to commission not yet paid out. Members who use the gym&rsquo;s own code are 100% the gym&rsquo;s.
-            </p>
-            <p className="mb-2">
-              Rysflo pays trainers directly out of the gym&rsquo;s 20%, at the share the gym has set. We do not set that share or take part in any separate arrangement between a gym and its trainers.
-            </p>
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">6. WHAT YOU MAY NOT CLAIM</h3>
-            <p className="mb-2">
-              Rysflo is a <strong>wellness product, not a medical device</strong>. Do not say it diagnoses, treats, cures or prevents anything, do not promise health outcomes, and do not present a reading as a diagnosis.
-            </p>
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">7. YOUR CODES AND PRINTED MATERIAL</h3>
-            <p className="mb-2">
-              Codes and QR posters we issue stay ours. Do not alter them, sell them, bid on the Rysflo brand in paid ads, or refer yourself.
-            </p>
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">8. MEMBER INFORMATION</h3>
-            <p className="mb-2">
-              You see the name, email and payment history of members who signed up through you. You do not see their readings. Keep it confidential, use it only to support those members, and do not sell or share it.
-            </p>
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">9. ENDING THIS</h3>
-            <p className="mb-2">
-              Either of us can end it at any time, with notice. Commission already earned is still paid, subject to the $25 minimum and to any refunds. Nothing new accrues after that.
-            </p>
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">10. THE RELATIONSHIP</h3>
-            <p className="mb-2">
-              This is a referral arrangement &mdash; not employment, agency or partnership. You handle your own taxes on what you earn, and you cannot commit Rysflo to anything.
-            </p>
-            <h3 className="text-[11px] font-semibold text-[#252525] mt-3.5 mb-[5px]">11. ACCEPTANCE</h3>
-            <p>
-              Ticking the boxes below is your signature. A copy of what you accepted is saved with your account.
-            </p>
+          <div className="flex flex-col gap-[26px]">
+            {TERMS.map((t, i) => (
+              <section key={i} className="grid grid-cols-[26px_1fr] gap-x-3">
+                <span className="text-[13px] font-medium text-[#308bf9] leading-[1.55] tabular-nums pt-px">
+                  {i + 1}
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-[16px] font-medium text-[#252525] tracking-[-0.03em] leading-[1.35] m-0 mb-2">
+                    {t.title}
+                  </h2>
+                  {t.body.map((para, j) => (
+                    <p key={j} className="text-[14.5px] text-[#535359] leading-[1.68] m-0 mb-2 last:mb-0 max-w-[62ch]">
+                      {para}
+                    </p>
+                  ))}
+                </div>
+              </section>
+            ))}
           </div>
-        </div>
 
-        <div
-          data-pdf-hide
-          className="absolute bottom-0 left-0 right-0 px-3.5 pb-2.5 pt-[18px] bg-gradient-to-b from-transparent via-white/95 to-white/95 flex items-center justify-center gap-[5px] text-[10px] text-[#738298] pointer-events-none transition-opacity duration-300"
-          style={{ opacity: scrolledToBottom ? 0 : 1 }}
-        >
-          <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
-            <path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Scroll to read all terms
         </div>
       </div>
 
-      <div className="px-7 pt-5 pb-1 flex flex-col gap-[13px]">
-        <div className="text-[10px] font-semibold text-[#738298] tracking-[0.03em] uppercase mb-1">
-          Please confirm all of the following to continue:
-        </div>
-
-        <label className="flex items-start gap-2.5 cursor-pointer select-none bg-[#e9f3ff] border-[1.5px] border-[#308bf9]/25 rounded-[8px] px-4 py-3">
-          <input type="checkbox" className="sr-only" checked={selectAll} onChange={handleSelectAll} />
-          <span className={`flex-shrink-0 w-[18px] h-[18px] rounded-[4px] border-[1.5px] flex items-center justify-center mt-px transition-all duration-150 ${selectAll ? 'bg-[#3faf58] border-[#3faf58]' : 'bg-white border-[#308bf9]/40'}`}>
-            <span style={{ opacity: selectAll ? 1 : 0 }} className="transition-opacity duration-150">
-              <CheckIcon size={10} />
-            </span>
-          </span>
-          <span className="text-[12px] font-semibold text-[#308bf9] tracking-[-0.02em]">
-            Select all
-          </span>
-        </label>
-
-        <div className="h-px bg-[#e1e6ed]" />
-
-        {CHECKBOX_ITEMS.map((text, idx) => (
-          <label key={idx} className="flex items-start gap-2.5 cursor-pointer select-none">
-            <input type="checkbox" className="sr-only" checked={checks[idx]} onChange={() => handleItemCheck(idx)} />
-            <span className={`flex-shrink-0 w-[18px] h-[18px] rounded-[4px] border-[1.5px] flex items-center justify-center mt-px transition-all duration-150 ${checks[idx] ? 'bg-[#3faf58] border-[#3faf58]' : 'bg-white border-[#e1e6ed]'}`}>
-              <span style={{ opacity: checks[idx] ? 1 : 0 }} className="transition-opacity duration-150">
-                <CheckIcon size={10} />
+      {/* Consent. Three separate acknowledgements, each ticked on its own —
+          a "select all" would defeat the point of asking three times. */}
+      <div className="border-t border-[#e1e6ed] bg-white">
+        <div className="px-5 sm:px-7 pt-5 pb-4 flex flex-col gap-3">
+          {CHECKBOX_ITEMS.map((text, idx) => (
+            <label key={idx} className="group flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={checks[idx]}
+                onChange={() => handleItemCheck(idx)}
+              />
+              <span
+                className={`flex-shrink-0 w-[19px] h-[19px] rounded-[6px] border flex items-center justify-center mt-[2px] transition-colors duration-150 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#308bf9] ${
+                  checks[idx] ? 'bg-[#3faf58] border-[#3faf58]' : 'bg-white border-[#cdd5df] group-hover:border-[#738298]'
+                }`}
+              >
+                <span style={{ opacity: checks[idx] ? 1 : 0 }} className="transition-opacity duration-150">
+                  <CheckIcon size={11} />
+                </span>
               </span>
-            </span>
-            <span className="text-[11px] text-[#535359] tracking-[-0.02em] leading-[1.5]">
-              {text}
-            </span>
-          </label>
-        ))}
-      </div>
+              <span className="text-[13.5px] text-[#535359] leading-[1.55] tracking-[-0.01em]">
+                {text}
+              </span>
+            </label>
+          ))}
+        </div>
 
-      <div className="flex items-center gap-3 px-7 py-4 pb-[22px] sticky bottom-0 bg-white border-t border-[#e1e6ed] z-10">
-        <button
-          onClick={handleDecline}
-          className="h-11 px-[22px] bg-white text-[#e74c3c] border-[1.5px] border-[#e74c3c]/25 rounded-[15px] text-[12px] font-semibold tracking-[-0.02em] cursor-pointer whitespace-nowrap transition-all duration-150 hover:bg-[#fff5f5] hover:border-[#e74c3c]/50"
-        >
-          Decline
-        </button>
+        <div className="px-5 sm:px-7 pb-6 pt-1 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleDecline}
+            className="px-6 py-3 rounded-[33px] border border-[#e1e6ed] bg-white text-[15px] font-semibold text-[#252525] tracking-[-0.02em] transition-colors duration-150 hover:border-[#cdd5df] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[#308bf9]"
+          >
+            Decline
+          </button>
+          <button
+            type="button"
+            onClick={handleAccept}
+            disabled={!allChecked || generating}
+            className="flex-1 inline-flex items-center justify-center px-6 py-3 rounded-[33px] bg-[#252525] text-white text-[15px] font-semibold tracking-[-0.02em] shadow-[0_4px_12px_rgba(37,37,37,0.25)] transition-[background,transform,box-shadow,opacity] duration-150 hover:not-disabled:bg-[#3a3a3a] hover:not-disabled:-translate-y-px active:not-disabled:translate-y-0 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[#308bf9]"
+          >
+            {generating ? 'Preparing your copy…' : 'Agree and continue'}
+          </button>
+        </div>
 
-        <button
-          onClick={handleAccept}
-          disabled={!allChecked || generating}
-          className="flex-1 h-11 bg-[#252525] text-white rounded-[15px] text-[13px] font-semibold tracking-[-0.02em] cursor-pointer flex items-center justify-center gap-2 transition-all duration-150 shadow-btn hover:bg-[#3a3a3a] hover:-translate-y-px active:translate-y-0 disabled:opacity-55 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+        {/* Says which condition is unmet, rather than leaving a dead button. */}
+        <p
+          aria-live="polite"
+          className="px-5 sm:px-7 pb-5 -mt-2 text-[12.5px] text-[#738298] leading-[1.5] m-0"
+          style={{ visibility: allChecked ? 'hidden' : 'visible' }}
         >
-          {generating ? (
-            <>
-              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              <span>Preparing…</span>
-            </>
-          ) : (
-            <>
-              <span>I Agree &amp; Continue</span>
-              <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-                <path d="M5 12h14M13 6l6 6-6 6" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </>
-          )}
-        </button>
+          {!scrolledToBottom ? 'Scroll to the end of the terms to continue.' : 'Tick all three to continue.'}
+        </p>
       </div>
     </div>
   )
