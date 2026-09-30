@@ -241,7 +241,7 @@ export async function buildQrPoster(qrCanvas, { code, stickerId, url, kind = "fa
   roundRect(ctx, 250, y, W - 500, bandH, 46);
   ctx.fill();
 
-  line(ctx, "See what your metabolism says", y + 102, { size: 76, weight: 600, color: PAPER });
+  line(ctx, "See how your body utilizes fuel", y + 102, { size: 76, weight: 600, color: PAPER });
   y += bandH;
 
   // ── what they get ──────────────────────────────────────────────
