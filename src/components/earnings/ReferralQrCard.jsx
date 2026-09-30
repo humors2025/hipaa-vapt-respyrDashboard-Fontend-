@@ -27,13 +27,11 @@ const joinUrl = (base, id) => (/[?=&]$/.test(base) ? base : base.replace(/\/+$/,
 
 function QrBlock({ value, filename, size = 220, poster = null }) {
   const ref = useRef(null);
-  const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState(null);
-
-  const canvas = () => ref.current?.querySelector("canvas");
+  const [failed, setFailed] = useState(false);
 
   const downloadPlain = () => {
-    const cv = canvas();
+    const cv = ref.current?.querySelector("canvas");
     if (!cv) return;
     const a = document.createElement("a");
     a.href = cv.toDataURL("image/png");
@@ -41,21 +39,34 @@ function QrBlock({ value, filename, size = 220, poster = null }) {
     a.click();
   };
 
-  // The poster is what goes on a gym wall, so it is built from the same canvas
-  // the page already drew — the QR is never re-encoded or scaled down.
-  const makePoster = async () => {
-    const cv = canvas();
-    if (!cv || busy) return;
-    setBusy(true);
-    try {
-      const url = await buildQrPoster(cv, poster);
-      setPreview(url);
-    } catch (err) {
-      toast.error(err?.message || "Could not build the poster");
-    } finally {
-      setBusy(false);
-    }
-  };
+  // The poster builds itself as soon as the QR is on the page. A trainer admin
+  // who has just had a sticker assigned should find the printable sheet already
+  // waiting, not a button that makes one.
+  //
+  // It is drawn from the canvas this component already rendered, so the QR is
+  // never re-encoded or resampled. Child effects run before the parent's, so
+  // QRCodeCanvas has finished drawing by the time this runs.
+  const posterKey = poster ? JSON.stringify(poster) : null;
+  useEffect(() => {
+    if (!posterKey) return;
+    let alive = true;
+    setPreview(null);
+    setFailed(false);
+    (async () => {
+      const cv = ref.current?.querySelector("canvas");
+      if (!cv) return;
+      try {
+        const url = await buildQrPoster(cv, JSON.parse(posterKey));
+        if (alive) setPreview(url);
+      } catch {
+        // The QR itself still downloads, so this is a degraded state, not an error.
+        if (alive) setFailed(true);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [value, posterKey]);
 
   const downloadPoster = () => {
     if (!preview) return;
@@ -66,29 +77,41 @@ function QrBlock({ value, filename, size = 220, poster = null }) {
   };
 
   return (
-    <div className="flex flex-col items-center gap-2 self-center md:self-start">
+    <div className="flex flex-col items-center gap-3 self-center md:self-start">
       <div ref={ref} className="bg-white rounded-[10px] border border-[#E1E6ED] p-4">
         <QRCodeCanvas value={value} size={size} level="M" includeMargin />
       </div>
+
+      {poster && preview && (
+        <img
+          src={preview}
+          alt="Printable Rysflo poster with this QR code"
+          className="w-[240px] rounded-[10px] border border-[#E1E6ED]"
+        />
+      )}
+
+      {poster && !preview && !failed && (
+        <p className="text-[11px] text-[#A1A1A1]">Preparing the printable poster…</p>
+      )}
+
       <div className="flex flex-col gap-2 w-full">
-        {poster && (
-          <button type="button" onClick={makePoster} disabled={busy} className="rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 disabled:opacity-60 cursor-pointer">
-            {busy ? "Building…" : preview ? "Rebuild poster" : "Make printable poster"}
+        {poster && preview && (
+          <button
+            type="button"
+            onClick={downloadPoster}
+            className="rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 cursor-pointer"
+          >
+            Download poster (A4, print ready)
           </button>
         )}
-        <button type="button" onClick={downloadPlain} className="rounded-[10px] bg-[#EEF4FE] text-[#308BF9] text-[12px] font-semibold px-4 py-2 cursor-pointer">
+        <button
+          type="button"
+          onClick={downloadPlain}
+          className="rounded-[10px] bg-[#EEF4FE] text-[#308BF9] text-[12px] font-semibold px-4 py-2 cursor-pointer"
+        >
           Download QR only
         </button>
       </div>
-
-      {preview && (
-        <div className="mt-2 flex flex-col items-center gap-2">
-          <img src={preview} alt="Printable Rysflo poster with your QR code" className="w-[240px] rounded-[10px] border border-[#E1E6ED]" />
-          <button type="button" onClick={downloadPoster} className="rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 cursor-pointer">
-            Download poster (A4, print ready)
-          </button>
-        </div>
-      )}
     </div>
   );
 }
