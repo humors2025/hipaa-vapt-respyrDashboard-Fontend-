@@ -2,12 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { listFacilitiesService, inviteFacilityAdminService, formatMinor } from "@/services/commissionService";
+import { QrCode } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { listFacilitiesService, inviteFacilityAdminService, listQrService, setupQrService, revokeInviteService, formatMinor } from "@/services/commissionService";
+import { inviteTrainerClientService, superAdminInviteTrainerService, resendUserInviteService } from "@/services/authService";
+import ConfirmDialog from "./ConfirmDialog";
+import FacilityDetailsDialog from "./FacilityDetailsDialog";
+import FacilityPeopleDialog, { FacilityPeopleList } from "./FacilityPeopleDialog";
 
 /**
  * Facilities (gyms / studios) — shared by trainer admin (their own) and super
- * admin (all). Invite an owner as facility_admin; see every facility's
- * trainers, subscriptions, commission and payout-setup state.
+ * admin (all). Invite an owner as facility_admin or a personal trainer —
+ * optionally binding one of the caller's not-yet-set-up QR stickers in the
+ * same step (same flow as "Set up" on the QR codes page); see every
+ * facility's trainers, subscriptions, commission and payout-setup state.
  */
 
 const PAYOUT = {
@@ -18,65 +26,173 @@ const PAYOUT = {
   not_started: { text: "No payout setup", cls: "bg-[#F5F7FA] text-[#535359]" },
 };
 
-const EMPTY = { firstName: "", lastName: "", email: "", phone: "", facilityName: "" };
+const EMPTY = { type: "facility", qrId: "", firstName: "", lastName: "", email: "", phone: "", facilityName: "" };
+// Radix Select can't hold "" as an item value — sentinel for "invite only".
+const NO_STICKER = "__none__";
+// Mirrors the API's per-recipient cooldown (EMAIL_RESEND_COOLDOWN_SECONDS, default 60).
+const RESEND_COOLDOWN_SECONDS = 60;
+// Facilities per page (list-facilities `limit`).
+const PAGE_SIZE = 10;
 
-function Card({ label, value, hint, accent }) {
+function Card({ label, value, hint, accent, onClick }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className={`rounded-[10px] p-5 flex flex-col gap-1 ${accent ? "bg-[#308BF9] text-white" : "bg-white border border-[#E1E6ED]"}`}>
+    <Tag
+      {...(onClick && { type: "button", onClick, "aria-pressed": !!accent })}
+      className={`rounded-[10px] p-5 flex flex-col gap-1 text-left border ${accent ? "bg-[#308BF9] border-[#308BF9] text-white" : "bg-white border-[#E1E6ED]"} ${onClick ? "cursor-pointer" : ""} ${onClick && !accent ? "hover:border-[#308BF9]" : ""}`}
+    >
       <div className={`text-[12px] ${accent ? "opacity-80" : "text-[#535359]"}`}>{label}</div>
       <div className={`text-[28px] font-bold ${accent ? "" : "text-[#252525]"}`}>{value}</div>
       <div className={`text-[11px] ${accent ? "opacity-80" : "text-[#A1A1A1]"}`}>{hint}</div>
-    </div>
+    </Tag>
   );
 }
 
 export default function FacilitiesPanel({ isSuperAdmin = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  // Super admin: the Facilities / Trainers / Active members cards are tabs;
+  // the selected one is blue and picks the list shown below them.
+  const [tab, setTab] = useState("facilities"); // "facilities" | "trainers" | "members"
+  // Bumped on every successful load so Refresh also reloads the open list.
+  const [reloadTick, setReloadTick] = useState(0);
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [lastInvite, setLastInvite] = useState(null);
+  const [stickers, setStickers] = useState([]);
+  const [revokingId, setRevokingId] = useState(null);
+  const [confirmRevoke, setConfirmRevoke] = useState(null); // pending invite awaiting "Are you sure?"
+  const [resendingId, setResendingId] = useState(null);
+  // Super admin: facility row clicked → detail popup.
+  const [openFacility, setOpenFacility] = useState(null);
+  const closeFacility = useCallback(() => setOpenFacility(null), []);
+  // Super admin: Trainers / Active members count clicked → list popup.
+  const [peopleTarget, setPeopleTarget] = useState(null); // { facility, view: "trainers" | "members" }
+  const closePeople = useCallback(() => setPeopleTarget(null), []);
+  // Seconds left before "Resend" is allowed again, per invite — set after a
+  // successful send (server cooldown) or from a 429's retry_after_seconds.
+  const [cooldowns, setCooldowns] = useState({});
+  useEffect(() => {
+    if (!Object.values(cooldowns).some((sec) => sec > 0)) return undefined;
+    const t = setInterval(() => {
+      setCooldowns((c) => Object.fromEntries(Object.entries(c).map(([k, v]) => [k, Math.max(0, v - 1)]).filter(([, v]) => v > 0)));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [cooldowns]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await listFacilitiesService());
+      const res = await listFacilitiesService({ page, limit: PAGE_SIZE });
+      // Rows were removed and this page is now past the end: step back.
+      if (res?.pagination && page > res.pagination.total_pages) {
+        setPage(res.pagination.total_pages);
+        return;
+      }
+      setData(res);
+      setReloadTick((n) => n + 1);
     } catch (err) {
       toast.error(err?.message || "Failed to load facilities");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page]);
+
+  // Stickers the caller holds that are not set up yet — offered in the form.
+  const loadStickers = useCallback(async () => {
+    try {
+      const q = await listQrService({});
+      setStickers((q.items || []).filter((x) => x.status !== "retired" && !(x.status === "assigned" && x.partner_code) && (!isSuperAdmin || x.assigned_to_user_id)));
+    } catch {
+      setStickers([]);
+    }
+  }, [isSuperAdmin]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    loadStickers();
+  }, [loadStickers]);
+
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-  const canSubmit = form.firstName.trim() && form.lastName.trim() && /\S+@\S+\.\S+/.test(form.email) && form.facilityName.trim();
+  const isFacility = form.type === "facility";
+  const canSubmit = form.firstName.trim() && form.lastName.trim() && /\S+@\S+\.\S+/.test(form.email) && (!isFacility || form.facilityName.trim());
 
   const submit = async (e) => {
     e.preventDefault();
     if (!canSubmit || busy) return;
     setBusy(true);
+    const payload = {
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      facilityName: isFacility ? form.facilityName.trim() : "",
+    };
     try {
-      const res = await inviteFacilityAdminService({
-        firstName: form.firstName.trim(),
-        lastName: form.lastName.trim(),
-        email: form.email.trim(),
-        phone: form.phone.trim(),
-        facilityName: form.facilityName.trim(),
-      });
-      toast.success(`Invite sent to ${res.data.invited_email} for ${res.data.facility_name} (code ${res.data.partner_code})`);
-      setLastInvite(res.data);
+      let out;
+      if (form.qrId) {
+        // Invite + bind the sticker in one go (same as "Set up" on the QR codes page).
+        const res = await setupQrService({ qrId: form.qrId, targetType: form.type, ...payload });
+        out = { invited_email: res.invited_email, label: res.qr?.target_label, partner_code: res.partner_code, sticker_id: form.qrId, debug_invite_link: res.debug_invite_link };
+      } else if (isFacility) {
+        const res = await inviteFacilityAdminService(payload);
+        out = { invited_email: res.data.invited_email, label: res.data.facility_name, partner_code: res.data.partner_code, debug_invite_link: res.debug_invite_link || res.data.debug_invite_link };
+      } else {
+        const res = await (isSuperAdmin ? superAdminInviteTrainerService : inviteTrainerClientService)(payload);
+        out = { invited_email: res.data.invited_email, label: res.data.invited_name, partner_code: res.data.partner_code, debug_invite_link: res.debug_invite_link || res.data.debug_invite_link };
+      }
+      toast.success(`Invite sent to ${out.invited_email} for ${out.label} (code ${out.partner_code})${out.sticker_id ? ` · sticker ${out.sticker_id} is live` : ""}`);
+      setLastInvite(out);
       setForm(EMPTY);
       setShowForm(false);
       load();
+      if (form.qrId) loadStickers();
     } catch (err) {
       toast.error(err?.message || "Could not send invite");
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Pending owner invite → revoked (after the in-app confirm); a sticker bound
+  // at invite time goes back to "not set up".
+  const revokeInvite = async () => {
+    const p = confirmRevoke;
+    if (!p) return;
+    const who = p.invited_name || p.invited_email;
+    setRevokingId(p.id);
+    try {
+      await revokeInviteService({ inviteId: p.id });
+      toast.success(`Invite to ${who} revoked${p.qr_id ? ` — sticker ${p.qr_id} is ready to set up again` : ""}`);
+      if (lastInvite?.partner_code && lastInvite.partner_code === p.partner_code) setLastInvite(null);
+      setConfirmRevoke(null);
+      load();
+      if (p.qr_id) loadStickers();
+    } catch (err) {
+      toast.error(err?.message || "Could not revoke invite");
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const resendInvite = async (p) => {
+    if (resendingId || (cooldowns[p.id] || 0) > 0) return;
+    setResendingId(p.id);
+    try {
+      await resendUserInviteService({ inviteId: p.id });
+      toast.success(`Invite re-sent to ${p.invited_email}`);
+      setCooldowns((c) => ({ ...c, [p.id]: RESEND_COOLDOWN_SECONDS }));
+    } catch (err) {
+      const wait = Number(err?.data?.retry_after_seconds);
+      if (err?.status === 429 && wait > 0) setCooldowns((c) => ({ ...c, [p.id]: Math.min(wait, 3600) }));
+      toast.error(err?.message || "Could not resend invite");
+    } finally {
+      setResendingId(null);
     }
   };
 
@@ -94,7 +210,7 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
         </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setShowForm((v) => !v)} className="rounded-full bg-[#308BF9] text-white text-[11px] font-semibold px-4 py-1.5 cursor-pointer">
-            {showForm ? "Close" : "+ Invite facility owner"}
+            {showForm ? "Close" : "+ Invite owner / trainer"}
           </button>
           <button type="button" onClick={load} disabled={loading} className="rounded-full bg-[#EEF4FE] text-[#308BF9] text-[11px] font-semibold px-3 py-1.5 disabled:opacity-60 cursor-pointer">
             {loading ? "Loading…" : "Refresh"}
@@ -104,33 +220,64 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
 
       {t && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card label="Facilities" value={t.facilities} hint={`${t.pending_invites} invite${t.pending_invites === 1 ? "" : "s"} pending`} accent />
-          <Card label="Trainers" value={t.trainers} hint="Across all facilities" />
-          <Card label="Active members" value={t.active_subscriptions} hint="Referred subscriptions" />
+          <Card label="Facilities" value={t.facilities} hint={`${t.pending_invites} invite${t.pending_invites === 1 ? "" : "s"} pending`} accent={tab === "facilities"} onClick={isSuperAdmin ? () => setTab("facilities") : undefined} />
+          <Card label="Trainers" value={t.trainers} hint="Across all facilities" accent={tab === "trainers"} onClick={isSuperAdmin ? () => setTab("trainers") : undefined} />
+          <Card label="Active members" value={t.active_subscriptions} hint="Referred subscriptions" accent={tab === "members"} onClick={isSuperAdmin ? () => setTab("members") : undefined} />
           <Card label="Commission owed" value={formatMinor(t.owed_minor)} hint="Pending + on hold" />
         </div>
       )}
 
       {showForm && (
         <form onSubmit={submit} className="bg-white rounded-[15px] p-6 flex flex-col gap-4 max-w-[720px] border border-[#E1E6ED]">
-          <h2 className="text-[#252525] text-[14px] font-bold">Invite a facility owner</h2>
-          <label className="flex flex-col gap-1">
-            <span className="text-[#535359] text-[12px] font-semibold">Facility name *</span>
-            <input className={field} value={form.facilityName} onChange={set("facilityName")} placeholder="Iron Works Gym" autoComplete="off" />
-          </label>
+          <h2 className="text-[#252525] text-[14px] font-bold">Invite a facility owner or personal trainer</h2>
+          <div className="flex gap-2">
+            {[["facility", "Business (gym / studio)"], ["trainer", "Personal trainer"]].map(([k, label]) => (
+              <button key={k} type="button" onClick={() => setForm((f) => ({ ...f, type: k }))} className={`rounded-full px-3 py-1.5 text-[12px] font-semibold cursor-pointer ${form.type === k ? "bg-[#308BF9] text-white" : "bg-white text-[#535359] border border-[#E1E6ED]"}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {isFacility && (
+              <label className="flex flex-col gap-1">
+                <span className="text-[#535359] text-[12px] font-semibold">Facility name *</span>
+                <input className={field} value={form.facilityName} onChange={set("facilityName")} placeholder="Iron Works Gym" autoComplete="off" />
+              </label>
+            )}
+            <label className="flex flex-col gap-1">
+              <span className="text-[#535359] text-[12px] font-semibold">QR sticker (optional)</span>
+              <Select value={form.qrId || NO_STICKER} onValueChange={(v) => setForm((f) => ({ ...f, qrId: v === NO_STICKER ? "" : v }))}>
+                <SelectTrigger className={`${field} h-auto shadow-none data-[placeholder]:text-[#252525] [&_svg]:text-[#A1A1A1] focus-visible:ring-0 focus-visible:border-[#308BF9] data-[state=open]:border-[#308BF9]`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent side="bottom" align="start" sideOffset={6} avoidCollisions={false} className="rounded-[10px] border-[#E1E6ED] bg-white shadow-[0_8px_24px_rgba(37,37,37,0.10)] max-h-[280px]">
+                  <SelectItem value={NO_STICKER} className="rounded-[8px] py-2 text-[13px] text-[#535359] cursor-pointer focus:bg-[#EEF4FE] focus:text-[#308BF9]">
+                    No sticker yet — invite only
+                  </SelectItem>
+                  {stickers.map((q) => (
+                    <SelectItem key={q.id} value={q.id} className="rounded-[8px] py-2 text-[13px] text-[#252525] cursor-pointer focus:bg-[#EEF4FE] focus:text-[#308BF9]">
+                      <QrCode className="size-4 text-[#A1A1A1]" />
+                      <span className="font-mono font-semibold">{q.id}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-[#A1A1A1] text-[11px]">{stickers.length ? "Stickers you hold that are not set up. The one you pick goes live for this invite." : "No stickers waiting to be set up."}</span>
+            </label>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="flex flex-col gap-1">
-              <span className="text-[#535359] text-[12px] font-semibold">Owner first name *</span>
+              <span className="text-[#535359] text-[12px] font-semibold">{isFacility ? "Owner first name *" : "First name *"}</span>
               <input className={field} value={form.firstName} onChange={set("firstName")} autoComplete="off" />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-[#535359] text-[12px] font-semibold">Owner last name *</span>
+              <span className="text-[#535359] text-[12px] font-semibold">{isFacility ? "Owner last name *" : "Last name *"}</span>
               <input className={field} value={form.lastName} onChange={set("lastName")} autoComplete="off" />
             </label>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="flex flex-col gap-1">
-              <span className="text-[#535359] text-[12px] font-semibold">Owner email *</span>
+              <span className="text-[#535359] text-[12px] font-semibold">{isFacility ? "Owner email *" : "Email *"}</span>
               <input type="email" className={field} value={form.email} onChange={set("email")} autoComplete="off" />
             </label>
             <label className="flex flex-col gap-1">
@@ -142,15 +289,16 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
             <button type="submit" disabled={!canSubmit || busy} className="rounded-[10px] bg-[#308BF9] text-white text-[13px] font-semibold px-5 py-2.5 disabled:opacity-50 cursor-pointer">
               {busy ? "Sending…" : "Send invite"}
             </button>
-            <span className="text-[#A1A1A1] text-[11px]">The owner gets an email + link. The facility and its QR code are created when they accept.</span>
+            <span className="text-[#A1A1A1] text-[11px]">{form.qrId ? "The sticker works from the moment you save. Commission is held until they accept the invite." : "They get an email + link. Their code is created when they accept."}</span>
           </div>
         </form>
       )}
 
       {lastInvite && (
         <div className="rounded-[10px] bg-[#E5F6EE] px-4 py-3 text-[12px] text-[#1F7A4A] max-w-[720px]">
-          Invite sent to <strong>{lastInvite.invited_email}</strong> for <strong>{lastInvite.facility_name}</strong> (code{" "}
+          Invite sent to <strong>{lastInvite.invited_email}</strong> for <strong>{lastInvite.label}</strong> (code{" "}
           <span className="font-mono font-semibold">{lastInvite.partner_code}</span>).
+          {lastInvite.sticker_id && <> Sticker <span className="font-mono font-semibold">{lastInvite.sticker_id}</span> is live.</>}
           {/* Only present when the API runs with RETURN_INVITE_LINK_FOR_TESTING (never in production). */}
           {lastInvite.debug_invite_link && (
             <div className="mt-2 flex flex-col gap-2">
@@ -162,6 +310,15 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
         </div>
       )}
 
+      {tab !== "facilities" ? (
+        <div className="flex flex-col gap-2">
+          <h2 className="text-[#252525] text-[14px] font-bold">
+            {tab === "trainers" ? "Trainers" : "Active members"} <span className="text-[#A1A1A1] font-semibold">· All facilities</span>
+          </h2>
+          <FacilityPeopleList key={`${tab}-${reloadTick}`} facility={null} view={tab} />
+        </div>
+      ) : (
+      <>
       {loading && !data ? (
         <div className="text-[#A1A1A1] text-[13px]">Loading&hellip;</div>
       ) : (data?.facilities?.length || 0) === 0 ? (
@@ -185,15 +342,41 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
               {data.facilities.map((f) => {
                 const p = PAYOUT[f.payout_status] || PAYOUT.not_started;
                 return (
-                  <tr key={f.id} className="border-t border-[#F5F7FA]">
-                    <td className="py-2.5 px-4 text-[#252525] font-semibold">{f.name}</td>
+                  <tr
+                    key={f.id}
+                    className={`border-t border-[#F5F7FA] ${isSuperAdmin ? "cursor-pointer hover:bg-[#F5F7FA]" : ""}`}
+                    onClick={isSuperAdmin ? () => setOpenFacility(f) : undefined}
+                  >
+                    <td className="py-2.5 px-4 font-semibold">
+                      {isSuperAdmin ? (
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setOpenFacility(f); }} className="text-[#308BF9] hover:underline text-left cursor-pointer">
+                          {f.name}
+                        </button>
+                      ) : (
+                        <span className="text-[#252525]">{f.name}</span>
+                      )}
+                    </td>
                     <td className="py-2.5 px-4">
                       <div className="text-[#252525]">{f.owner_name || "—"}</div>
                       <div className="text-[#A1A1A1] text-[11px]">{f.owner_user_id}</div>
                     </td>
                     <td className="py-2.5 px-4 text-[#535359] font-mono">{f.partner_code}</td>
-                    <td className="py-2.5 px-4 text-right text-[#252525]">{f.trainers_count}</td>
-                    <td className="py-2.5 px-4 text-right text-[#252525]">{f.active_subscriptions}</td>
+                    {[["trainers", f.trainers_count], ["members", f.active_subscriptions]].map(([view, n]) => (
+                      <td key={view} className="py-2.5 px-4 text-right text-[#252525]">
+                        {isSuperAdmin ? (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setPeopleTarget({ facility: f, view }); }}
+                            className="text-[#308BF9] font-semibold hover:underline cursor-pointer"
+                            title={view === "trainers" ? "View trainers" : "View active members"}
+                          >
+                            {n}
+                          </button>
+                        ) : (
+                          n
+                        )}
+                      </td>
+                    ))}
                     <td className="py-2.5 px-4 text-right text-[#252525] font-semibold">{formatMinor(f.owed_minor)}</td>
                     <td className="py-2.5 px-4 text-right text-[#535359]">{formatMinor(f.paid_minor)}</td>
                     <td className="py-2.5 px-4">
@@ -207,29 +390,67 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
         </div>
       )}
 
+      {data?.pagination && data.pagination.total_pages > 1 && (
+        <div className="flex items-center justify-between gap-3 text-[12px] text-[#535359] -mt-3">
+          <span>
+            {(data.pagination.page - 1) * data.pagination.limit + 1}–{Math.min(data.pagination.page * data.pagination.limit, data.pagination.total)} of {data.pagination.total} facilities
+          </span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={loading || data.pagination.page <= 1} className="rounded-full bg-white border border-[#E1E6ED] px-3 py-1 font-semibold disabled:opacity-50 cursor-pointer">
+              Previous
+            </button>
+            <span>
+              Page {data.pagination.page} of {data.pagination.total_pages}
+            </span>
+            <button type="button" onClick={() => setPage((p) => Math.min(data.pagination.total_pages, p + 1))} disabled={loading || data.pagination.page >= data.pagination.total_pages} className="rounded-full bg-white border border-[#E1E6ED] px-3 py-1 font-semibold disabled:opacity-50 cursor-pointer">
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
       {(data?.pending_invites?.length || 0) > 0 && (
         <div>
-          <h2 className="text-[#252525] text-[14px] font-bold mb-2">Pending owner invites</h2>
+          <h2 className="text-[#252525] text-[14px] font-bold mb-2">Pending invites</h2>
           <div className="overflow-x-auto rounded-[10px] border border-[#E1E6ED]">
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="bg-[#F5F7FA] text-[#535359] text-left">
+                  <th className="py-2.5 px-4 font-semibold">Type</th>
                   <th className="py-2.5 px-4 font-semibold">Facility</th>
-                  <th className="py-2.5 px-4 font-semibold">Owner</th>
+                  <th className="py-2.5 px-4 font-semibold">Invitee</th>
                   <th className="py-2.5 px-4 font-semibold">Code</th>
+                  <th className="py-2.5 px-4 font-semibold">Sticker</th>
                   <th className="py-2.5 px-4 font-semibold">Expires</th>
+                  <th className="py-2.5 px-4 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {data.pending_invites.map((p) => (
                   <tr key={p.id} className="border-t border-[#F5F7FA]">
-                    <td className="py-2.5 px-4 text-[#252525] font-semibold">{p.facility_name}</td>
+                    <td className="py-2.5 px-4">
+                      {p.invited_role === "trainer"
+                        ? <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[#EEF4FE] text-[#308BF9]">Personal trainer</span>
+                        : <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[#F1ECFE] text-[#6B46C1]">Business owner</span>}
+                    </td>
+                    <td className="py-2.5 px-4 text-[#252525] font-semibold">{p.facility_name || <span className="text-[#A1A1A1] font-normal">—</span>}</td>
                     <td className="py-2.5 px-4">
                       <div className="text-[#252525]">{p.invited_name || "—"}</div>
                       <div className="text-[#A1A1A1] text-[11px]">{p.invited_email}</div>
                     </td>
                     <td className="py-2.5 px-4 text-[#535359] font-mono">{p.partner_code}</td>
+                    <td className="py-2.5 px-4 text-[#535359] font-mono">{p.qr_id || <span className="text-[#A1A1A1] font-sans">—</span>}</td>
                     <td className="py-2.5 px-4 text-[#A1A1A1]">{p.expires_at || "—"}</td>
+                    <td className="py-2.5 px-4">
+                      <div className="flex items-center justify-end gap-2">
+                        <button type="button" onClick={() => resendInvite(p)} disabled={resendingId === p.id || (cooldowns[p.id] || 0) > 0} className="rounded-full bg-[#EEF4FE] text-[#308BF9] text-[11px] font-semibold px-3 py-1 disabled:opacity-50 cursor-pointer whitespace-nowrap">
+                          {resendingId === p.id ? "Sending…" : (cooldowns[p.id] || 0) > 0 ? `Resend in ${cooldowns[p.id]}s` : "Resend"}
+                        </button>
+                        <button type="button" onClick={() => setConfirmRevoke(p)} disabled={revokingId === p.id} className="rounded-full bg-[#FDECEC] text-[#E5484D] text-[11px] font-semibold px-3 py-1 disabled:opacity-50 cursor-pointer">
+                          Revoke
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -237,6 +458,33 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
           </div>
         </div>
       )}
+      </>
+      )}
+
+      {isSuperAdmin && (
+        <FacilityDetailsDialog facility={openFacility} onClose={closeFacility} onShowPeople={(view) => setPeopleTarget({ facility: openFacility, view })} suspendEscape={!!peopleTarget} />
+      )}
+      {isSuperAdmin && <FacilityPeopleDialog target={peopleTarget} onClose={closePeople} />}
+
+      <ConfirmDialog
+        open={!!confirmRevoke}
+        danger
+        title={`Are you sure you want to revoke ${confirmRevoke?.invited_email}?`}
+        confirmText="Yes, revoke"
+        busyText="Revoking…"
+        busy={!!revokingId}
+        onConfirm={revokeInvite}
+        onClose={() => !revokingId && setConfirmRevoke(null)}
+      >
+        The {confirmRevoke?.invited_role === "trainer" ? "personal trainer" : "facility owner"} invite
+        {confirmRevoke?.facility_name && <> for <strong className="text-[#252525]">{confirmRevoke.facility_name}</strong></>} is cancelled and the code{" "}
+        <span className="font-mono font-semibold text-[#252525]">{confirmRevoke?.partner_code}</span> stops working.
+        {confirmRevoke?.qr_id && (
+          <>
+            {" "}Sticker <span className="font-mono font-semibold text-[#252525]">{confirmRevoke.qr_id}</span> goes back to &ldquo;not set up&rdquo; so you can set it up again.
+          </>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }

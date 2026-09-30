@@ -89,7 +89,9 @@ export const API_ENDPOINTS = {
     DIETANALYSISPLANNEWTEST: `/${API_VERSION}/dietitian/api/web/get_weekly_food_json_suggestions_weeks_newtest`,
     APPROVALPLAN: `/${API_VERSION}/dietitian/api/web/food_json_suggestion_approve_plan`,
     // "Approve week" for DietPlanNew — flips status on a weekly_food_json_suggestions_newtest row
-    APPROVALPLANNEWTEST: `/${API_VERSION}/dietitian/api/web/food_json_suggestion_approve_plan_newtest`
+    APPROVALPLANNEWTEST: `/${API_VERSION}/dietitian/api/web/food_json_suggestion_approve_plan_newtest`,
+    // Read-only client food log (what the client actually ate) for DietPlanNew's "Food log" popup
+    FOODLOG: `/${API_VERSION}/dietitian/api/web/food-log`
   },
   MACROSANALYSIS: {
     GETMACROSUMMARY: `/${API_VERSION}/dietitian/api/web/get_macro_summary_by_date`
@@ -153,6 +155,7 @@ export const API_ENDPOINTS = {
     LISTTRAINERUSERS: `/${API_VERSION}/dietitian/api/web/list-admin-trainer-users-jwt`,
     INVITEFACILITYADMIN: `/${API_VERSION}/dietitian/api/web/admin-invite-facility-admin`,
     LISTFACILITIES: `/${API_VERSION}/dietitian/api/web/list-facilities`,
+    FACILITYPEOPLE: `/${API_VERSION}/dietitian/api/web/super-admin-facility-people`,
     SETTRAINERSPLIT: `/${API_VERSION}/dietitian/api/web/set-trainer-commission-split`,
     REMOVEUSER: `/${API_VERSION}/dietitian/api/web/remove-user`,
     EARNINGSSUMMARY: `/${API_VERSION}/dietitian/api/web/earnings-summary`,
@@ -175,9 +178,24 @@ export const API_ENDPOINTS = {
     QRLIST: `/${API_VERSION}/dietitian/api/web/qr-list`,
     QRASSIGN: `/${API_VERSION}/dietitian/api/web/qr-assign`,
     QRSETUP: `/${API_VERSION}/dietitian/api/web/qr-setup`,
+    QRREVOKE: `/${API_VERSION}/dietitian/api/web/qr-revoke`,
+    INVITEREVOKE: `/${API_VERSION}/dietitian/api/web/invite-revoke`,
     LISTTRAINERADMINS: `/${API_VERSION}/dietitian/api/web/list-trainer-admins`,
     GETPRICING: `/${API_VERSION}/dietitian/api/web/get-pricing`,
     SETPRICING: `/${API_VERSION}/dietitian/api/web/set-pricing`,
+    SETTINGSLOCKSTATUS: `/${API_VERSION}/dietitian/api/web/settings-lock-status`,
+    SETTINGSLOCKREQUEST: `/${API_VERSION}/dietitian/api/web/settings-lock-request`,
+    SETTINGSLOCKVERIFY: `/${API_VERSION}/dietitian/api/web/settings-lock-verify`,
+    SETTINGSMFASETUP: `/${API_VERSION}/dietitian/api/web/settings-mfa-setup`,
+    SETTINGSMFACONFIRM: `/${API_VERSION}/dietitian/api/web/settings-mfa-confirm`,
+    SETTINGSMFAVERIFY: `/${API_VERSION}/dietitian/api/web/settings-mfa-verify`,
+  },
+
+  // Super Admin network-wide sales analytics (website vs trainer-code purchases).
+  // Contract: src/services/superAdminSalesService.js.
+  SALES: {
+    SUPERADMINSALESANALYTICS: `/${API_VERSION}/dietitian/api/web/super-admin-sales-analytics`,
+    SUPERADMINORDERS: `/${API_VERSION}/dietitian/api/web/super-admin-orders`,
   },
 
    FOOD: {
@@ -187,8 +205,10 @@ export const API_ENDPOINTS = {
      FITCHEFSEARCH: `/${API_VERSION}/dietitian/api/web/search-foods`,
     // FitChef shopping-list pricer (internal Next.js proxy to respyr.in/fitchef-dashboard/api/shopping)
     FITCHEFSHOPPING: "/api/food/shopping",
-    // FitChef custom meal (internal Next.js proxy to respyr.in/fitchef-dashboard/api/custom_meal)
-    FITCHEFCUSTOMMEAL: "/api/food/custom-meal",
+    // Ingredient-level search (Lambda → FitChef fc_ingredients / fc_recipes):
+    // pick an ingredient, then the recipes that contain it, scored for the meal.
+    FITCHEFINGREDIENTS: `/${API_VERSION}/dietitian/api/web/search-ingredients`,
+    FITCHEFRECIPESBYINGREDIENT: `/${API_VERSION}/dietitian/api/web/recipes-by-ingredient`,
     // "Make my meal" plate → Lambda (respyr-metabolism-web). Registers the
     // combination against the plan row and returns the generated meal image.
     CUSTOMMEAL: `/${API_VERSION}/dietitian/api/web/custom-meal`,

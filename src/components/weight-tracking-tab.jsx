@@ -816,7 +816,7 @@ export default function WeightTrackingTab({ profileData, profileId, isActive }) 
           <line x1="12" y1="8" x2="12.01" y2="8" />
         </svg>
         <p className="text-[#A1A1A1] text-[11px] tracking-[-0.22px]">
-          Weight data syncs from the client&apos;s Respyr app. Focus on weekly averages over individual weigh-ins.
+          Weight data syncs from the client&apos;s Rysflo app. Focus on weekly averages over individual weigh-ins.
         </p>
       </div>
     </div>

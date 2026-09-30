@@ -31,7 +31,7 @@ const MonoIcon = ({ src, size = 20, color = "#A1A1A1", alt = "" }) => (
   />
 );
 
-function decodeAccessTokenRole() {
+export function decodeAccessTokenRole() {
   try {
     const token = cookieManager.get("access_token");
     if (!token || typeof token !== "string") return null;
@@ -104,7 +104,8 @@ const hideHeaderPaths = [
           { name: "Dashboard", icon: "/icons/hugeicons_home-05.svg", path: "/trainer/dashboard" },
           // Referrals is trainer-only: facility admins have their own section.
           ...(userRole === "trainer" ? [{ name: "Referrals", icon: "/icons/hugeicons_view.svg", path: "/trainer/referrals" }] : []),
-          { name: "Earnings", icon: "/icons/hugeicons_award-01.svg", path: "/trainer/earnings" },
+          // Earnings is hidden for trainer admins (token role "admin").
+          ...(userRole !== "admin" ? [{ name: "Earnings", icon: "/icons/hugeicons_award-01.svg", path: "/trainer/earnings" }] : []),
           { name: "Settings", icon: "/icons/hugeicons_settings-03.svg", path: "/trainer/settings" },
         ]
       : [];
@@ -159,16 +160,20 @@ const hideHeaderPaths = [
       router.push("/trainer-admin/trainers");
     } else if (userRole === "super_admin") {
       router.push("/super-admin/overview");
+    } else if (userRole === "facility_admin") {
+      router.push("/facility-admin/trainers");
     }
   };
 
-  const showSwitchButton = userRole === "admin" || userRole === "super_admin";
+  const showSwitchButton = userRole === "admin" || userRole === "super_admin" || userRole === "facility_admin";
 
   const switchBasePath =
     userRole === "admin"
       ? "/trainer-admin"
       : userRole === "super_admin"
       ? "/super-admin"
+      : userRole === "facility_admin"
+      ? "/facility-admin"
       : "";
   const isSwitchActive = !!switchBasePath && pathname?.startsWith(switchBasePath);
   const switchColor = isSwitchActive ? "#308BF9" : "#A1A1A1";

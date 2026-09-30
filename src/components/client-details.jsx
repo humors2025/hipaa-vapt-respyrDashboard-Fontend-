@@ -14,7 +14,7 @@ import WeightTrackingTab from "./weight-tracking-tab";
 import TrainerDirection from "./training-direction/TrainerDirection";
 import RightSidebar from "./rightSidebar";
 import PDFLoadingModal from "./PDFLoadingModal";
-import { exportDietAnalysisPDF } from "../lib/pdfExport";
+import { exportDietAnalysisPDF, exportDietPlanPDF } from "../lib/pdfExport";
 import {
   getClientIndividualProfile,
   selectClientIndividualProfileData,
@@ -22,6 +22,7 @@ import {
 import {
   getDietAnalysisPlan,
   selectDietAnalysisData,
+  selectDietAnalysisNewTestPlan,
 } from "../store/dietAnalysisSlice";
 import {
   getMacroSummary,
@@ -62,6 +63,10 @@ export default function ClientDetails() {
   const individualProfileData = useSelector(selectClientIndividualProfileData);
 
   const dietAnalysisData = useSelector(selectDietAnalysisData);
+  // Recipe-level plan DietPlanNew currently has on screen (mirrored into the
+  // store by DietPlanNew itself). This is what the Weekly Diet Analysis tab
+  // actually renders, so it is what the export button should print.
+  const newTestPlan = useSelector(selectDietAnalysisNewTestPlan);
 
   const [profileDates, setProfileDates] = useState([]);
   const [datesLoading, setDatesLoading] = useState(false);
@@ -71,12 +76,7 @@ export default function ClientDetails() {
   const [weeklyDatesLoading, setWeeklyDatesLoading] = useState(false);
   const [weeklyDatesError, setWeeklyDatesError] = useState(null);
   const [isDietAnalysisAvailable, setIsDietAnalysisAvailable] = useState(true);
-  // TEMP (testing only): keep the Weekly Diet Analysis tab clickable even when
-  // get-weekly-tab-list returns "No weekly data", so the *_newtest plan
-  // (fixed sample payload in authService) can be viewed. Set to false to restore
-  // the original gating.
-  const ALLOW_DIET_TAB_WITHOUT_WEEKS = true;
-  const dietTabDisabled = !isDietAnalysisAvailable && !ALLOW_DIET_TAB_WITHOUT_WEEKS;
+  const dietTabDisabled = !isDietAnalysisAvailable;
   const [isLoadingWeeklyData, setIsLoadingWeeklyData] = useState(true);
   const [isPDFExporting, setIsPDFExporting] = useState(false);
 
@@ -222,8 +222,13 @@ const transformDatesToDisplay = () => {
       return;
     }
 
-    if (!dietAnalysisData?.data?.food_json) {
-      toast.error("Diet analysis data is not available yet.");
+    const hasNewPlan = Array.isArray(newTestPlan?.days) && newTestPlan.days.length > 0;
+    // Legacy fallback: the old get-weekly-food-json shape, only relevant while
+    // the diet tab still rendered DietPlan / MacrosUpdate.
+    const hasLegacyData = !!dietAnalysisData?.data?.food_json;
+
+    if (!hasNewPlan && !hasLegacyData) {
+      toast.error("Diet plan for this week is still loading or not available yet.");
       return;
     }
 
@@ -232,7 +237,10 @@ const transformDatesToDisplay = () => {
       const clientName = profileDetails?.profile_name || "client";
       const selectedWeek = getSelectedWeekInfo();
 
-      await exportDietAnalysisPDF(clientName, selectedWeek, dietAnalysisData);
+      const ok = hasNewPlan
+        ? await exportDietPlanPDF(clientName, selectedWeek, newTestPlan)
+        : await exportDietAnalysisPDF(clientName, selectedWeek, dietAnalysisData);
+      if (!ok) toast.error("Failed to export PDF. Please try again.");
     } catch (error) {
       console.error("Export failed:", error);
       toast.error("Failed to export PDF. Please try again.");
@@ -309,7 +317,7 @@ const transformDatesToDisplay = () => {
           setIsDietAnalysisAvailable(false);
           setWeeklyDates([]);
 
-          if (activeTab === "diet" && !ALLOW_DIET_TAB_WITHOUT_WEEKS) {
+          if (activeTab === "diet") {
             setActiveTab("test");
           }
         } else if (response && response.status === true && response.data) {
@@ -338,7 +346,7 @@ const transformDatesToDisplay = () => {
           setIsDietAnalysisAvailable(false);
           setWeeklyDates([]);
 
-          if (activeTab === "diet" && !ALLOW_DIET_TAB_WITHOUT_WEEKS) {
+          if (activeTab === "diet") {
             setActiveTab("test");
           }
         } else {

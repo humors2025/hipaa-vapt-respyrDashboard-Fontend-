@@ -10,6 +10,10 @@ const initialState = {
   // getDietAnalysisPlan. Lets other views (DietPlanNew) follow the week the
   // user picked in client-details without wiring extra props through.
   requestedWeek: null,
+  // The recipe-level weekly plan currently shown by DietPlanNew (PLAN SHAPE,
+  // see Dietplannew.jsx), mirrored here so client-details can export it as a
+  // PDF. Includes unsaved edits — it tracks what is on screen.
+  newTestPlan: null,
 };
 
 export const getDietAnalysisPlan = createAsyncThunk(
@@ -43,6 +47,10 @@ const dietAnalysisSlice = createSlice({
       state.loading = false;
       state.error = null;
       state.requestedWeek = null;
+      state.newTestPlan = null;
+    },
+    setNewTestPlan(state, action) {
+      state.newTestPlan = action.payload ?? null;
     },
     setWeeklyJsonData(state, action) {
       if (!state.data?.data?.food_json) return;
@@ -108,11 +116,12 @@ const dietAnalysisSlice = createSlice({
   },
 });
 
-export const { clearDietAnalysis, updateEditedDays, setWeeklyJsonData } = dietAnalysisSlice.actions;
+export const { clearDietAnalysis, updateEditedDays, setWeeklyJsonData, setNewTestPlan } = dietAnalysisSlice.actions;
 
 export const selectDietAnalysisData = (state) => state.dietAnalysis.data;
 export const selectDietAnalysisLoading = (state) => state.dietAnalysis.loading;
 export const selectDietAnalysisError = (state) => state.dietAnalysis.error;
 export const selectDietAnalysisRequestedWeek = (state) => state.dietAnalysis.requestedWeek;
+export const selectDietAnalysisNewTestPlan = (state) => state.dietAnalysis.newTestPlan;
 
 export default dietAnalysisSlice.reducer;

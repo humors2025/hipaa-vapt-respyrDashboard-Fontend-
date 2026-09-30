@@ -105,18 +105,33 @@ export default function PayoutSetupPanel({ audience = "trainer" }) {
   const tone = TONE[meta.tone];
   const canOpenDashboard = state === "verified" || (status?.account?.details_submitted && state !== "disabled");
 
+  // Stripe opens in a new tab so the dashboard stays put. The tab is opened
+  // synchronously in the click handler (popup blockers refuse one opened
+  // after an await) and pointed at Stripe once the link comes back.
   const onCta = async () => {
+    const tab = window.open("", "_blank");
+    if (tab) tab.opener = null;
     setBusy(true);
     try {
       const res = canOpenDashboard
         ? await createConnectDashboardLinkService()
         : await createConnectOnboardingLinkService();
-      window.location.assign(res.url);
+      if (tab) tab.location = res.url;
+      else window.location.assign(res.url); // popup blocked: fall back to same tab
     } catch (err) {
+      tab?.close();
       toast.error(err?.message || "Could not open Stripe");
+    } finally {
       setBusy(false);
     }
   };
+
+  // The user finishes on Stripe in the other tab; re-sync when they come back.
+  useEffect(() => {
+    const onFocus = () => load(true);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [load]);
 
   const currency = "USD";
 

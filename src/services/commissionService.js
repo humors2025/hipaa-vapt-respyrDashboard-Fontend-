@@ -16,8 +16,19 @@ const post = (endpoint, body = {}) =>
 
 // ── Facilities (trainer-admin / super-admin) ─────────────────────────────────
 
-export const listFacilitiesService = () =>
-  post(API_ENDPOINTS.COMMISSION.LISTFACILITIES);
+// Pass { page, limit } for one page (response then has `pagination`); no args = every facility.
+export const listFacilitiesService = (paging) =>
+  post(API_ENDPOINTS.COMMISSION.LISTFACILITIES, paging || {});
+
+// Super admin: the trainers or active members behind a facility's counts;
+// facilityId omitted = every facility (the total cards).
+// Pass page/limit for one page (response then has `pagination`).
+export const listFacilityPeopleService = ({ facilityId, view, page, limit }) =>
+  post(API_ENDPOINTS.COMMISSION.FACILITYPEOPLE, {
+    ...(facilityId && { facility_id: facilityId }),
+    view,
+    ...(page != null && { page, limit }),
+  });
 
 export const inviteFacilityAdminService = ({ firstName, lastName, email, phone, facilityName }) =>
   post(API_ENDPOINTS.COMMISSION.INVITEFACILITYADMIN, {
@@ -118,6 +129,8 @@ export const listQrService = ({ status, facilityId } = {}) => post(API_ENDPOINTS
 export const assignQrService = ({ toUserId, count, batchId }) => post(API_ENDPOINTS.COMMISSION.QRASSIGN, { to_user_id: toUserId, count, batch_id: batchId || undefined });
 export const setupQrService = ({ qrId, targetType, facilityName, firstName, lastName, email, phone }) =>
   post(API_ENDPOINTS.COMMISSION.QRSETUP, { qr_id: qrId, target_type: targetType, facility_name: facilityName || undefined, first_name: firstName, last_name: lastName, email, phone: phone || undefined });
+export const revokeQrService = ({ qrId }) => post(API_ENDPOINTS.COMMISSION.QRREVOKE, { qr_id: qrId });
+export const revokeInviteService = ({ inviteId }) => post(API_ENDPOINTS.COMMISSION.INVITEREVOKE, { invite_id: inviteId });
 export const listTrainerAdminsService = () => post(API_ENDPOINTS.COMMISSION.LISTTRAINERADMINS);
 
 // ── Pricing ──────────────────────────────────────────────────────────────────
@@ -125,6 +138,15 @@ export const listTrainerAdminsService = () => post(API_ENDPOINTS.COMMISSION.LIST
 export const fetchPricingService = () => post(API_ENDPOINTS.COMMISSION.GETPRICING);
 export const setPricingService = ({ listPrice, referredPrice, note }) =>
   post(API_ENDPOINTS.COMMISSION.SETPRICING, { list_price: listPrice, referred_price: referredPrice, note: note || undefined });
+
+// ── Settings Google Authenticator gate (super admin) ───────────────────────────────────
+
+export const fetchSettingsLockStatusService = () => post(API_ENDPOINTS.COMMISSION.SETTINGSLOCKSTATUS);
+export const requestSettingsCodeService = () => post(API_ENDPOINTS.COMMISSION.SETTINGSLOCKREQUEST);
+export const verifySettingsCodeService = ({ code }) => post(API_ENDPOINTS.COMMISSION.SETTINGSLOCKVERIFY, { code });
+export const startSettingsMfaSetupService = () => post(API_ENDPOINTS.COMMISSION.SETTINGSMFASETUP);
+export const confirmSettingsMfaSetupService = ({ code }) => post(API_ENDPOINTS.COMMISSION.SETTINGSMFACONFIRM, { code });
+export const verifySettingsMfaService = ({ code }) => post(API_ENDPOINTS.COMMISSION.SETTINGSMFAVERIFY, { code });
 
 // ── Formatting helpers shared by the earnings pages ──────────────────────────
 
