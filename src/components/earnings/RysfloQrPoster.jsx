@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import s from "./RysfloQrPoster.module.css";
@@ -277,6 +277,28 @@ export default function RysfloQrPoster({ value, code, codeLabel = "GYM CODE", fi
         <small>PDF &middot; 5&times;7 in</small>
       </button>
       {onClose && note && <div className={s.note}>{note}</div>}
+    </div>
+  );
+}
+
+/** The poster as a pop-up: backdrop click, Esc and the ✕ all close it. */
+export function RysfloQrPosterModal({ onClose, ...props }) {
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 bg-[rgba(10,14,22,.62)] backdrop-blur-[4px] flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()}>
+        <RysfloQrPoster {...props} onClose={onClose} />
+      </div>
     </div>
   );
 }

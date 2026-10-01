@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
 import { UserRound, Users, X } from "lucide-react";
-import RysfloQrPoster from "@/components/earnings/RysfloQrPoster";
+import { RysfloQrPosterModal } from "@/components/earnings/RysfloQrPoster";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   listQrService,
@@ -47,34 +47,19 @@ function StatusPill({ q }) {
  * (what a member types at checkout); before that it shows the sticker ID.
  */
 function PosterPreview({ sticker, onClose }) {
-  useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = overflow;
-    };
-  }, [onClose]);
-
   const live = sticker.status === "assigned" && !!sticker.partner_code;
   const code = live ? sticker.partner_code : sticker.id;
   const codeLabel = !live ? "STICKER" : sticker.target_type === "trainer" ? "CODE" : "GYM CODE";
 
   return (
-    <div className="fixed inset-0 bg-[rgba(10,14,22,.62)] backdrop-blur-[4px] flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()}>
-        <RysfloQrPoster
-          value={stickerUrl(sticker.id)}
-          code={code}
-          codeLabel={codeLabel}
-          filename={`Rysflo-QR-Poster-${sticker.id}-5x7.pdf`}
-          onClose={onClose}
-          note={`Sticker ${sticker.id} · ${sticker.target_label || "Not set up yet"}`}
-        />
-      </div>
-    </div>
+    <RysfloQrPosterModal
+      value={stickerUrl(sticker.id)}
+      code={code}
+      codeLabel={codeLabel}
+      filename={`Rysflo-QR-Poster-${sticker.id}-5x7.pdf`}
+      onClose={onClose}
+      note={`Sticker ${sticker.id} · ${sticker.target_label || "Not set up yet"}`}
+    />
   );
 }
 
