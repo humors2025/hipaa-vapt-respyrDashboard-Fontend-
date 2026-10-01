@@ -5,6 +5,7 @@ import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
 import { fetchEarningsSummaryService } from "@/services/commissionService";
 import { buildQrPoster } from "@/lib/qrPoster";
+import RysfloQrPoster from "./RysfloQrPoster";
 
 /**
  * The referral QR code for the signed-in payee. Shared by trainer, facility
@@ -236,7 +237,7 @@ export default function ReferralQrCard({ title = "Your referral QR code", subtit
             null
           ) : codeQr ? (
             <div className="flex flex-col md:flex-row gap-6 items-start">
-              <QrBlock value={url} filename={`rysflo-${code}.png`} poster={{ code, url, kind: codeQr ? "trainer" : "facility" }} />
+              <RysfloQrPoster value={url} code={code} codeLabel="CODE" filename={`Rysflo-QR-Poster-${code}-5x7.pdf`} />
               <div className="flex flex-col gap-3 flex-1 min-w-0">
                 <div>
                   <div className={LABEL}>Your code</div>
@@ -253,7 +254,7 @@ export default function ReferralQrCard({ title = "Your referral QR code", subtit
                   </button>
                 </div>
                 <p className="text-[#A1A1A1] text-[11px]">
-                  Print it or download it and let your clients scan. Members pay $29/month for the Rysflo device and app; every reading earns them 20¢ off the next month, up to $6.
+                  Download the 5×7 poster, print it, and let your clients scan. Members pay $29/month for the Rysflo device and app; every reading earns them 20¢ off the next month, up to $6.
                 </p>
               </div>
             </div>

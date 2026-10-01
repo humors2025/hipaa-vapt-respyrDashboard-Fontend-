@@ -1,0 +1,84 @@
+/* Poppins (self-hosted, latin subset) - SIL Open Font License, see /fonts/poster/OFL.txt.
+   Registered under its own family name: next/font renames the app's Poppins, and
+   the PDF canvas needs a family it can ask for by name. */
+@font-face{font-family:RysfloPoster;font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/poster/poppins-400.woff2) format("woff2")}
+@font-face{font-family:RysfloPoster;font-style:italic;font-weight:400;font-display:swap;src:url(/fonts/poster/poppins-400-italic.woff2) format("woff2")}
+@font-face{font-family:RysfloPoster;font-style:normal;font-weight:600;font-display:swap;src:url(/fonts/poster/poppins-600.woff2) format("woff2")}
+@font-face{font-family:RysfloPoster;font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/poster/poppins-700.woff2) format("woff2")}
+
+/* Every size below is in poster pixels (poster = 1429 x 2000) multiplied by --u,
+   so the card is an exact scaled copy of the print artwork at any width. */
+.stack{
+  --blue:#308bf9; --bg:#252525; --bg-bottom:#29496f; --rule:#00234d; --body:#d9d9d9; --muted:#9d9d9d;
+  display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;max-width:440px;
+  font-family:RysfloPoster,system-ui,sans-serif;
+}
+.stack *{box-sizing:border-box;margin:0;padding:0}
+/* In a modal: as big as fits, leaving room for the button under it. */
+.modal{max-width:none;width:min(540px, calc(100vw - 32px), calc((100vh - 120px) * 1429 / 2000))}
+.note{font-size:12px;color:rgba(255,255,255,.8)}
+
+.popup{
+  width:100%;aspect-ratio:1429/2000;container-type:inline-size;position:relative;overflow:hidden;
+  --u:calc(100cqw / 1429);
+  background:linear-gradient(180deg,var(--bg) 0%,var(--bg) 77.5%,var(--bg-bottom) 100%);
+  border-radius:10px;box-shadow:0 24px 50px -20px rgba(0,0,0,.45);
+}
+.dl{display:inline-flex;align-items:center;gap:10px;height:46px;padding:0 22px;border:0;border-radius:999px;cursor:pointer;
+    background:#308bf9;color:#fff;font:600 14px RysfloPoster,system-ui,sans-serif;box-shadow:0 12px 28px -10px rgba(48,139,249,.7);
+    transition:background .2s,transform .2s}
+.dl:hover{background:#1f7ce8;transform:translateY(-1px)}
+.dl:focus-visible{outline:2px solid #308bf9;outline-offset:3px}
+.dl[disabled]{opacity:.7;cursor:progress;transform:none}
+.dl svg{width:18px;height:18px}
+.dl small{font-weight:400;opacity:.85;font-size:12px}
+.topbar{position:absolute;inset:0 0 auto;height:calc(22 * var(--u));background:var(--blue)}
+
+/* text block: --t = cap-top y, --fs = font size, --lh = line height (poster px) */
+.t{position:absolute;left:0;right:0;text-align:center;white-space:nowrap;
+   --lh:var(--fs);
+   font-size:calc(var(--fs) * var(--u)); line-height:calc(var(--lh) * var(--u));
+   top:calc((var(--t) - var(--lh) / 2 + .35 * var(--fs)) * var(--u))}
+
+.logo{position:absolute;left:calc(535 * var(--u));top:calc(106 * var(--u));width:calc(359 * var(--u));height:auto;display:block}
+
+.sub{--t:264;--fs:36.8;color:var(--blue);font-weight:400}
+.h{--t:394;--fs:108;--lh:120;color:#fff;font-weight:700;letter-spacing:-.005em}
+.h em{font-weight:400}
+.body{--t:662;--fs:38.2;--lh:60;color:var(--body);font-weight:400}
+
+.card{position:absolute;left:calc(357 * var(--u));top:calc(808 * var(--u));width:calc(716 * var(--u));height:calc(820 * var(--u));
+      background:#fff;border-radius:calc(60 * var(--u))}
+.qr{position:absolute;left:calc(464.5 * var(--u));top:calc(866 * var(--u));width:calc(500 * var(--u));height:calc(500 * var(--u));display:block}
+.cardRule{position:absolute;left:calc(398 * var(--u));width:calc(633 * var(--u));top:calc(1402 * var(--u));height:calc(3 * var(--u));background:var(--blue)}
+.label{--t:1434;--fs:30.6;color:var(--blue);font-weight:400}
+
+/* coupon-style code chip: high contrast, big type, readable on a wall print */
+.chip{position:absolute;left:calc(414.5 * var(--u));top:calc(1488 * var(--u));width:calc(600 * var(--u));height:calc(102 * var(--u));
+      border:calc(3 * var(--u)) dashed var(--blue);border-radius:calc(22 * var(--u));background:#eaf3ff;
+      display:flex;align-items:center;justify-content:center;gap:calc(24 * var(--u))}
+.chip span{line-height:1;white-space:nowrap}
+.chipTag{font-size:calc(22 * var(--u));font-weight:600;letter-spacing:.16em;color:var(--blue)}
+.chipDiv{width:calc(3 * var(--u));height:calc(50 * var(--u));background:var(--blue);opacity:.35;border-radius:2px}
+.chipCode{font-size:calc(46 * var(--u));font-weight:700;letter-spacing:.1em;color:#252525;margin-right:calc(-4.6 * var(--u))}
+
+.feat{position:absolute;top:calc(1712 * var(--u));height:calc(46 * var(--u));display:flex;align-items:center;
+      gap:calc(var(--g) * var(--u));color:#fff;font-size:calc(28.2 * var(--u));font-weight:400;white-space:nowrap}
+.feat svg{height:calc(46 * var(--u));width:auto;flex:none;color:var(--blue)}
+.f1{left:calc(163 * var(--u));--g:14}
+.f2{left:calc(553 * var(--u));--g:12}
+.f3{left:calc(915 * var(--u));--g:16}
+
+.rule{position:absolute;left:calc(78 * var(--u));width:calc(1273 * var(--u));top:calc(1806 * var(--u));height:calc(3 * var(--u));background:var(--rule)}
+.site{--t:1841;--fs:30.3;color:#fff;font-weight:400}
+.disc{--t:1931;--fs:22.8;color:var(--muted);font-weight:400}
+
+
+.close{position:absolute;top:calc(48 * var(--u));right:calc(48 * var(--u));width:calc(72 * var(--u));height:calc(72 * var(--u));
+       min-width:28px;min-height:28px;border-radius:50%;border:0;cursor:pointer;background:rgba(255,255,255,.08);color:#fff;
+       display:grid;place-items:center;transition:background .2s}
+.close:hover{background:rgba(255,255,255,.18)}
+.close:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.close svg{width:45%;height:45%}
+
+@media (prefers-reduced-motion:reduce){.dl{transition:none}}
