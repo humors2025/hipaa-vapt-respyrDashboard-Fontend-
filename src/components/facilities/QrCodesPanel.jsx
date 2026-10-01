@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
-import { Download, UserRound, Users, X } from "lucide-react";
-import { buildQrPoster } from "@/lib/qrPoster";
+import { UserRound, Users, X } from "lucide-react";
+import RysfloQrPoster from "@/components/earnings/RysfloQrPoster";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   listQrService,
@@ -42,79 +42,37 @@ function StatusPill({ q }) {
 }
 
 /**
- * Clicking a sticker's QR shows the exact poster that sticker prints as, built
- * by the same buildQrPoster the print sheet uses, so the preview never drifts
- * from what ends up on the wall.
+ * Clicking a sticker's QR opens the branded 5 x 7 poster for it, with a PDF
+ * download. Once the sticker is set up the poster carries the partner's code
+ * (what a member types at checkout); before that it shows the sticker ID.
  */
 function PosterPreview({ sticker, onClose }) {
-  const qrRef = useRef(null);
-  const [url, setUrl] = useState(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const cv = qrRef.current?.querySelector("canvas");
-      if (!cv) return;
-      try {
-        const png = await buildQrPoster(cv, { stickerId: sticker.id, url: stickerUrl(sticker.id), kind: "facility" });
-        if (alive) setUrl(png);
-      } catch {
-        if (alive) setFailed(true);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [sticker.id]);
-
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+    };
   }, [onClose]);
 
+  const live = sticker.status === "assigned" && !!sticker.partner_code;
+  const code = live ? sticker.partner_code : sticker.id;
+  const codeLabel = !live ? "STICKER" : sticker.target_type === "trainer" ? "CODE" : "GYM CODE";
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="relative bg-white rounded-[16px] shadow-[0_16px_48px_rgba(37,37,37,0.18)] w-full max-w-[460px] max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3">
-          <div className="min-w-0">
-            <div className="text-[#252525] text-[15px] font-bold">Sticker <span className="font-mono">{sticker.id}</span></div>
-            <div className="text-[#535359] text-[12px] mt-0.5 truncate">{sticker.target_label || "Not set up yet"}</div>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="rounded-full p-1.5 text-[#A1A1A1] hover:bg-[#F5F7FA] hover:text-[#535359] cursor-pointer">
-            <X className="size-4" />
-          </button>
-        </div>
-
-        {/* Off-screen source canvas the poster is drawn from. */}
-        <div ref={qrRef} className="absolute -left-[9999px] top-0" aria-hidden="true">
-          <QRCodeCanvas value={stickerUrl(sticker.id)} size={1000} level="M" includeMargin />
-        </div>
-
-        <div className="px-5 overflow-y-auto">
-          {url ? (
-            <img src={url} alt={`Rysflo poster for sticker ${sticker.id}`} className="w-full rounded-[8px] border border-[#E1E6ED]" />
-          ) : (
-            <div className="w-full aspect-[2480/3508] rounded-[8px] bg-[#0f1114] flex items-center justify-center text-[#818a97] text-[12px]">
-              {failed ? "Could not build the poster." : "Building poster…"}
-            </div>
-          )}
-          <div className="text-[#A1A1A1] text-[11px] break-all mt-2">{stickerUrl(sticker.id)}</div>
-        </div>
-
-        <div className="flex justify-end gap-2 px-5 py-3 mt-2 border-t border-[#F5F7FA]">
-          <button type="button" onClick={onClose} className="rounded-[10px] border border-[#E1E6ED] bg-white text-[#535359] text-[12px] font-semibold px-4 py-2 hover:bg-[#F5F7FA] cursor-pointer">Close</button>
-          <a
-            href={url || undefined}
-            download={`rysflo-poster-${sticker.id}.png`}
-            aria-disabled={!url}
-            className={`inline-flex items-center gap-1.5 rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 ${url ? "cursor-pointer" : "opacity-50 pointer-events-none"}`}
-          >
-            <Download className="size-3.5" />
-            Download poster
-          </a>
-        </div>
+    <div className="fixed inset-0 bg-[rgba(10,14,22,.62)] backdrop-blur-[4px] flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()}>
+        <RysfloQrPoster
+          value={stickerUrl(sticker.id)}
+          code={code}
+          codeLabel={codeLabel}
+          filename={`Rysflo-QR-Poster-${sticker.id}-5x7.pdf`}
+          onClose={onClose}
+          note={`Sticker ${sticker.id} · ${sticker.target_label || "Not set up yet"}`}
+        />
       </div>
     </div>
   );
