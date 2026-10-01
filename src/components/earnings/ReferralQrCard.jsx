@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
 import { fetchEarningsSummaryService } from "@/services/commissionService";
 import { buildQrPoster } from "@/lib/qrPoster";
-import RysfloQrPoster from "./RysfloQrPoster";
+import { RysfloQrPosterModal } from "./RysfloQrPoster";
 
 /**
  * The referral QR code for the signed-in payee. Shared by trainer, facility
@@ -137,6 +137,8 @@ export default function ReferralQrCard({ title = "Your referral QR code", subtit
   const [code, setCode] = useState(null);
   const [facility, setFacility] = useState(null);
   const [stickers, setStickers] = useState([]);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const closePreview = useCallback(() => setPreviewOpen(false), []);
 
   useEffect(() => {
     (async () => {
@@ -237,7 +239,27 @@ export default function ReferralQrCard({ title = "Your referral QR code", subtit
             null
           ) : codeQr ? (
             <div className="flex flex-col md:flex-row gap-6 items-start">
-              <RysfloQrPoster value={url} code={code} codeLabel="CODE" filename={`Rysflo-QR-Poster-${code}-5x7.pdf`} />
+              <div className="flex flex-col items-center gap-3 self-center md:self-start">
+                <div className="bg-white rounded-[10px] border border-[#E1E6ED] p-4">
+                  <QRCodeCanvas value={url} size={220} level="M" includeMargin />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreviewOpen(true)}
+                  className="w-full rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 cursor-pointer"
+                >
+                  Preview downloadable QR
+                </button>
+              </div>
+              {previewOpen && (
+                <RysfloQrPosterModal
+                  value={url}
+                  code={code}
+                  codeLabel="CODE"
+                  filename={`Rysflo-QR-Poster-${code}-5x7.pdf`}
+                  onClose={closePreview}
+                />
+              )}
               <div className="flex flex-col gap-3 flex-1 min-w-0">
                 <div>
                   <div className={LABEL}>Your code</div>
@@ -254,7 +276,7 @@ export default function ReferralQrCard({ title = "Your referral QR code", subtit
                   </button>
                 </div>
                 <p className="text-[#A1A1A1] text-[11px]">
-                  Download the 5×7 poster, print it, and let your clients scan. Members pay $29/month for the Rysflo device and app; every reading earns them 20¢ off the next month, up to $6.
+                  Tap &ldquo;Preview downloadable QR&rdquo; to see and download the 5×7 poster, print it, and let your clients scan. Members pay $29/month for the Rysflo device and app; every reading earns them 20¢ off the next month, up to $6.
                 </p>
               </div>
             </div>
