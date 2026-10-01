@@ -248,7 +248,7 @@ export default function ReferralQrCard({ title = "Your referral QR code", subtit
                   onClick={() => setPreviewOpen(true)}
                   className="w-full rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 cursor-pointer"
                 >
-                  Preview
+                  Preview downloadable QR
                 </button>
               </div>
               {previewOpen && (
@@ -276,7 +276,7 @@ export default function ReferralQrCard({ title = "Your referral QR code", subtit
                   </button>
                 </div>
                 <p className="text-[#A1A1A1] text-[11px]">
-                  Tap Preview to see and download the 5×7 poster, print it, and let your clients scan. Members pay $29/month for the Rysflo device and app; every reading earns them 20¢ off the next month, up to $6.
+                  Tap &ldquo;Preview downloadable QR&rdquo; to see and download the 5×7 poster, print it, and let your clients scan. Members pay $29/month for the Rysflo device and app; every reading earns them 20¢ off the next month, up to $6.
                 </p>
               </div>
             </div>
