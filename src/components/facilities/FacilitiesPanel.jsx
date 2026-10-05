@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { QrCode } from "lucide-react";
+import { QrCode, Pencil } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { listFacilitiesService, inviteFacilityAdminService, listQrService, setupQrService, revokeInviteService, formatMinor } from "@/services/commissionService";
 import { inviteTrainerClientService, superAdminInviteTrainerService, resendUserInviteService } from "@/services/authService";
 import ConfirmDialog from "./ConfirmDialog";
 import FacilityDetailsDialog from "./FacilityDetailsDialog";
+import FacilityEditDialog from "./FacilityEditDialog";
 import FacilityPeopleDialog, { FacilityPeopleList } from "./FacilityPeopleDialog";
 
 /**
@@ -68,6 +69,9 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   // Super admin: facility row clicked → detail popup.
   const [openFacility, setOpenFacility] = useState(null);
   const closeFacility = useCallback(() => setOpenFacility(null), []);
+  // Pencil on a row (or Edit in the detail popup) → edit name / owner name.
+  const [editFacility, setEditFacility] = useState(null);
+  const closeEdit = useCallback(() => setEditFacility(null), []);
   // Super admin: Trainers / Active members count clicked → list popup.
   const [peopleTarget, setPeopleTarget] = useState(null); // { facility, view: "trainers" | "members" }
   const closePeople = useCallback(() => setPeopleTarget(null), []);
@@ -92,6 +96,13 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
         return;
       }
       setData(res);
+      // Keep an open facility popup in sync with the fresh row (names,
+      // edits_count, last edited) so its edit history reloads after a save.
+      setOpenFacility((o) => {
+        if (!o) return o;
+        const fresh = (res?.facilities || []).find((x) => x.id === o.id);
+        return fresh ? { ...o, ...fresh } : o;
+      });
       setReloadTick((n) => n + 1);
     } catch (err) {
       toast.error(err?.message || "Failed to load facilities");
@@ -113,6 +124,18 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Patch the edited row in place (and the open detail popup) so the new
+  // names show immediately, then reload so the "Edited" tag and last-edit
+  // info come back from the server.
+  const onFacilitySaved = useCallback(
+    (updated) => {
+      setData((d) => (d ? { ...d, facilities: (d.facilities || []).map((x) => (x.id === updated.id ? { ...x, ...updated } : x)) } : d));
+      setOpenFacility((o) => (o && o.id === updated.id ? { ...o, ...updated } : o));
+      load();
+    },
+    [load]
+  );
 
   useEffect(() => {
     loadStickers();
@@ -348,13 +371,32 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
                     onClick={isSuperAdmin ? () => setOpenFacility(f) : undefined}
                   >
                     <td className="py-2.5 px-4 font-semibold">
-                      {isSuperAdmin ? (
-                        <button type="button" onClick={(e) => { e.stopPropagation(); setOpenFacility(f); }} className="text-[#308BF9] hover:underline text-left cursor-pointer">
-                          {f.name}
+                      <div className="flex items-center gap-1.5">
+                        {isSuperAdmin ? (
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setOpenFacility(f); }} className="text-[#308BF9] hover:underline text-left cursor-pointer">
+                            {f.name}
+                          </button>
+                        ) : (
+                          <span className="text-[#252525]">{f.name}</span>
+                        )}
+                        {(f.edits_count || 0) > 0 && (
+                          <span
+                            className="inline-flex rounded-full bg-[#FFF4E0] text-[#A66B00] text-[10px] font-semibold px-2 py-0.5 shrink-0"
+                            title={`Last edited by ${f.last_edited_by || "unknown"}${f.last_edited_at ? ` · ${f.last_edited_at}` : ""}`}
+                          >
+                            Edited
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setEditFacility(f); }}
+                          title="Edit facility"
+                          aria-label={`Edit ${f.name}`}
+                          className="rounded-full p-1 text-[#A1A1A1] hover:bg-[#EEF4FE] hover:text-[#308BF9] cursor-pointer shrink-0"
+                        >
+                          <Pencil className="size-3.5" />
                         </button>
-                      ) : (
-                        <span className="text-[#252525]">{f.name}</span>
-                      )}
+                      </div>
                     </td>
                     <td className="py-2.5 px-4">
                       <div className="text-[#252525]">{f.owner_name || "—"}</div>
@@ -462,9 +504,17 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
       )}
 
       {isSuperAdmin && (
-        <FacilityDetailsDialog facility={openFacility} onClose={closeFacility} onShowPeople={(view) => setPeopleTarget({ facility: openFacility, view })} suspendEscape={!!peopleTarget} />
+        <FacilityDetailsDialog
+          facility={openFacility}
+          onClose={closeFacility}
+          onShowPeople={(view) => setPeopleTarget({ facility: openFacility, view })}
+          onEdit={() => setEditFacility(openFacility)}
+          suspendEscape={!!peopleTarget || !!editFacility}
+        />
       )}
       {isSuperAdmin && <FacilityPeopleDialog target={peopleTarget} onClose={closePeople} />}
+
+      <FacilityEditDialog facility={editFacility} onClose={closeEdit} onSaved={onFacilitySaved} />
 
       <ConfirmDialog
         open={!!confirmRevoke}
