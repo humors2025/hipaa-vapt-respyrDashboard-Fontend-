@@ -29,6 +29,11 @@ export const updateFacilityService = ({ facilityId, name, ownerName }) =>
     ...(ownerName != null && { owner_name: ownerName }),
   });
 
+// A facility's edit history (who changed the name / owner name, old → new,
+// when) — newest first.
+export const facilityEditLogsService = ({ facilityId }) =>
+  post(API_ENDPOINTS.COMMISSION.FACILITYEDITLOGS, { facility_id: facilityId });
+
 // Super admin: the trainers or active members behind a facility's counts;
 // facilityId omitted = every facility (the total cards).
 // Pass page/limit for one page (response then has `pagination`).

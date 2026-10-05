@@ -72,12 +72,6 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   // Pencil on a row (or Edit in the detail popup) → edit name / owner name.
   const [editFacility, setEditFacility] = useState(null);
   const closeEdit = useCallback(() => setEditFacility(null), []);
-  // Patch the edited row in place (and the open detail popup) so the new
-  // names show immediately; the next load() re-syncs from the server.
-  const onFacilitySaved = useCallback((updated) => {
-    setData((d) => (d ? { ...d, facilities: (d.facilities || []).map((x) => (x.id === updated.id ? { ...x, ...updated } : x)) } : d));
-    setOpenFacility((o) => (o && o.id === updated.id ? { ...o, ...updated } : o));
-  }, []);
   // Super admin: Trainers / Active members count clicked → list popup.
   const [peopleTarget, setPeopleTarget] = useState(null); // { facility, view: "trainers" | "members" }
   const closePeople = useCallback(() => setPeopleTarget(null), []);
@@ -102,6 +96,13 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
         return;
       }
       setData(res);
+      // Keep an open facility popup in sync with the fresh row (names,
+      // edits_count, last edited) so its edit history reloads after a save.
+      setOpenFacility((o) => {
+        if (!o) return o;
+        const fresh = (res?.facilities || []).find((x) => x.id === o.id);
+        return fresh ? { ...o, ...fresh } : o;
+      });
       setReloadTick((n) => n + 1);
     } catch (err) {
       toast.error(err?.message || "Failed to load facilities");
@@ -123,6 +124,18 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Patch the edited row in place (and the open detail popup) so the new
+  // names show immediately, then reload so the "Edited" tag and last-edit
+  // info come back from the server.
+  const onFacilitySaved = useCallback(
+    (updated) => {
+      setData((d) => (d ? { ...d, facilities: (d.facilities || []).map((x) => (x.id === updated.id ? { ...x, ...updated } : x)) } : d));
+      setOpenFacility((o) => (o && o.id === updated.id ? { ...o, ...updated } : o));
+      load();
+    },
+    [load]
+  );
 
   useEffect(() => {
     loadStickers();
@@ -365,6 +378,14 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
                           </button>
                         ) : (
                           <span className="text-[#252525]">{f.name}</span>
+                        )}
+                        {(f.edits_count || 0) > 0 && (
+                          <span
+                            className="inline-flex rounded-full bg-[#FFF4E0] text-[#A66B00] text-[10px] font-semibold px-2 py-0.5 shrink-0"
+                            title={`Last edited by ${f.last_edited_by || "unknown"}${f.last_edited_at ? ` · ${f.last_edited_at}` : ""}`}
+                          >
+                            Edited
+                          </span>
                         )}
                         <button
                           type="button"

@@ -1,13 +1,18 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { X, Pencil } from "lucide-react";
-import { formatMinor } from "@/services/commissionService";
+import { formatMinor, facilityEditLogsService } from "@/services/commissionService";
 
 /**
  * Super admin › Facilities › click a facility: shows that facility's full row
- * from the list-facilities response in a popup. Escape / overlay / × close it.
+ * from the list-facilities response in a popup, plus the facility's edit
+ * history (who changed the name / owner name and when). Escape / overlay / ×
+ * close it.
  */
+
+// facility_edit_logs field → label shown in the history list.
+const EDIT_FIELD = { name: "Facility name", owner_name: "Owner name" };
 
 const PAYOUT = {
   verified: { text: "Stripe verified", cls: "bg-[#E5F6EE] text-[#1F7A4A]" },
@@ -37,6 +42,9 @@ function Row({ name, children }) {
 
 export default function FacilityDetailsDialog({ facility, onClose, onShowPeople, onEdit, suspendEscape = false }) {
   const open = !!facility;
+  // Edit history, loaded when the popup opens (and again after an edit —
+  // edits_count changes, which re-triggers the effect).
+  const [edits, setEdits] = useState(null); // null = loading, [] = none
 
   useEffect(() => {
     // Escape is left to the Trainers / Active members list while it is open.
@@ -45,6 +53,23 @@ export default function FacilityDetailsDialog({ facility, onClose, onShowPeople,
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose, suspendEscape]);
+
+  const facilityId = facility?.id;
+  const editsCount = facility?.edits_count || 0;
+  useEffect(() => {
+    if (!facilityId || !editsCount) {
+      setEdits([]);
+      return undefined;
+    }
+    let cancelled = false;
+    setEdits(null);
+    facilityEditLogsService({ facilityId })
+      .then((res) => !cancelled && setEdits(res.edits || []))
+      .catch(() => !cancelled && setEdits([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [facilityId, editsCount]);
 
   if (!open) return null;
 
@@ -64,6 +89,11 @@ export default function FacilityDetailsDialog({ facility, onClose, onShowPeople,
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             <span className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 ${STATUS[f.status] || STATUS.inactive}`}>{label(f.status)}</span>
             <span className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 ${payout.cls}`}>{payout.text}</span>
+            {(f.edits_count || 0) > 0 && (
+              <span className="inline-flex rounded-full bg-[#FFF4E0] text-[#A66B00] text-[10px] font-semibold px-2 py-0.5" title={`Last edited by ${f.last_edited_by || "unknown"}${f.last_edited_at ? ` · ${f.last_edited_at}` : ""}`}>
+                Edited
+              </span>
+            )}
             {onEdit && (
               <button type="button" onClick={onEdit} className="inline-flex items-center gap-1 rounded-full bg-[#EEF4FE] text-[#308BF9] text-[10px] font-semibold px-2.5 py-0.5 cursor-pointer">
                 <Pencil className="size-3" /> Edit
@@ -106,6 +136,11 @@ export default function FacilityDetailsDialog({ facility, onClose, onShowPeople,
           <Row name="Code"><span className="font-mono font-semibold">{f.partner_code}</span></Row>
           <Row name="Status">{label(f.status)}</Row>
           <Row name="Created">{f.created_at}</Row>
+          {(f.edits_count || 0) > 0 && (
+            <Row name="Last edited">
+              {f.last_edited_at} {f.last_edited_by && <span className="text-[#A1A1A1]">by</span>} {f.last_edited_by}
+            </Row>
+          )}
           <Row name="Owner name">{f.owner_name}</Row>
           <Row name="Owner email">{f.owner_user_id}</Row>
           <Row name="Trainer admin">{f.parent_admin_user_id}</Row>
@@ -115,6 +150,32 @@ export default function FacilityDetailsDialog({ facility, onClose, onShowPeople,
           <Row name="Commission owed">{formatMinor(f.owed_minor)}</Row>
           <Row name="Commission paid">{formatMinor(f.paid_minor)}</Row>
         </div>
+
+        {(f.edits_count || 0) > 0 && (
+          <div>
+            <h3 className="text-[#252525] text-[13px] font-bold mb-2">Edit history</h3>
+            {edits === null ? (
+              <div className="text-[#A1A1A1] text-[12px]">Loading&hellip;</div>
+            ) : edits.length === 0 ? (
+              <div className="text-[#A1A1A1] text-[12px]">No edits recorded.</div>
+            ) : (
+              <div className="rounded-[10px] border border-[#E1E6ED] px-4 py-1">
+                {edits.map((e) => (
+                  <div key={e.id} className="py-2.5 border-t border-[#F5F7FA] first:border-t-0 text-[12px]">
+                    <div className="text-[#252525]">
+                      <span className="font-semibold">{EDIT_FIELD[e.field] || e.field}</span>:{" "}
+                      <span className="text-[#A1A1A1] line-through">{e.old_value || "—"}</span>{" "}
+                      <span className="text-[#A1A1A1]">&rarr;</span> <span className="font-semibold">{e.new_value}</span>
+                    </div>
+                    <div className="text-[#A1A1A1] text-[11px] mt-0.5">
+                      by {e.edited_by} ({String(e.edited_role || "").replace(/_/g, " ")}) · {e.edited_at}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

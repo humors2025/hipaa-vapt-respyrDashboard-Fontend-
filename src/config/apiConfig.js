@@ -156,6 +156,7 @@ export const API_ENDPOINTS = {
     INVITEFACILITYADMIN: `/${API_VERSION}/dietitian/api/web/admin-invite-facility-admin`,
     LISTFACILITIES: `/${API_VERSION}/dietitian/api/web/list-facilities`,
     UPDATEFACILITY: `/${API_VERSION}/dietitian/api/web/update-facility`,
+    FACILITYEDITLOGS: `/${API_VERSION}/dietitian/api/web/facility-edit-logs`,
     FACILITYPEOPLE: `/${API_VERSION}/dietitian/api/web/super-admin-facility-people`,
     SETTRAINERSPLIT: `/${API_VERSION}/dietitian/api/web/set-trainer-commission-split`,
     REMOVEUSER: `/${API_VERSION}/dietitian/api/web/remove-user`,
