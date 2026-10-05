@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { X } from "lucide-react";
+import { X, Pencil } from "lucide-react";
 import { formatMinor } from "@/services/commissionService";
 
 /**
@@ -35,7 +35,7 @@ function Row({ name, children }) {
   );
 }
 
-export default function FacilityDetailsDialog({ facility, onClose, onShowPeople, suspendEscape = false }) {
+export default function FacilityDetailsDialog({ facility, onClose, onShowPeople, onEdit, suspendEscape = false }) {
   const open = !!facility;
 
   useEffect(() => {
@@ -64,6 +64,11 @@ export default function FacilityDetailsDialog({ facility, onClose, onShowPeople,
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             <span className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 ${STATUS[f.status] || STATUS.inactive}`}>{label(f.status)}</span>
             <span className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 ${payout.cls}`}>{payout.text}</span>
+            {onEdit && (
+              <button type="button" onClick={onEdit} className="inline-flex items-center gap-1 rounded-full bg-[#EEF4FE] text-[#308BF9] text-[10px] font-semibold px-2.5 py-0.5 cursor-pointer">
+                <Pencil className="size-3" /> Edit
+              </button>
+            )}
           </div>
         </div>
 

@@ -20,6 +20,15 @@ const post = (endpoint, body = {}) =>
 export const listFacilitiesService = (paging) =>
   post(API_ENDPOINTS.COMMISSION.LISTFACILITIES, paging || {});
 
+// Edit a facility's name and/or its owner's display name (super admin: any
+// facility; trainer admin: only their own facilities).
+export const updateFacilityService = ({ facilityId, name, ownerName }) =>
+  post(API_ENDPOINTS.COMMISSION.UPDATEFACILITY, {
+    facility_id: facilityId,
+    ...(name != null && { name }),
+    ...(ownerName != null && { owner_name: ownerName }),
+  });
+
 // Super admin: the trainers or active members behind a facility's counts;
 // facilityId omitted = every facility (the total cards).
 // Pass page/limit for one page (response then has `pagination`).
