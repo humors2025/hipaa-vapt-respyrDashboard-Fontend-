@@ -34,8 +34,9 @@ export const updateFacilityService = ({ facilityId, name, ownerName }) =>
 export const facilityEditLogsService = ({ facilityId }) =>
   post(API_ENDPOINTS.COMMISSION.FACILITYEDITLOGS, { facility_id: facilityId });
 
-// Super admin: the trainers or active members behind a facility's counts;
-// facilityId omitted = every facility (the total cards).
+// Super admin / trainer admin: the trainers or active members behind a
+// facility's counts; facilityId omitted = every facility in the caller's
+// scope (the total cards). A trainer admin only sees their own facilities.
 // Pass page/limit for one page (response then has `pagination`).
 export const listFacilityPeopleService = ({ facilityId, view, page, limit }) =>
   post(API_ENDPOINTS.COMMISSION.FACILITYPEOPLE, {

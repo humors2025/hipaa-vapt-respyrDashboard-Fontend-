@@ -53,8 +53,9 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  // Super admin: the Facilities / Trainers / Active members cards are tabs;
-  // the selected one is blue and picks the list shown below them.
+  // The Facilities / Trainers / Active members cards are tabs (super admin
+  // and trainer admin — the API scopes a trainer admin to their own
+  // facilities); the selected one is blue and picks the list shown below.
   const [tab, setTab] = useState("facilities"); // "facilities" | "trainers" | "members"
   // Bumped on every successful load so Refresh also reloads the open list.
   const [reloadTick, setReloadTick] = useState(0);
@@ -72,7 +73,7 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   // Pencil on a row (or Edit in the detail popup) → edit name / owner name.
   const [editFacility, setEditFacility] = useState(null);
   const closeEdit = useCallback(() => setEditFacility(null), []);
-  // Super admin: Trainers / Active members count clicked → list popup.
+  // Trainers / Active members count clicked → list popup.
   const [peopleTarget, setPeopleTarget] = useState(null); // { facility, view: "trainers" | "members" }
   const closePeople = useCallback(() => setPeopleTarget(null), []);
   // Seconds left before "Resend" is allowed again, per invite — set after a
@@ -243,9 +244,9 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
 
       {t && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card label="Facilities" value={t.facilities} hint={`${t.pending_invites} invite${t.pending_invites === 1 ? "" : "s"} pending`} accent={tab === "facilities"} onClick={isSuperAdmin ? () => setTab("facilities") : undefined} />
-          <Card label="Trainers" value={t.trainers} hint="Across all facilities" accent={tab === "trainers"} onClick={isSuperAdmin ? () => setTab("trainers") : undefined} />
-          <Card label="Active members" value={t.active_subscriptions} hint="Referred subscriptions" accent={tab === "members"} onClick={isSuperAdmin ? () => setTab("members") : undefined} />
+          <Card label="Facilities" value={t.facilities} hint={`${t.pending_invites} invite${t.pending_invites === 1 ? "" : "s"} pending`} accent={tab === "facilities"} onClick={() => setTab("facilities")} />
+          <Card label="Trainers" value={t.trainers} hint="Across all facilities" accent={tab === "trainers"} onClick={() => setTab("trainers")} />
+          <Card label="Active members" value={t.active_subscriptions} hint="Referred subscriptions" accent={tab === "members"} onClick={() => setTab("members")} />
           <Card label="Commission owed" value={formatMinor(t.owed_minor)} hint="Pending + on hold" />
         </div>
       )}
@@ -405,18 +406,14 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
                     <td className="py-2.5 px-4 text-[#535359] font-mono">{f.partner_code}</td>
                     {[["trainers", f.trainers_count], ["members", f.active_subscriptions]].map(([view, n]) => (
                       <td key={view} className="py-2.5 px-4 text-right text-[#252525]">
-                        {isSuperAdmin ? (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setPeopleTarget({ facility: f, view }); }}
-                            className="text-[#308BF9] font-semibold hover:underline cursor-pointer"
-                            title={view === "trainers" ? "View trainers" : "View active members"}
-                          >
-                            {n}
-                          </button>
-                        ) : (
-                          n
-                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setPeopleTarget({ facility: f, view }); }}
+                          className="text-[#308BF9] font-semibold hover:underline cursor-pointer"
+                          title={view === "trainers" ? "View trainers" : "View active members"}
+                        >
+                          {n}
+                        </button>
                       </td>
                     ))}
                     <td className="py-2.5 px-4 text-right text-[#252525] font-semibold">{formatMinor(f.owed_minor)}</td>
@@ -512,7 +509,7 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
           suspendEscape={!!peopleTarget || !!editFacility}
         />
       )}
-      {isSuperAdmin && <FacilityPeopleDialog target={peopleTarget} onClose={closePeople} />}
+      <FacilityPeopleDialog target={peopleTarget} onClose={closePeople} />
 
       <FacilityEditDialog facility={editFacility} onClose={closeEdit} onSaved={onFacilitySaved} />
 
