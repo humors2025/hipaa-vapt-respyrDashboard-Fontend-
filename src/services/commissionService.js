@@ -140,7 +140,16 @@ export const resendPurchaseCodeService = ({ stripeSubscriptionId }) =>
 
 export const generateQrBatchService = ({ count }) => post(API_ENDPOINTS.COMMISSION.QRGENERATE, { count });
 export const linkQrService = ({ qrId, targetUserId }) => post(API_ENDPOINTS.COMMISSION.QRLINK, { qr_id: qrId, target_user_id: targetUserId || null });
-export const listQrService = ({ status, facilityId } = {}) => post(API_ENDPOINTS.COMMISSION.QRLIST, { status: status || undefined, facility_id: facilityId ?? undefined });
+// Sending page opts into server-side pagination (+ pagination/counts in the
+// response); without it the backend answers with the legacy ≤1000-row shape.
+export const listQrService = ({ status, facilityId, page, limit, filter } = {}) =>
+  post(API_ENDPOINTS.COMMISSION.QRLIST, {
+    status: status || undefined,
+    facility_id: facilityId ?? undefined,
+    page: page ?? undefined,
+    limit: limit ?? undefined,
+    filter: filter || undefined,
+  });
 export const assignQrService = ({ toUserId, count, batchId }) => post(API_ENDPOINTS.COMMISSION.QRASSIGN, { to_user_id: toUserId, count, batch_id: batchId || undefined });
 export const setupQrService = ({ qrId, targetType, facilityName, firstName, lastName, email, phone }) =>
   post(API_ENDPOINTS.COMMISSION.QRSETUP, { qr_id: qrId, target_type: targetType, facility_name: facilityName || undefined, first_name: firstName, last_name: lastName, email, phone: phone || undefined });

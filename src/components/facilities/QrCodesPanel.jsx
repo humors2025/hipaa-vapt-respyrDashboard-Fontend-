@@ -14,6 +14,9 @@ import {
   revokeQrService,
   listTrainerAdminsService,
 } from "@/services/commissionService";
+import { SalesPagination } from "@/components/super-admin/sales/PurchaseTable";
+
+const PAGE_LIMIT = 20;
 
 /**
  * QR Codes.
@@ -136,9 +139,10 @@ function SetupForm({ sticker, onDone, onCancel }) {
 }
 
 export default function QrCodesPanel({ isSuperAdmin = false }) {
-  const [data, setData] = useState({ items: [], allocation: [] });
+  const [data, setData] = useState({ items: [], allocation: [], counts: null, pagination: null });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
+  const [page, setPage] = useState(1);
   const [setupId, setSetupId] = useState(null);
   const [preview, setPreview] = useState(null);
   const closePreview = useCallback(() => setPreview(null), []);
@@ -154,15 +158,18 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [q, t] = await Promise.all([listQrService({}), isSuperAdmin ? listTrainerAdminsService() : Promise.resolve({ items: [] })]);
-      setData({ items: q.items || [], allocation: q.allocation || [] });
+      const [q, t] = await Promise.all([
+        listQrService({ page, limit: PAGE_LIMIT, filter }),
+        isSuperAdmin ? listTrainerAdminsService() : Promise.resolve({ items: [] }),
+      ]);
+      setData({ items: q.items || [], allocation: q.allocation || [], counts: q.counts || null, pagination: q.pagination || null });
       setTas(t.items || []);
     } catch (err) {
       toast.error(err?.message || "Could not load QR codes");
     } finally {
       setLoading(false);
     }
-  }, [isSuperAdmin]);
+  }, [isSuperAdmin, page, filter]);
 
   useEffect(() => {
     load();
@@ -213,15 +220,20 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
     }
   };
 
-  // One predicate per filter pill; the pill count is the number of rows it shows.
+  // Rows arrive pre-filtered and paginated, with the pill counts computed
+  // server-side over the whole set. The predicates remain only as a fallback
+  // for a backend that predates qr-list pagination (no pagination in the
+  // response → legacy full list).
   const FILTERS = {
     all: (q) => q.status !== "retired",
     unset: (q) => q.status !== "assigned" || !q.partner_code,
     live: (q) => q.status === "assigned" && !!q.partner_code,
   };
-  const items = data.items.filter(FILTERS[filter] || (() => true));
-  const counts = Object.fromEntries(Object.entries(FILTERS).map(([k, fn]) => [k, data.items.filter(fn).length]));
+  const serverPaged = Boolean(data.pagination);
+  const items = serverPaged ? data.items : data.items.filter(FILTERS[filter] || (() => true));
+  const counts = data.counts || Object.fromEntries(Object.entries(FILTERS).map(([k, fn]) => [k, data.items.filter(fn).length]));
   const { unset, live } = counts;
+  const totalPages = Math.max(1, data.pagination?.total_pages || 1);
 
   return (
     <div className="flex flex-col gap-6">
@@ -247,7 +259,7 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-[#308BF9] rounded-[10px] p-5 text-white"><div className="text-[12px] opacity-80">{isSuperAdmin ? "Stickers" : "My stickers"}</div><div className="text-[28px] font-bold">{data.items.filter((q) => q.status !== "retired").length}</div></div>
+        <div className="bg-[#308BF9] rounded-[10px] p-5 text-white"><div className="text-[12px] opacity-80">{isSuperAdmin ? "Stickers" : "My stickers"}</div><div className="text-[28px] font-bold">{counts.all}</div></div>
         <div className="bg-white rounded-[10px] p-5 border border-[#E1E6ED]"><div className="text-[#535359] text-[12px]">Live</div><div className="text-[#252525] text-[28px] font-bold">{live}</div><div className="text-[#A1A1A1] text-[11px]">Pointing at a gym or trainer</div></div>
         <div className="bg-white rounded-[10px] p-5 border border-[#E1E6ED]"><div className="text-[#535359] text-[12px]">Not set up</div><div className="text-[#252525] text-[28px] font-bold">{unset}</div><div className="text-[#A1A1A1] text-[11px]">Ready to put on a wall</div></div>
       </div>
@@ -311,7 +323,7 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
 
       <div className="flex gap-2 flex-wrap">
         {[["all", "All"], ["unset", "Not set up"], ["live", "Live"]].map(([k, label]) => (
-          <button key={k} type="button" onClick={() => setFilter(k)} className={`inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1 text-[11px] font-semibold cursor-pointer ${filter === k ? "bg-[#308BF9] text-white" : "bg-[#F5F7FA] text-[#535359]"}`}>
+          <button key={k} type="button" onClick={() => { setFilter(k); setPage(1); }} className={`inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1 text-[11px] font-semibold cursor-pointer ${filter === k ? "bg-[#308BF9] text-white" : "bg-[#F5F7FA] text-[#535359]"}`}>
             {label}
             <span className={`inline-flex min-w-[20px] justify-center rounded-full px-1.5 py-px text-[10px] tabular-nums ${filter === k ? "bg-white/25 text-white" : "bg-white text-[#252525] border border-[#E1E6ED]"}`}>{counts[k]}</span>
           </button>
@@ -376,6 +388,18 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {serverPaged && (
+        <SalesPagination
+          page={page}
+          limit={PAGE_LIMIT}
+          total={data.pagination?.total || 0}
+          totalPages={totalPages}
+          disabled={loading}
+          noun="stickers"
+          onPageChange={(p) => p >= 1 && p <= totalPages && p !== page && setPage(p)}
+        />
       )}
 
       {showAllocation && (
