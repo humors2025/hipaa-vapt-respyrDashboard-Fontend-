@@ -10,6 +10,8 @@ import {
   ORDERS_SEARCH_MIN_LENGTH,
   fetchPaymentTransactionsService,
   fetchShippingAddressesService,
+  fetchTestCodesService,
+  generateTestCodesService,
 } from "@/services/superAdminOrdersService";
 import { formatDate, formatMoney, humanizeStatus } from "@/components/super-admin/sales/salesFormat";
 import { SalesCard, UpdatingPill, Skeleton, EmptyState, SectionError, StatusBadge } from "@/components/super-admin/sales/SalesUi";
@@ -21,6 +23,7 @@ const DEFAULT_PAYMENT_STATUSES = ["paid", "failed", "refunded", "partially_refun
 const TABS = [
   { value: "shipping", label: "Shipping" },
   { value: "payments", label: "Payments" },
+  { value: "codes", label: "Test codes" },
 ];
 
 const PAYMENT_TYPE_LABEL = { first_payment: "First payment", renewal: "Renewal" };
@@ -220,6 +223,144 @@ function PaymentsTable({ rows, ...shell }) {
   );
 }
 
+const CODE_STATE = {
+  unused: { label: "Unused", cls: "bg-[#EEF4FE] text-[#308BF9]" },
+  redeemed: { label: "Redeemed", cls: "bg-[#E5F6EE] text-[#1F7A4A]" },
+  expired: { label: "Expired", cls: "bg-[#F5F7FA] text-[#535359]" },
+};
+
+function CodeStateBadge({ state }) {
+  const c = CODE_STATE[state] || { label: state || "—", cls: "bg-[#F5F7FA] text-[#535359]" };
+  return (
+    <span className={`inline-flex whitespace-nowrap rounded-full text-[11px] font-semibold px-2.5 py-0.5 ${c.cls}`}>{c.label}</span>
+  );
+}
+
+async function copyCode(code) {
+  try {
+    await navigator.clipboard.writeText(code);
+    toast.success(`${code} copied`);
+  } catch {
+    toast.error("Could not copy — select the code and copy manually.");
+  }
+}
+
+function CopyableCode({ code }) {
+  return (
+    <button
+      type="button"
+      onClick={() => copyCode(code)}
+      title="Copy code"
+      className="font-mono text-[12px] font-semibold text-[#252525] bg-[#F5F7FA] hover:bg-[#EEF4FE] rounded-[8px] px-2 py-1 cursor-pointer transition-colors"
+    >
+      {code}
+    </button>
+  );
+}
+
+function TestCodesTable({ rows, ...shell }) {
+  return (
+    <TableShell
+      {...shell}
+      empty={!rows?.length}
+      emptyMessage="No test codes yet. Generate one above."
+      minWidth="min-w-[760px]"
+      head={
+        <>
+          <th scope="col" className={th}>Code</th>
+          <th scope="col" className={th}>Created</th>
+          <th scope="col" className={th}>Expires</th>
+          <th scope="col" className={th}>Status</th>
+          <th scope="col" className={th}>Redeemed by (profile)</th>
+          <th scope="col" className={th}>Redeemed</th>
+        </>
+      }
+    >
+      {rows?.map((r) => (
+        <tr key={r.id} className="border-t border-[#F5F7FA] align-top">
+          <td className={`${td} whitespace-nowrap`}>
+            <CopyableCode code={r.code} />
+          </td>
+          <td className={`${td} text-[#535359] whitespace-nowrap`}>{formatDate(r.created_at, true)}</td>
+          <td className={`${td} text-[#535359] whitespace-nowrap`}>{formatDate(r.expires_at)}</td>
+          <td className={td}>
+            <CodeStateBadge state={r.state} />
+          </td>
+          <td className={`${td} whitespace-nowrap`}>
+            {r.redeemed_profile_id ? <span className="font-mono text-[11px] text-[#535359]">{r.redeemed_profile_id}</span> : <Dash />}
+          </td>
+          <td className={`${td} text-[#535359] whitespace-nowrap`}>{r.redeemed_at ? formatDate(r.redeemed_at, true) : <Dash />}</td>
+        </tr>
+      ))}
+    </TableShell>
+  );
+}
+
+// Generate panel + the codes a generate call just returned (copy them from
+// here; they are also first in the table below after the reload).
+function GenerateTestCodes({ onGenerated, disabled }) {
+  const [count, setCount] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [lastBatch, setLastBatch] = useState(null);
+
+  const generate = async () => {
+    setBusy(true);
+    try {
+      const res = await generateTestCodesService({ count });
+      if (res?.status === false) throw new Error(res?.message || "Failed to generate codes");
+      setLastBatch(res);
+      toast.success(`${res.codes.length} code${res.codes.length === 1 ? "" : "s"} generated`);
+      if (res.warning) toast.warning(res.warning, { duration: 10000 });
+      onGenerated?.();
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to generate codes"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-[10px] border border-[#E1E6ED] bg-[#FBFCFE] p-4 flex flex-col gap-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 w-[120px]">
+          <span className="text-[#535359] text-[11px] font-semibold">How many</span>
+          <select
+            value={count}
+            onChange={(e) => setCount(Number(e.target.value))}
+            aria-label="Number of codes"
+            className="w-full rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] text-[#252525] focus:outline-none focus:border-[#308BF9] transition-colors cursor-pointer"
+          >
+            {[1, 2, 3, 5, 10, 20].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          onClick={generate}
+          disabled={busy || disabled}
+          className="rounded-[10px] bg-[#308BF9] text-white px-4 py-2 text-[12px] font-semibold hover:bg-[#2578DB] disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+        >
+          {busy ? "Generating…" : "Generate codes"}
+        </button>
+        <p className="text-[#A1A1A1] text-[11px] mb-1">
+          Each code onboards one app user for free (no payment). Codes expire in 30 days.
+        </p>
+      </div>
+      {lastBatch?.codes?.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[#535359] text-[11px] font-semibold">New:</span>
+          {lastBatch.codes.map((c) => (
+            <CopyableCode key={c} code={c} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PaymentSummary({ summary }) {
   if (!summary?.length) return null;
   // One chip per status and currency, e.g. "Paid · 12 · $348.00".
@@ -268,10 +409,13 @@ export default function SuperAdminOrdersPage() {
       const res =
         tab === "shipping"
           ? await fetchShippingAddressesService({ search, page, limit: PAGE_LIMIT })
-          : await fetchPaymentTransactionsService({ status, search, page, limit: PAGE_LIMIT });
+          : tab === "payments"
+            ? await fetchPaymentTransactionsService({ status, search, page, limit: PAGE_LIMIT })
+            : await fetchTestCodesService({ page, limit: PAGE_LIMIT });
       if (id !== reqId.current) return;
       if (res?.status === false) throw new Error(res?.message || "Failed to load data");
-      setData(res);
+      // The test-codes endpoint answers with action: "list" instead of view.
+      setData(tab === "codes" ? { ...res, view: "codes" } : res);
     } catch (err) {
       if (id !== reqId.current) return;
       const msg = errorMessage(err, "Failed to load data");
@@ -322,11 +466,13 @@ export default function SuperAdminOrdersPage() {
       </div>
 
       <SalesCard
-        title={tab === "shipping" ? "Shipping addresses" : "Payment transactions"}
+        title={tab === "shipping" ? "Shipping addresses" : tab === "payments" ? "Payment transactions" : "Test onboarding codes"}
         subtitle={
           tab === "shipping"
             ? "Name, phone and address entered on Stripe Checkout"
-            : "One row per Stripe invoice. Stripe fee is shown only when it is in the same currency as the payment."
+            : tab === "payments"
+              ? "One row per Stripe invoice. Stripe fee is shown only when it is in the same currency as the payment."
+              : "Free single-use codes for testing app onboarding — redeemed like a purchase code, but with no payment, sales or commission behind them."
         }
         action={<UpdatingPill show={loading && Boolean(current)} />}
       >
@@ -352,6 +498,9 @@ export default function SuperAdminOrdersPage() {
 
         {tab === "payments" && <PaymentSummary summary={current?.summary} />}
 
+        {tab === "codes" && <GenerateTestCodes onGenerated={load} disabled={loading} />}
+
+        {tab !== "codes" && (
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 w-full md:w-auto md:flex-1 md:max-w-[420px]">
             <span className="text-[#535359] text-[11px] font-semibold">Search</span>
@@ -386,7 +535,10 @@ export default function SuperAdminOrdersPage() {
             </label>
           )}
         </div>
-        {tooShort && <p className="text-[#A1A1A1] text-[11px] -mt-2">Type at least {ORDERS_SEARCH_MIN_LENGTH} characters to search.</p>}
+        )}
+        {tab !== "codes" && tooShort && (
+          <p className="text-[#A1A1A1] text-[11px] -mt-2">Type at least {ORDERS_SEARCH_MIN_LENGTH} characters to search.</p>
+        )}
 
         {tab === "shipping" ? (
           <ShippingTable
@@ -394,12 +546,14 @@ export default function SuperAdminOrdersPage() {
             {...shell}
             emptyMessage={filtersActive ? "No addresses match this search." : "No shipping addresses recorded yet."}
           />
-        ) : (
+        ) : tab === "payments" ? (
           <PaymentsTable
             rows={current?.payments}
             {...shell}
             emptyMessage={filtersActive ? "No payments match these filters." : "No payments recorded yet."}
           />
+        ) : (
+          <TestCodesTable rows={current?.codes} {...shell} />
         )}
 
         {current && !error && (
@@ -409,7 +563,7 @@ export default function SuperAdminOrdersPage() {
             total={pagination?.total || 0}
             totalPages={totalPages}
             disabled={loading}
-            noun={tab === "shipping" ? "addresses" : "payments"}
+            noun={tab === "shipping" ? "addresses" : tab === "payments" ? "payments" : "codes"}
             onPageChange={(p) => p >= 1 && p <= totalPages && p !== page && setPage(p)}
           />
         )}

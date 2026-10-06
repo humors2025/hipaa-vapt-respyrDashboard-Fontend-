@@ -177,7 +177,8 @@ export default function SuccessContent() {
     {
       body: (
         <p>
-          Create your account{email ? <> with <strong className="font-semibold text-[#252525] break-all">{email}</strong></> : null}.
+          {linked ? "Sign in to your account" : "Create your account"}
+          {email ? <> with <strong className="font-semibold text-[#252525] break-all">{email}</strong></> : null}.
         </p>
       ),
     },
@@ -218,7 +219,9 @@ export default function SuccessContent() {
             <h1 id="page-title" className="mt-4 text-[#252525] text-[26px] sm:text-[28px] font-bold leading-tight">
               You&rsquo;re in.
             </h1>
-            <p className="mt-1.5 text-[#535359] text-[14px]">Your membership is active and your device is on its way.</p>
+            <p className="mt-1.5 text-[#535359] text-[14px]">
+              {linked ? "Your membership is active and you’re ready to go." : "Your membership is active and your device is on its way."}
+            </p>
           </section>
 
           {/* code pass */}

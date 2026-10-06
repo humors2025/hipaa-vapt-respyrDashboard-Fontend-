@@ -35,3 +35,22 @@ export const fetchShippingAddressesService = async ({ search = "", page = 1, lim
 
 export const fetchPaymentTransactionsService = async ({ status = "all", search = "", page = 1, limit = 20 }) =>
   post({ view: "payments", status, ...(search ? { search } : {}), page, limit });
+
+// Free app-onboarding test codes (super-admin-test-codes.js): rows shaped like a
+// paid purchase in trainer_client_plan_subscriptions, so the app redeems them
+// as usual, but with no Stripe payment behind them. One redemption per code.
+//
+// generate → { status, codes: ["RSP…"], expires_at, trainer_code, warning? }
+// list     → { status, codes: [ { id, code, trainer_code, created_at, expires_at,
+//              state: "unused" | "redeemed" | "expired", redeemed_profile_id, redeemed_at } ],
+//              pagination: { page, limit, total, total_pages } }
+const postTestCodes = (payload) =>
+  apiFetcher(API_ENDPOINTS.SALES.SUPERADMINTESTCODES, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    timeoutMs: 29000,
+  });
+
+export const generateTestCodesService = async ({ count = 1 }) => postTestCodes({ action: "generate", count });
+
+export const fetchTestCodesService = async ({ page = 1, limit = 20 }) => postTestCodes({ action: "list", page, limit });

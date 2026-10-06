@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
-import { UserRound, Users, X } from "lucide-react";
+import { Printer, Send, UserRound, Users } from "lucide-react";
 import { RysfloQrPosterModal } from "@/components/earnings/RysfloQrPoster";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -14,6 +14,9 @@ import {
   revokeQrService,
   listTrainerAdminsService,
 } from "@/services/commissionService";
+import { SalesPagination } from "@/components/super-admin/sales/PurchaseTable";
+
+const PAGE_LIMIT = 20;
 
 /**
  * QR Codes.
@@ -33,6 +36,25 @@ const STICKER_BASE = process.env.NEXT_PUBLIC_STICKER_BASE_URL || "https://rysflo
 export const stickerUrl = (id) => (/[?=&]$/.test(STICKER_BASE) ? STICKER_BASE : STICKER_BASE.replace(/\/+$/, "") + "/") + id;
 
 const field = "w-full rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[13px] text-[#252525] focus:outline-none focus:border-[#308BF9]";
+
+/** A titled card: icon + title + subtitle header, divider, then the content. */
+function Section({ icon: Icon, title, subtitle, action, children }) {
+  return (
+    <section className="bg-white rounded-[15px] border border-[#E1E6ED] overflow-hidden">
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-[#F5F7FA]">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[#EEF4FE] text-[#308BF9]">
+          <Icon className="size-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[#252525] text-[14px] font-bold leading-tight tracking-[-0.28px]">{title}</h2>
+          <p className="text-[#535359] text-[12px] mt-0.5">{subtitle}</p>
+        </div>
+        {action}
+      </div>
+      <div className="p-5">{children}</div>
+    </section>
+  );
+}
 
 function StatusPill({ q }) {
   if (q.status === "retired") return <span className="inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 bg-[#F5F7FA] text-[#535359]">retired</span>;
@@ -136,14 +158,14 @@ function SetupForm({ sticker, onDone, onCancel }) {
 }
 
 export default function QrCodesPanel({ isSuperAdmin = false }) {
-  const [data, setData] = useState({ items: [], allocation: [] });
+  const [data, setData] = useState({ items: [], allocation: [], counts: null, pagination: null });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
+  const [page, setPage] = useState(1);
   const [setupId, setSetupId] = useState(null);
   const [preview, setPreview] = useState(null);
   const closePreview = useCallback(() => setPreview(null), []);
   const [busy, setBusy] = useState(false);
-  const [showAllocation, setShowAllocation] = useState(false); // super admin: who holds how many stickers
   const [revokingId, setRevokingId] = useState(null);
   const [count, setCount] = useState(50);
   const [tas, setTas] = useState([]);
@@ -154,15 +176,18 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [q, t] = await Promise.all([listQrService({}), isSuperAdmin ? listTrainerAdminsService() : Promise.resolve({ items: [] })]);
-      setData({ items: q.items || [], allocation: q.allocation || [] });
+      const [q, t] = await Promise.all([
+        listQrService({ page, limit: PAGE_LIMIT, filter }),
+        isSuperAdmin ? listTrainerAdminsService() : Promise.resolve({ items: [] }),
+      ]);
+      setData({ items: q.items || [], allocation: q.allocation || [], counts: q.counts || null, pagination: q.pagination || null });
       setTas(t.items || []);
     } catch (err) {
       toast.error(err?.message || "Could not load QR codes");
     } finally {
       setLoading(false);
     }
-  }, [isSuperAdmin]);
+  }, [isSuperAdmin, page, filter]);
 
   useEffect(() => {
     load();
@@ -213,15 +238,20 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
     }
   };
 
-  // One predicate per filter pill; the pill count is the number of rows it shows.
+  // Rows arrive pre-filtered and paginated, with the pill counts computed
+  // server-side over the whole set. The predicates remain only as a fallback
+  // for a backend that predates qr-list pagination (no pagination in the
+  // response → legacy full list).
   const FILTERS = {
     all: (q) => q.status !== "retired",
     unset: (q) => q.status !== "assigned" || !q.partner_code,
     live: (q) => q.status === "assigned" && !!q.partner_code,
   };
-  const items = data.items.filter(FILTERS[filter] || (() => true));
-  const counts = Object.fromEntries(Object.entries(FILTERS).map(([k, fn]) => [k, data.items.filter(fn).length]));
+  const serverPaged = Boolean(data.pagination);
+  const items = serverPaged ? data.items : data.items.filter(FILTERS[filter] || (() => true));
+  const counts = data.counts || Object.fromEntries(Object.entries(FILTERS).map(([k, fn]) => [k, data.items.filter(fn).length]));
   const { unset, live } = counts;
+  const totalPages = Math.max(1, data.pagination?.total_pages || 1);
 
   return (
     <div className="flex flex-col gap-6">
@@ -247,33 +277,40 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-[#308BF9] rounded-[10px] p-5 text-white"><div className="text-[12px] opacity-80">{isSuperAdmin ? "Stickers" : "My stickers"}</div><div className="text-[28px] font-bold">{data.items.filter((q) => q.status !== "retired").length}</div></div>
+        <div className="bg-[#308BF9] rounded-[10px] p-5 text-white"><div className="text-[12px] opacity-80">{isSuperAdmin ? "Stickers" : "My stickers"}</div><div className="text-[28px] font-bold">{counts.all}</div></div>
         <div className="bg-white rounded-[10px] p-5 border border-[#E1E6ED]"><div className="text-[#535359] text-[12px]">Live</div><div className="text-[#252525] text-[28px] font-bold">{live}</div><div className="text-[#A1A1A1] text-[11px]">Pointing at a gym or trainer</div></div>
         <div className="bg-white rounded-[10px] p-5 border border-[#E1E6ED]"><div className="text-[#535359] text-[12px]">Not set up</div><div className="text-[#252525] text-[28px] font-bold">{unset}</div><div className="text-[#A1A1A1] text-[11px]">Ready to put on a wall</div></div>
       </div>
 
       {isSuperAdmin && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="rounded-[10px] border border-[#E1E6ED] p-4 flex flex-col gap-3">
-            <div className="text-[#252525] text-[13px] font-bold">Generate & print</div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <input type="number" min={1} max={1000} value={count} onChange={(e) => setCount(Number(e.target.value) || 1)} className={`${field} w-24`} />
-              <button type="button" onClick={generate} disabled={busy} className="rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 disabled:opacity-50 cursor-pointer">Generate & open print sheet</button>
+        <div className="flex flex-col gap-4">
+          <Section
+            icon={Printer}
+            title="Generate & print"
+            subtitle="Create a new batch of stickers and open the print sheet for them."
+          >
+            <div className="flex items-end gap-3 flex-wrap">
+              <label className="flex flex-col gap-1 w-28">
+                <span className="text-[#535359] text-[11px] font-semibold">How many</span>
+                <input type="number" min={1} max={1000} value={count} onChange={(e) => setCount(Number(e.target.value) || 1)} className={field} />
+              </label>
+              <button type="button" onClick={generate} disabled={busy} className="rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2.5 hover:bg-[#2578DB] disabled:opacity-50 transition-colors cursor-pointer">
+                {busy ? "Working…" : "Generate & open print sheet"}
+              </button>
+              <span className="text-[#A1A1A1] text-[11px] mb-1.5">
+                Stickers encode <span className="font-mono">{stickerUrl("<ID>")}</span>
+              </span>
             </div>
-            <div className="text-[#A1A1A1] text-[11px]">Stickers encode {stickerUrl("<ID>")}</div>
-          </div>
-          <form onSubmit={assign} className="rounded-[10px] border border-[#E1E6ED] p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="text-[#252525] text-[13px] font-bold">Hand stickers to a trainer admin</div>
-              {data.allocation.length > 0 && (
-                <button type="button" onClick={() => setShowAllocation(true)} className="inline-flex items-center gap-1.5 rounded-full bg-[#EEF4FE] text-[#308BF9] text-[11px] font-semibold px-3 py-1 cursor-pointer">
-                  <Users className="size-3.5" />
-                  Who holds what
-                  <span className="inline-flex min-w-[18px] justify-center rounded-full bg-white px-1.5 py-px text-[10px] tabular-nums border border-[#E1E6ED] text-[#252525]">{data.allocation.length}</span>
-                </button>
-              )}
-            </div>
-            <div className="flex items-center gap-3 flex-wrap">
+          </Section>
+
+          <Section
+            icon={Send}
+            title="Hand stickers to a trainer admin"
+            subtitle="Move unassigned stickers from the pool into a trainer admin's hands — they set them up in the field."
+          >
+            <form onSubmit={assign} className="flex items-end gap-3 flex-wrap">
+              <label className="flex flex-col gap-1 w-full md:w-auto">
+                <span className="text-[#535359] text-[11px] font-semibold">Trainer admin</span>
               <Select value={assignTo || undefined} onValueChange={setAssignTo}>
                 <SelectTrigger className={`${field} w-auto min-w-[380px] max-w-[520px] h-auto py-2.5 shadow-none data-[placeholder]:text-[#A1A1A1] [&_svg]:text-[#A1A1A1] focus-visible:ring-0 focus-visible:border-[#308BF9] data-[state=open]:border-[#308BF9]`}>
                   <SelectValue placeholder="Choose trainer admin…">
@@ -302,16 +339,67 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
                   ))}
                 </SelectContent>
               </Select>
-              <input type="number" min={1} max={1000} value={assignCount} onChange={(e) => setAssignCount(Number(e.target.value) || 1)} className={`${field} w-24`} />
-              <button type="submit" disabled={busy || !assignTo} className="rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2 disabled:opacity-50 cursor-pointer">Assign</button>
-            </div>
-          </form>
+              </label>
+              <label className="flex flex-col gap-1 w-28">
+                <span className="text-[#535359] text-[11px] font-semibold">How many</span>
+                <input type="number" min={1} max={1000} value={assignCount} onChange={(e) => setAssignCount(Number(e.target.value) || 1)} className={field} />
+              </label>
+              <button type="submit" disabled={busy || !assignTo} className="rounded-[10px] bg-[#308BF9] text-white text-[12px] font-semibold px-4 py-2.5 hover:bg-[#2578DB] disabled:opacity-50 transition-colors cursor-pointer">
+                {busy ? "Assigning…" : "Assign"}
+              </button>
+            </form>
+          </Section>
+
+          <Section
+            icon={Users}
+            title="Who holds what"
+            subtitle="Stickers held by each trainer admin, and how many are live."
+            action={
+              data.allocation.length > 0 ? (
+                <span className="inline-flex min-w-[22px] justify-center rounded-full bg-[#F5F7FA] border border-[#E1E6ED] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[#252525]">
+                  {data.allocation.length}
+                </span>
+              ) : null
+            }
+          >
+            {data.allocation.length === 0 ? (
+              <div className="rounded-[10px] border border-dashed border-[#E1E6ED] p-5 text-[#A1A1A1] text-[12px] text-center">
+                No stickers generated yet — holders appear here once a batch exists.
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-[10px] border border-[#E1E6ED]">
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="bg-[#F5F7FA] text-[#535359] text-left">
+                      <th className="py-2.5 px-4 font-semibold">Trainer admin</th>
+                      <th className="py-2.5 px-4 font-semibold text-right">Total</th>
+                      <th className="py-2.5 px-4 font-semibold text-right">Live</th>
+                      <th className="py-2.5 px-4 font-semibold text-right">Not set up</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.allocation.map((a) => (
+                      <tr key={a.ta || "pool"} className="border-t border-[#F5F7FA]">
+                        <td className="py-2.5 px-4">
+                          <div className="text-[#252525] font-semibold">{a.ta_name || a.ta || "Unassigned pool"}</div>
+                          {a.ta_name && a.ta && <div className="text-[#A1A1A1] text-[11px]">{a.ta}</div>}
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-[#252525] font-semibold tabular-nums">{a.total}</td>
+                        <td className="py-2.5 px-4 text-right tabular-nums"><span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[#E5F6EE] text-[#1F7A4A]">{a.linked}</span></td>
+                        <td className="py-2.5 px-4 text-right tabular-nums"><span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[#FFF4E0] text-[#A66B00]">{a.unassigned}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Section>
         </div>
       )}
 
       <div className="flex gap-2 flex-wrap">
         {[["all", "All"], ["unset", "Not set up"], ["live", "Live"]].map(([k, label]) => (
-          <button key={k} type="button" onClick={() => setFilter(k)} className={`inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1 text-[11px] font-semibold cursor-pointer ${filter === k ? "bg-[#308BF9] text-white" : "bg-[#F5F7FA] text-[#535359]"}`}>
+          <button key={k} type="button" onClick={() => { setFilter(k); setPage(1); }} className={`inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1 text-[11px] font-semibold cursor-pointer ${filter === k ? "bg-[#308BF9] text-white" : "bg-[#F5F7FA] text-[#535359]"}`}>
             {label}
             <span className={`inline-flex min-w-[20px] justify-center rounded-full px-1.5 py-px text-[10px] tabular-nums ${filter === k ? "bg-white/25 text-white" : "bg-white text-[#252525] border border-[#E1E6ED]"}`}>{counts[k]}</span>
           </button>
@@ -378,48 +466,16 @@ export default function QrCodesPanel({ isSuperAdmin = false }) {
         </div>
       )}
 
-      {showAllocation && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowAllocation(false)}>
-          <div className="relative bg-white rounded-[15px] shadow-[0_16px_48px_rgba(37,37,37,0.18)] w-full max-w-[560px] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-3">
-              <div>
-                <div className="text-[#252525] text-[15px] font-bold">Who holds what</div>
-                <div className="text-[#535359] text-[12px] mt-0.5">Stickers held by each trainer admin, and how many are live.</div>
-              </div>
-              <button type="button" onClick={() => setShowAllocation(false)} aria-label="Close" className="rounded-full p-1.5 text-[#A1A1A1] hover:bg-[#F5F7FA] hover:text-[#535359] cursor-pointer">
-                <X className="size-4" />
-              </button>
-            </div>
-            <div className="max-h-[60vh] overflow-y-auto border-t border-[#F5F7FA]">
-              <table className="w-full text-[12px]">
-                <thead className="sticky top-0 bg-[#F5F7FA] text-[#535359] text-left">
-                  <tr>
-                    <th className="py-2.5 px-6 font-semibold">Trainer admin</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">Total</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">Live</th>
-                    <th className="py-2.5 px-6 font-semibold text-right">Not set up</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.allocation.map((a) => (
-                    <tr key={a.ta || "pool"} className="border-t border-[#F5F7FA]">
-                      <td className="py-2.5 px-6">
-                        <div className="text-[#252525] font-semibold">{a.ta_name || a.ta || "Unassigned pool"}</div>
-                        {a.ta_name && a.ta && <div className="text-[#A1A1A1] text-[11px]">{a.ta}</div>}
-                      </td>
-                      <td className="py-2.5 px-3 text-right text-[#252525] font-semibold tabular-nums">{a.total}</td>
-                      <td className="py-2.5 px-3 text-right tabular-nums"><span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[#E5F6EE] text-[#1F7A4A]">{a.linked}</span></td>
-                      <td className="py-2.5 px-6 text-right tabular-nums"><span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[#FFF4E0] text-[#A66B00]">{a.unassigned}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex justify-end px-6 py-3 border-t border-[#F5F7FA]">
-              <button type="button" onClick={() => setShowAllocation(false)} className="rounded-[10px] border border-[#E1E6ED] bg-white text-[#535359] text-[12px] font-semibold px-4 py-2 hover:bg-[#F5F7FA] cursor-pointer">Close</button>
-            </div>
-          </div>
-        </div>
+      {serverPaged && (
+        <SalesPagination
+          page={page}
+          limit={PAGE_LIMIT}
+          total={data.pagination?.total || 0}
+          totalPages={totalPages}
+          disabled={loading}
+          noun="stickers"
+          onPageChange={(p) => p >= 1 && p <= totalPages && p !== page && setPage(p)}
+        />
       )}
 
       {preview && <PosterPreview sticker={preview} onClose={closePreview} />}
