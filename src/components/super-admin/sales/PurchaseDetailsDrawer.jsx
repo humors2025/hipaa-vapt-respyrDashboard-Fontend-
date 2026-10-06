@@ -129,7 +129,23 @@ export default function PurchaseDetailsDrawer({ purchase, onClose }) {
                 <StatusBadge status={p.subscription_status} />
               </Row>
               <Row label="Start date">{p.subscription_start ? formatDate(p.subscription_start) : null}</Row>
-              <Row label="Renewal / end date">{p.subscription_end ? formatDate(p.subscription_end) : null}</Row>
+              {p.canceled_at && <Row label="Cancellation requested">{formatDate(p.canceled_at, true)}</Row>}
+              <Row
+                label={
+                  p.subscription_status === "cancelled"
+                    ? "Ended on"
+                    : p.subscription_status === "cancellation_scheduled"
+                      ? "Access until"
+                      : "Renewal / end date"
+                }
+              >
+                {p.subscription_end ? formatDate(p.subscription_end) : null}
+              </Row>
+              {p.subscription_status === "cancellation_scheduled" && (
+                <p className="text-[#A1A1A1] text-[11px] -mt-1 text-right">
+                  The customer cancelled; the plan stays active until this date, then ends without renewing.
+                </p>
+              )}
             </Section>
 
             <Section title="Payment reference">

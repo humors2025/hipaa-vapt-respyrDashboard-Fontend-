@@ -92,6 +92,7 @@ const STATUS_BADGE = {
   expired: "bg-[#F5F7FA] text-[#535359]",
   cancelled: "bg-[#FCEAEB] text-[#B5363A]",
   canceled: "bg-[#FCEAEB] text-[#B5363A]",
+  cancellation_scheduled: "bg-[#FFF4E0] text-[#A66B00]",
   failed: "bg-[#FCEAEB] text-[#B5363A]",
   refunded: "bg-[#FFF4E0] text-[#A66B00]",
   partially_refunded: "bg-[#FFF4E0] text-[#A66B00]",

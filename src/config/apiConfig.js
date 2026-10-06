@@ -198,6 +198,7 @@ export const API_ENDPOINTS = {
   SALES: {
     SUPERADMINSALESANALYTICS: `/${API_VERSION}/dietitian/api/web/super-admin-sales-analytics`,
     SUPERADMINORDERS: `/${API_VERSION}/dietitian/api/web/super-admin-orders`,
+    SUPERADMINTESTCODES: `/${API_VERSION}/dietitian/api/web/super-admin-test-codes`,
   },
 
    FOOD: {

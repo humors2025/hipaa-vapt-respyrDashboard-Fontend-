@@ -5,7 +5,8 @@ import { X } from "lucide-react";
 import { listFacilityPeopleService, formatMinor } from "@/services/commissionService";
 
 /**
- * Super admin › Facilities: the trainers or active members behind a count.
+ * Facilities (super admin and trainer admin): the trainers or active members
+ * behind a count — the API scopes a trainer admin to their own facilities.
  * FacilityPeopleList renders the list (also used inline by the Trainers /
  * Active members tabs); the default export wraps it in a popup for one
  * facility's counts. facility null = every facility, which adds a Facility
