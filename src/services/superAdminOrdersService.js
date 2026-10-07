@@ -40,9 +40,17 @@ export const fetchPaymentTransactionsService = async ({ status = "all", search =
 // paid purchase in trainer_client_plan_subscriptions, so the app redeems them
 // as usual, but with no Stripe payment behind them. One redemption per code.
 //
-// generate → { status, codes: ["RSP…"], expires_at, trainer_code, warning? }
+// Every code is issued under one real trainer account (connect@respyr.in unless
+// the backend's SUPER_ADMIN_TEST_CODE_TRAINER_EMAIL says otherwise), so whoever
+// redeems one shows up in that trainer's client list. trainer.found === false
+// means that account is missing or deactivated: generate then answers 409 and
+// mints nothing, because a code whose trainer the app cannot resolve never
+// redeems.
+//
+// generate → { status, codes: ["RSP…"], expires_at, trainer_code, trainer }
 // list     → { status, codes: [ { id, code, trainer_code, created_at, expires_at,
 //              state: "unused" | "redeemed" | "expired", redeemed_profile_id, redeemed_at } ],
+//              trainer: { email, name, code, found },
 //              pagination: { page, limit, total, total_pages } }
 const postTestCodes = (payload) =>
   apiFetcher(API_ENDPOINTS.SALES.SUPERADMINTESTCODES, {
