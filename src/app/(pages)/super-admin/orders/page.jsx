@@ -264,10 +264,11 @@ function TestCodesTable({ rows, ...shell }) {
       {...shell}
       empty={!rows?.length}
       emptyMessage="No test codes yet. Generate one above."
-      minWidth="min-w-[760px]"
+      minWidth="min-w-[880px]"
       head={
         <>
           <th scope="col" className={th}>Code</th>
+          <th scope="col" className={th}>Trainer</th>
           <th scope="col" className={th}>Created</th>
           <th scope="col" className={th}>Expires</th>
           <th scope="col" className={th}>Status</th>
@@ -280,6 +281,9 @@ function TestCodesTable({ rows, ...shell }) {
         <tr key={r.id} className="border-t border-[#F5F7FA] align-top">
           <td className={`${td} whitespace-nowrap`}>
             <CopyableCode code={r.code} />
+          </td>
+          <td className={`${td} whitespace-nowrap`}>
+            {r.trainer_code ? <span className="font-mono text-[11px] text-[#535359]">{r.trainer_code}</span> : <Dash />}
           </td>
           <td className={`${td} text-[#535359] whitespace-nowrap`}>{formatDate(r.created_at, true)}</td>
           <td className={`${td} text-[#535359] whitespace-nowrap`}>{formatDate(r.expires_at)}</td>
@@ -298,7 +302,7 @@ function TestCodesTable({ rows, ...shell }) {
 
 // Generate panel + the codes a generate call just returned (copy them from
 // here; they are also first in the table below after the reload).
-function GenerateTestCodes({ onGenerated, disabled }) {
+function GenerateTestCodes({ onGenerated, disabled, trainer }) {
   const [count, setCount] = useState(1);
   const [busy, setBusy] = useState(false);
   const [lastBatch, setLastBatch] = useState(null);
@@ -310,7 +314,6 @@ function GenerateTestCodes({ onGenerated, disabled }) {
       if (res?.status === false) throw new Error(res?.message || "Failed to generate codes");
       setLastBatch(res);
       toast.success(`${res.codes.length} code${res.codes.length === 1 ? "" : "s"} generated`);
-      if (res.warning) toast.warning(res.warning, { duration: 10000 });
       onGenerated?.();
     } catch (err) {
       toast.error(errorMessage(err, "Failed to generate codes"));
@@ -340,7 +343,7 @@ function GenerateTestCodes({ onGenerated, disabled }) {
         <button
           type="button"
           onClick={generate}
-          disabled={busy || disabled}
+          disabled={busy || disabled || trainer?.found === false}
           className="rounded-[10px] bg-[#308BF9] text-white px-4 py-2 text-[12px] font-semibold hover:bg-[#2578DB] disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
         >
           {busy ? "Generating…" : "Generate codes"}
@@ -349,6 +352,22 @@ function GenerateTestCodes({ onGenerated, disabled }) {
           Each code onboards one app user for free (no payment). Codes expire in 30 days.
         </p>
       </div>
+      {trainer && (trainer.found
+        ? (
+          <p className="text-[#535359] text-[11px]">
+            Issued under <span className="font-semibold text-[#252525]">{trainer.name || trainer.email}</span>
+            {trainer.name ? ` (${trainer.email})` : ""} · trainer code{" "}
+            <span className="font-mono text-[#252525]">{trainer.code}</span> — whoever redeems one becomes that trainer's
+            client.
+          </p>
+        )
+        : (
+          <p className="text-[#B5363A] text-[11px]">
+            No active trainer account for <span className="font-semibold">{trainer.email}</span>. Test codes are issued
+            under that trainer, and a code whose trainer the app can't resolve never redeems — so generating is blocked
+            until the account exists.
+          </p>
+        ))}
       {lastBatch?.codes?.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[#535359] text-[11px] font-semibold">New:</span>
@@ -498,7 +517,7 @@ export default function SuperAdminOrdersPage() {
 
         {tab === "payments" && <PaymentSummary summary={current?.summary} />}
 
-        {tab === "codes" && <GenerateTestCodes onGenerated={load} disabled={loading} />}
+        {tab === "codes" && <GenerateTestCodes onGenerated={load} disabled={loading} trainer={current?.trainer} />}
 
         {tab !== "codes" && (
         <div className="flex flex-wrap items-end gap-3">
