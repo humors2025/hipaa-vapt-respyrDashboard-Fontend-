@@ -201,6 +201,13 @@ export const API_ENDPOINTS = {
     SUPERADMINTESTCODES: `/${API_VERSION}/dietitian/api/web/super-admin-test-codes`,
   },
 
+  // Super Admin audit log (app_auth_logs): sign-ins, API access, privileged
+  // actions. Contract: src/services/superAdminAuditService.js.
+  AUDIT: {
+    LOGS: `/${API_VERSION}/dietitian/api/web/audit-logs`,
+    LOGSLIVE: `/${API_VERSION}/dietitian/api/web/audit-logs/live`,
+  },
+
    FOOD: {
     // Internal Next.js API routes (relative — not prefixed with API_BASE_URL)
     FOODSEARCH: "/api/food/search",
