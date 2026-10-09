@@ -34,8 +34,11 @@ const NO_STICKER = "__none__";
 const RESEND_COOLDOWN_SECONDS = 60;
 // Facilities per page (list-facilities `limit`).
 const PAGE_SIZE = 10;
-// Search box → API `search` after this pause (same as the Orders page).
+// Search box → API `search` after this pause, and only once the trimmed term
+// has SEARCH_MIN_LENGTH characters (same 400 ms / 3-char rule as Orders; the
+// API rejects shorter terms with 422).
 const SEARCH_DEBOUNCE_MS = 400;
+const SEARCH_MIN_LENGTH = 3;
 // What the API's `search` matches on. Also applied client-side to the page
 // that came back when the response has no `search` echo, i.e. the API in
 // front of us predates the search support — the box still narrows that page.
@@ -66,6 +69,9 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   // name, owner email and parent admin email — server-side, across pages.
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  // Mirror of `search` for the debounce callback, so it only resets the page
+  // when the term the list is asked for actually changes.
+  const searchRef = useRef("");
   // Responses can land out of order while typing; only the latest counts.
   const reqId = useRef(0);
   // The Facilities / Trainers / Active members cards are tabs (super admin
@@ -102,10 +108,16 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
     return () => clearInterval(t);
   }, [cooldowns]);
 
-  // Debounce the search box; a new term always starts from page 1.
+  // Debounce the search box. Fewer than SEARCH_MIN_LENGTH characters is not a
+  // search yet: the unfiltered list stays (with a hint by the box) until there
+  // is enough to search. A new term always starts from page 1.
   useEffect(() => {
+    const trimmed = searchInput.trim();
+    const next = trimmed.length >= SEARCH_MIN_LENGTH ? trimmed : "";
     const t = setTimeout(() => {
-      setSearch(searchInput.trim());
+      if (next === searchRef.current) return;
+      searchRef.current = next;
+      setSearch(next);
       setPage(1);
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
@@ -257,6 +269,8 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   // Facilities matching the current term: the API's count when it searched
   // for us, else what is left of this page after the client-side narrowing.
   const matchTotal = typeof data?.search === "string" ? (data?.pagination?.total ?? data?.facilities?.length ?? 0) : (data?.facilities?.length ?? 0);
+  const typedLength = searchInput.trim().length;
+  const tooShort = typedLength > 0 && typedLength < SEARCH_MIN_LENGTH;
 
   return (
     <div className="flex flex-col gap-6">
@@ -403,7 +417,11 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
             </button>
           )}
         </div>
-        {!!search && !!data && (loading || matchTotal > 0) && (
+        {tooShort ? (
+          <span className="text-[#A1A1A1] text-[12px]" aria-live="polite">
+            Type at least {SEARCH_MIN_LENGTH} characters to search.
+          </span>
+        ) : !!search && !!data && (loading || matchTotal > 0) && (
           <span className="text-[#535359] text-[12px]" aria-live="polite">
             {loading ? (
               "Searching…"
