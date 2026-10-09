@@ -178,11 +178,18 @@ const handleSubmit = async (e) => {
     router.push(landingPathForUser(currentUser));
 
   } catch (error) {
-    let errorMessage = "Invalid credentials";
+    // 401 from the login API means the email / password pair was rejected
+    // (both the unknown-email and wrong-password paths) — say so plainly,
+    // whatever wording the API used. Other API errors (account not active,
+    // email not verified, …) keep the API message; anything else is a
+    // network / unexpected failure, not a credentials problem.
+    let errorMessage = "Could not sign in. Please try again.";
 
     if (error?.isApiError) {
       errorMessage =
-        error.message || error.data?.error || "Invalid credentials";
+        error.status === 401
+          ? "Wrong email or password"
+          : error.message || error.data?.error || "Wrong email or password";
     }
 
     setInputError(errorMessage);
