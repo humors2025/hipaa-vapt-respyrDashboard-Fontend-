@@ -17,8 +17,9 @@ const post = (endpoint, body = {}) =>
 // ── Facilities (trainer-admin / super-admin) ─────────────────────────────────
 
 // Pass { page, limit } for one page (response then has `pagination`); no args = every facility.
-export const listFacilitiesService = (paging) =>
-  post(API_ENDPOINTS.COMMISSION.LISTFACILITIES, paging || {});
+// Add `search` to narrow by facility name, partner code, owner name/email or parent admin email.
+export const listFacilitiesService = (body) =>
+  post(API_ENDPOINTS.COMMISSION.LISTFACILITIES, body || {});
 
 // Edit a facility's name and/or its owner's display name (super admin: any
 // facility; trainer admin: only their own facilities).

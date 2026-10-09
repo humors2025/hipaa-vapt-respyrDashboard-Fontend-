@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { QrCode, Pencil } from "lucide-react";
+import { QrCode, Pencil, Search, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { listFacilitiesService, inviteFacilityAdminService, listQrService, setupQrService, revokeInviteService, formatMinor } from "@/services/commissionService";
 import { inviteTrainerClientService, superAdminInviteTrainerService, resendUserInviteService } from "@/services/authService";
@@ -34,6 +34,14 @@ const NO_STICKER = "__none__";
 const RESEND_COOLDOWN_SECONDS = 60;
 // Facilities per page (list-facilities `limit`).
 const PAGE_SIZE = 10;
+// Search box → API `search` after this pause (same as the Orders page).
+const SEARCH_DEBOUNCE_MS = 400;
+// What the API's `search` matches on. Also applied client-side to the page
+// that came back when the response has no `search` echo, i.e. the API in
+// front of us predates the search support — the box still narrows that page.
+const FACILITY_SEARCH_FIELDS = ["name", "partner_code", "owner_name", "owner_user_id", "parent_admin_user_id"];
+const INVITE_SEARCH_FIELDS = ["facility_name", "partner_code", "invited_name", "invited_email", "invited_by_user_id"];
+const rowMatches = (row, fields, term) => fields.some((k) => String(row?.[k] || "").toLowerCase().includes(term));
 
 function Card({ label, value, hint, accent, onClick }) {
   const Tag = onClick ? "button" : "div";
@@ -53,6 +61,13 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  // Search box text, and the trimmed term the list is currently asked for
+  // (set after the debounce). Matches facility name, partner code, owner
+  // name, owner email and parent admin email — server-side, across pages.
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  // Responses can land out of order while typing; only the latest counts.
+  const reqId = useRef(0);
   // The Facilities / Trainers / Active members cards are tabs (super admin
   // and trainer admin — the API scopes a trainer admin to their own
   // facilities); the selected one is blue and picks the list shown below.
@@ -87,14 +102,31 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
     return () => clearInterval(t);
   }, [cooldowns]);
 
+  // Debounce the search box; a new term always starts from page 1.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
   const load = useCallback(async () => {
+    const id = ++reqId.current;
     setLoading(true);
     try {
-      const res = await listFacilitiesService({ page, limit: PAGE_SIZE });
+      const res = await listFacilitiesService({ page, limit: PAGE_SIZE, ...(search && { search }) });
+      if (id !== reqId.current) return; // superseded by a newer page / term
       // Rows were removed and this page is now past the end: step back.
       if (res?.pagination && page > res.pagination.total_pages) {
         setPage(res.pagination.total_pages);
         return;
+      }
+      // API without search support (no echo): narrow the page we got.
+      if (search && typeof res?.search !== "string") {
+        const term = search.toLowerCase();
+        res.facilities = (res.facilities || []).filter((f) => rowMatches(f, FACILITY_SEARCH_FIELDS, term));
+        res.pending_invites = (res.pending_invites || []).filter((p) => rowMatches(p, INVITE_SEARCH_FIELDS, term));
       }
       setData(res);
       // Keep an open facility popup in sync with the fresh row (names,
@@ -106,11 +138,11 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
       });
       setReloadTick((n) => n + 1);
     } catch (err) {
-      toast.error(err?.message || "Failed to load facilities");
+      if (id === reqId.current) toast.error(err?.message || "Failed to load facilities");
     } finally {
-      setLoading(false);
+      if (id === reqId.current) setLoading(false);
     }
-  }, [page]);
+  }, [page, search]);
 
   // Stickers the caller holds that are not set up yet — offered in the form.
   const loadStickers = useCallback(async () => {
@@ -222,6 +254,9 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
 
   const field = "w-full rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2.5 text-[13px] text-[#252525] focus:outline-none focus:border-[#308BF9]";
   const t = data?.totals;
+  // Facilities matching the current term: the API's count when it searched
+  // for us, else what is left of this page after the client-side narrowing.
+  const matchTotal = typeof data?.search === "string" ? (data?.pagination?.total ?? data?.facilities?.length ?? 0) : (data?.facilities?.length ?? 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -343,10 +378,50 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
         </div>
       ) : (
       <>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-full md:max-w-[440px]">
+          <Search className="size-4 text-[#A1A1A1] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") setSearchInput(""); }}
+            placeholder="Search facility, code, owner name, owner email or admin email"
+            aria-label="Search facilities"
+            autoComplete="off"
+            className="w-full rounded-[10px] border border-[#E1E6ED] bg-white pl-9 pr-9 py-2 text-[12px] text-[#252525] placeholder:text-[#A1A1A1] focus:outline-none focus:border-[#308BF9] transition-colors"
+          />
+          {searchInput && (
+            <button
+              type="button"
+              onClick={() => setSearchInput("")}
+              aria-label="Clear search"
+              title="Clear"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-[#A1A1A1] hover:bg-[#EEF4FE] hover:text-[#308BF9] cursor-pointer"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+        {!!search && !!data && (loading || matchTotal > 0) && (
+          <span className="text-[#535359] text-[12px]" aria-live="polite">
+            {loading ? (
+              "Searching…"
+            ) : (
+              <>
+                {matchTotal} {matchTotal === 1 ? "facility matches" : "facilities match"} <span className="font-semibold text-[#252525]">&ldquo;{search}&rdquo;</span>
+              </>
+            )}
+          </span>
+        )}
+      </div>
+
       {loading && !data ? (
         <div className="text-[#A1A1A1] text-[13px]">Loading&hellip;</div>
       ) : (data?.facilities?.length || 0) === 0 ? (
-        <div className="rounded-[10px] border border-dashed border-[#E1E6ED] p-6 text-[#A1A1A1] text-[12px] text-center">No facilities yet.</div>
+        <div className="rounded-[10px] border border-dashed border-[#E1E6ED] p-6 text-[#A1A1A1] text-[12px] text-center">
+          {search ? <>No facilities match &ldquo;{search}&rdquo;.</> : "No facilities yet."}
+        </div>
       ) : (
         <div className="overflow-x-auto rounded-[10px] border border-[#E1E6ED]">
           <table className="w-full text-[12px]">
