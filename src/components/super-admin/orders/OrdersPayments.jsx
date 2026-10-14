@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Copy } from "lucide-react";
 import {
   ORDERS_SEARCH_MIN_LENGTH,
   fetchPaymentTransactionsService,
@@ -37,6 +38,46 @@ function errorMessage(err, fallback) {
 }
 
 const Dash = () => <span className="text-[#A1A1A1]">—</span>;
+
+// Older copy path: select a hidden textarea and copy it. Used where the
+// Clipboard API is missing (plain-http LAN dev URL) or refused by the browser.
+function copyWithTextarea(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  try {
+    ta.select();
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    ta.remove();
+  }
+}
+
+async function copyText(text, { copied, failed }) {
+  let ok = false;
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch {
+      // permission refused: try the older path below
+    }
+  }
+  if (!ok) ok = copyWithTextarea(text);
+  if (ok) toast.success(copied);
+  else toast.error(failed);
+}
+
+// One line, ready to paste into a courier form or map search:
+// "915 W Price Rd, A, Brownsville, TX 78520, US".
+function addressLine(a) {
+  return [a.line1, a.line2, a.city, [a.state, a.postal_code].filter(Boolean).join(" "), a.country].filter(Boolean).join(", ");
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -134,13 +175,28 @@ function ShippingTable({ rows, ...shell }) {
             <td className={`${td} text-[#535359] whitespace-nowrap`}>{a.phone || <Dash />}</td>
             <td className={`${td} text-[#535359] max-w-[320px]`}>
               {a.line1 || cityLine ? (
-                <>
-                  {a.line1 && <div className="break-words">{a.line1}</div>}
-                  {a.line2 && <div className="break-words">{a.line2}</div>}
-                  {(cityLine || a.country) && (
-                    <div className="text-[#A1A1A1] text-[11px]">{[cityLine, a.country].filter(Boolean).join(" · ")}</div>
-                  )}
-                </>
+                // Click anywhere on the address to copy it.
+                <button
+                  type="button"
+                  onClick={() =>
+                    copyText(addressLine(a), {
+                      copied: "Address copied",
+                      failed: "Could not copy — select the address and copy manually.",
+                    })
+                  }
+                  title="Copy address"
+                  aria-label={`Copy address${a.name ? ` for ${a.name}` : ""}`}
+                  className="group inline-flex items-start gap-1.5 text-left rounded-[8px] -mx-1.5 -my-1 px-1.5 py-1 hover:bg-[#EEF4FE] cursor-pointer transition-colors"
+                >
+                  <span className="min-w-0">
+                    {a.line1 && <span className="block break-words">{a.line1}</span>}
+                    {a.line2 && <span className="block break-words">{a.line2}</span>}
+                    {(cityLine || a.country) && (
+                      <span className="block text-[#A1A1A1] text-[11px]">{[cityLine, a.country].filter(Boolean).join(" · ")}</span>
+                    )}
+                  </span>
+                  <Copy className="size-3.5 shrink-0 mt-0.5 text-[#A1A1A1] group-hover:text-[#308BF9]" aria-hidden="true" />
+                </button>
               ) : (
                 <Dash />
               )}
@@ -240,20 +296,11 @@ function CodeStateBadge({ state }) {
   );
 }
 
-async function copyCode(code) {
-  try {
-    await navigator.clipboard.writeText(code);
-    toast.success(`${code} copied`);
-  } catch {
-    toast.error("Could not copy — select the code and copy manually.");
-  }
-}
-
 function CopyableCode({ code }) {
   return (
     <button
       type="button"
-      onClick={() => copyCode(code)}
+      onClick={() => copyText(code, { copied: `${code} copied`, failed: "Could not copy — select the code and copy manually." })}
       title="Copy code"
       className="font-mono text-[12px] font-semibold text-[#252525] bg-[#F5F7FA] hover:bg-[#EEF4FE] rounded-[8px] px-2 py-1 cursor-pointer transition-colors"
     >
