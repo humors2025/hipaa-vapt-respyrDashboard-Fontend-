@@ -126,7 +126,9 @@ export function FacilityPeopleList({ facility, view, onCount }) {
                   <th className={TH}>Member</th>
                   {all && <th className={TH}>Facility</th>}
                   <th className={TH}>Plan</th>
-                  <th className={`${TH} text-right`}>Price</th>
+                  <th className={`${TH} text-right`}>Gross</th>
+                  <th className={`${TH} text-right`}>Discount</th>
+                  <th className={`${TH} text-right`}>Net</th>
                   <th className={TH}>Status</th>
                   <th className={TH}>Plan period</th>
                   <th className={TH}>Code used</th>
@@ -143,7 +145,14 @@ export function FacilityPeopleList({ facility, view, onCount }) {
                     </td>
                     {facilityCell(m)}
                     <td className={`${TD} text-[#535359]`}>{m.plan_code}</td>
-                    <td className={`${TD} text-right text-[#252525]`}>{formatMinor(m.amount_minor, m.currency)}</td>
+                    {/* Gross (list price) − referral discount = net (what the member paid), as on Sales analytics. */}
+                    <td className={`${TD} text-right tabular-nums text-[#535359]`}>{formatMinor(m.amount_minor, m.currency)}</td>
+                    <td className={`${TD} text-right tabular-nums`}>
+                      {Number(m.discount_amount_minor) > 0 ? <span className="text-[#A66B00]">−{formatMinor(m.discount_amount_minor, m.currency)}</span> : <span className="text-[#A1A1A1]">—</span>}
+                    </td>
+                    <td className={`${TD} text-right tabular-nums text-[#252525] font-semibold`}>
+                      {m.net_amount_minor != null ? formatMinor(m.net_amount_minor, m.currency) : <span className="text-[#A1A1A1] font-normal">—</span>}
+                    </td>
                     <td className={TD}>
                       <span className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 ${STATUS[m.status] || "bg-[#F5F7FA] text-[#535359]"}`}>{label(m.status)}</span>
                     </td>
