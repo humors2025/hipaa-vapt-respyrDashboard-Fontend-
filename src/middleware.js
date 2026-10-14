@@ -1,5 +1,10 @@
 // middleware.js
 import { NextResponse } from 'next/server';
+import {
+  ORDERS_SUPER_ADMIN_PATH,
+  ORDERS_TRAINER_ADMIN_PATH,
+  isOrdersViewer,
+} from '@/lib/ordersAccess';
 
 // Edge-side cookie reader. Cookies are URL-encoded JSON; decode then parse,
 // returning null on any failure so middleware never throws.
@@ -27,6 +32,11 @@ function readJsonCookie(request, name) {
 // Edge-safe: no Node Buffer.
 // Returns null on any failure so middleware never throws.
 function readRoleFromToken(request) {
+  return readTokenPayload(request)?.role ?? null;
+}
+
+// The access_token JWT payload (role, user_id = email, …), or null.
+function readTokenPayload(request) {
   const token = request.cookies.get('access_token')?.value;
 
   if (!token || typeof token !== 'string') {
@@ -54,7 +64,7 @@ function readRoleFromToken(request) {
         .join('')
     );
 
-    return JSON.parse(json)?.role ?? null;
+    return JSON.parse(json) ?? null;
   } catch {
     return null;
   }
@@ -199,6 +209,24 @@ export function middleware(request) {
   // 🛡️ Role-aware guards.
   if (token) {
     const role = readRole(request);
+
+    // Orders & Payments: super admins use /super-admin/orders; the trainer
+    // admins in src/lib/ordersAccess.js get a read-only copy under their own
+    // header at /trainer-admin/orders. Nobody else may open either.
+    if (
+      pathname === ORDERS_SUPER_ADMIN_PATH ||
+      pathname === ORDERS_TRAINER_ADMIN_PATH
+    ) {
+      const dest =
+        role === 'super_admin'
+          ? ORDERS_SUPER_ADMIN_PATH
+          : isOrdersViewer(role, readTokenPayload(request)?.user_id)
+          ? ORDERS_TRAINER_ADMIN_PATH
+          : homeForRole(role);
+      return pathname === dest
+        ? NextResponse.next()
+        : secureRedirect(dest, request);
+    }
 
     // Only super_admin can access /super-admin/*
     if (
