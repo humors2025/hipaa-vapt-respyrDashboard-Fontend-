@@ -8,7 +8,7 @@
 //
 // Plain module with no client-only imports: middleware.js runs it on the edge.
 
-export const ORDERS_VIEWER_EMAILS = ["evan.gaudet@gmail.com", "derek.lopez88@gmail.com"];
+export const ORDERS_VIEWER_EMAILS = ["evan.gaudet@gmail.com", "derek.lopez88@gmail.com", "sagar@respyr.in"];
 
 export const ORDERS_TRAINER_ADMIN_PATH = "/trainer-admin/orders";
 export const ORDERS_SUPER_ADMIN_PATH = "/super-admin/orders";
