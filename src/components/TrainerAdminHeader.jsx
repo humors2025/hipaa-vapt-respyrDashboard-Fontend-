@@ -36,11 +36,19 @@ const MENU = [
   { name: "View my clients",  icon: "/icons/hugeicons_user-group.png",     path: "/trainer/dashboard" },
   { name: "Client Directory", icon: "/icons/hugeicons_user-circle-02.svg", path: "/trainer/client-directory" },
   { name: "Invites Trainer",  icon: "/icons/hugeicons_award-01.svg",       path: "/trainer-admin/invites" },
-  { name: "Facilities",       icon: "/icons/hugeicons_home-05.svg",        path: "/trainer-admin/facilities" },
+  {
+    name: "Facilities",
+    icon: "/icons/hugeicons_home-05.svg",
+    path: "/trainer-admin/facilities",
+    // Dropdown only for orders viewers; everyone else gets a plain tab.
+    submenu: [
+      { name: "Facilities", path: "/trainer-admin/facilities" },
+      { name: "Orders & Payments", path: ORDERS_TRAINER_ADMIN_PATH },
+    ],
+  },
   { name: "QR codes",         icon: "/icons/hugeicons_view.svg",           path: "/trainer-admin/qr-codes" },
   { name: "TA Analytics",     icon: "/icons/hugeicons_view.svg",           path: "/trainer-admin/analytics" },
   { name: "Earnings",         icon: "/icons/hugeicons_award-01.svg",       path: "/trainer-admin/earnings" },
-  { name: "Orders & Payments", icon: "/icons/hugeicons_file-export.svg",   path: ORDERS_TRAINER_ADMIN_PATH },
 ];
 
 // The "TA Analytics" tab is hidden when the manage_admin_groups.php response
@@ -62,22 +70,34 @@ export default function TrainerAdminHeader() {
   const [showAnalytics, setShowAnalytics] = useState(false);
   // Same pattern: hidden until the token role is read on the client.
   const [showEarnings, setShowEarnings] = useState(false);
-  // Orders & Payments: only the trainer admins in src/lib/ordersAccess.js.
+  // Orders & Payments (under the Facilities dropdown): only the trainer
+  // admins in src/lib/ordersAccess.js.
   const [showOrders, setShowOrders] = useState(false);
+  const [openSubmenu, setOpenSubmenu] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [mobileSubmenuOpen, setMobileSubmenuOpen] = useState(null);
 
   const mobileMenuRef = useRef(null);
+  // One element per dropdown, keyed by menu name (see SuperAdminHeader).
+  const submenuRefs = useRef({});
 
   useEffect(() => {
     setActive(pathname);
     // close everything on navigation
     setIsMobileMenuOpen(false);
     setIsDropdownOpen(false);
+    setOpenSubmenu(null);
   }, [pathname]);
 
-  // close the drawer when tapping outside (needed for touch devices)
+  // close dropdowns / drawer when tapping outside (needed for touch devices)
   useEffect(() => {
     const handleOutside = (e) => {
+      const insideSubmenu = Object.values(submenuRefs.current).some(
+        (el) => el && el.contains(e.target)
+      );
+      if (!insideSubmenu) {
+        setOpenSubmenu(null);
+      }
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) {
         setIsMobileMenuOpen(false);
       }
@@ -95,9 +115,22 @@ export default function TrainerAdminHeader() {
   const menu = MENU.filter(
     (m) =>
       (showAnalytics || m.path !== TA_ANALYTICS_PATH) &&
-      (showEarnings || m.path !== EARNINGS_PATH) &&
-      (showOrders || m.path !== ORDERS_TRAINER_ADMIN_PATH)
-  );
+      (showEarnings || m.path !== EARNINGS_PATH)
+  ).map((m) => {
+    if (!m.submenu) return m;
+    const submenu = m.submenu.filter((s) => showOrders || s.path !== ORDERS_TRAINER_ADMIN_PATH);
+    if (submenu.length > 1) return { ...m, submenu };
+    // A dropdown holding only the tab's own page is just a link.
+    const { submenu: _unused, ...link } = m;
+    return link;
+  });
+
+  const isItemActive = (path) =>
+    pathname === path || pathname?.startsWith(path + "/") || active === path;
+
+  // A dropdown tab lights up while any page inside it is open.
+  const isMenuActive = (m) =>
+    m.submenu ? m.submenu.some((s) => isItemActive(s.path)) : isItemActive(m.path);
 
   // const handleLogout = () => {
   //   try {
@@ -165,11 +198,52 @@ const handleLogout = async () => {
           {isMobileMenuOpen && (
             <div className="xl:hidden absolute left-4 right-4 top-[82px] z-50 bg-white rounded-[15px] shadow-lg border border-gray-100 p-2">
               {menu.map((m) => {
-                const isActive =
-                  pathname === m.path ||
-                  pathname?.startsWith(m.path + "/") ||
-                  active === m.path;
-                const color = isActive ? "#308BF9" : "#A1A1A1";
+                const color = isMenuActive(m) ? "#308BF9" : "#A1A1A1";
+
+                if (m.submenu) {
+                  const isOpen = mobileSubmenuOpen === m.name;
+                  return (
+                    <div key={m.name}>
+                      <button
+                        type="button"
+                        className="flex items-center justify-between w-full px-4 py-3 rounded-[10px] hover:bg-gray-100"
+                        onClick={() => setMobileSubmenuOpen(isOpen ? null : m.name)}
+                      >
+                        <span className="flex items-center gap-3">
+                          <MonoIcon src={m.icon} color={color} alt={m.name} />
+                          <span className="font-semibold text-[12px]" style={{ color }}>
+                            {m.name}
+                          </span>
+                        </span>
+                        <svg
+                          className={`w-3 h-3 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                          aria-hidden="true"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <path stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 9-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {isOpen &&
+                        m.submenu.map((sub) => (
+                          <Link
+                            key={sub.name}
+                            href={sub.path}
+                            onClick={() => {
+                              setActive(sub.path);
+                              setIsMobileMenuOpen(false);
+                            }}
+                            className={`flex items-center w-full pl-12 pr-4 py-2.5 rounded-[10px] hover:bg-gray-100 font-semibold text-[12px] ${
+                              isItemActive(sub.path) ? "text-[#308BF9]" : "text-[#A1A1A1]"
+                            }`}
+                          >
+                            {sub.name}
+                          </Link>
+                        ))}
+                    </div>
+                  );
+                }
 
                 return (
                   <Link
@@ -195,11 +269,68 @@ const handleLogout = async () => {
         {/* Center: desktop pill nav (hidden below xl) */}
         <div className="hidden xl:flex gap-2 items-center">
           {menu.map((m) => {
-            const isActive =
-              pathname === m.path ||
-              pathname?.startsWith(m.path + "/") ||
-              active === m.path;
-            const color = isActive ? "#308BF9" : "#A1A1A1";
+            const color = isMenuActive(m) ? "#308BF9" : "#A1A1A1";
+
+            if (m.submenu) {
+              const isOpen = openSubmenu === m.name;
+              return (
+                <div
+                  key={m.name}
+                  className="relative"
+                  ref={(el) => {
+                    submenuRefs.current[m.name] = el;
+                  }}
+                  onMouseEnter={() => setOpenSubmenu(m.name)}
+                  onMouseLeave={() => setOpenSubmenu(null)}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActive(m.path);
+                      router.push(m.path);
+                    }}
+                    className="flex items-center gap-1.5 cursor-pointer rounded-[15px] px-[20px] py-[15px] bg-white"
+                  >
+                    <MonoIcon src={m.icon} color={color} alt={m.name} />
+                    <span className="font-semibold text-[12px]" style={{ color }}>
+                      {m.name}
+                    </span>
+                    <svg
+                      className={`w-3 h-3 ms-1 -me-0.5 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                      aria-hidden="true"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <path stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 9-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {isOpen && (
+                    <div className="absolute left-0 top-full z-50 bg-white border border-gray-100 rounded-[15px] shadow-lg w-48">
+                      <ul className="p-2 text-sm font-medium">
+                        {m.submenu.map((sub) => (
+                          <li key={sub.name}>
+                            <Link
+                              href={sub.path}
+                              onClick={() => {
+                                setActive(sub.path);
+                                setOpenSubmenu(null);
+                              }}
+                              className={`inline-flex items-center w-full p-2 rounded hover:bg-gray-100 font-semibold text-[12px] ${
+                                isItemActive(sub.path) ? "text-[#308BF9]" : "text-[#A1A1A1] hover:text-[#252525]"
+                              }`}
+                            >
+                              {sub.name}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              );
+            }
 
             return (
               <Link href={m.path} key={m.name}>
