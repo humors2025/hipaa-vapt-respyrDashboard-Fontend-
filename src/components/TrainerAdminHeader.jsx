@@ -7,6 +7,8 @@ import { cookieManager } from "@/lib/cookies";
 import { toast } from "sonner";
 import { logoutService } from "@/services/authService";
 import { decodeAccessTokenRole } from "@/components/Header";
+import { getCurrentUser } from "@/lib/user";
+import { ORDERS_TRAINER_ADMIN_PATH, isOrdersViewer } from "@/lib/ordersAccess";
 
 const MonoIcon = ({ src, size = 20, color = "#A1A1A1", alt = "" }) => (
   <span
@@ -38,6 +40,7 @@ const MENU = [
   { name: "QR codes",         icon: "/icons/hugeicons_view.svg",           path: "/trainer-admin/qr-codes" },
   { name: "TA Analytics",     icon: "/icons/hugeicons_view.svg",           path: "/trainer-admin/analytics" },
   { name: "Earnings",         icon: "/icons/hugeicons_award-01.svg",       path: "/trainer-admin/earnings" },
+  { name: "Orders & Payments", icon: "/icons/hugeicons_file-export.svg",   path: ORDERS_TRAINER_ADMIN_PATH },
 ];
 
 // The "TA Analytics" tab is hidden when the manage_admin_groups.php response
@@ -59,6 +62,8 @@ export default function TrainerAdminHeader() {
   const [showAnalytics, setShowAnalytics] = useState(false);
   // Same pattern: hidden until the token role is read on the client.
   const [showEarnings, setShowEarnings] = useState(false);
+  // Orders & Payments: only the trainer admins in src/lib/ordersAccess.js.
+  const [showOrders, setShowOrders] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const mobileMenuRef = useRef(null);
@@ -84,12 +89,14 @@ export default function TrainerAdminHeader() {
   useEffect(() => {
     setShowAnalytics(cookieManager.get("ta_analytics_enabled") === "1");
     setShowEarnings(decodeAccessTokenRole() !== "admin");
+    setShowOrders(isOrdersViewer(decodeAccessTokenRole(), getCurrentUser()?.email));
   }, []);
 
   const menu = MENU.filter(
     (m) =>
       (showAnalytics || m.path !== TA_ANALYTICS_PATH) &&
-      (showEarnings || m.path !== EARNINGS_PATH)
+      (showEarnings || m.path !== EARNINGS_PATH) &&
+      (showOrders || m.path !== ORDERS_TRAINER_ADMIN_PATH)
   );
 
   // const handleLogout = () => {
