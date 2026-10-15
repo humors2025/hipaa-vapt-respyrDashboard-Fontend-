@@ -49,7 +49,6 @@ const MENU = [
   { name: "QR codes",         icon: "/icons/hugeicons_view.svg",           path: "/trainer-admin/qr-codes" },
   { name: "TA Analytics",     icon: "/icons/hugeicons_view.svg",           path: "/trainer-admin/analytics" },
   { name: "Earnings",         icon: "/icons/hugeicons_award-01.svg",       path: "/trainer-admin/earnings" },
-  { name: "Orders & Payments", icon: "/icons/hugeicons_file-export.svg",   path: ORDERS_TRAINER_ADMIN_PATH },
 ];
 
 // The "TA Analytics" tab is hidden when the manage_admin_groups.php response
@@ -120,8 +119,7 @@ export default function TrainerAdminHeader() {
   const menu = MENU.filter(
     (m) =>
       (showAnalytics || m.path !== TA_ANALYTICS_PATH) &&
-      (showEarnings || m.path !== EARNINGS_PATH) &&
-      (showOrders || m.path !== ORDERS_TRAINER_ADMIN_PATH)
+      (showEarnings || m.path !== EARNINGS_PATH)
   ).map((m) => {
     if (!m.submenu) return m;
     const submenu = m.submenu.filter((s) => showOrders || s.path !== ORDERS_TRAINER_ADMIN_PATH);
@@ -133,6 +131,10 @@ export default function TrainerAdminHeader() {
 
   const isItemActive = (path) =>
     pathname === path || pathname?.startsWith(path + "/") || active === path;
+
+  // A dropdown tab stays lit on any of its pages, e.g. Facilities on Orders.
+  const isMenuActive = (m) =>
+    isItemActive(m.path) || (m.submenu || []).some((s) => isItemActive(s.path));
 
   // const handleLogout = () => {
   //   try {
@@ -200,7 +202,7 @@ const handleLogout = async () => {
           {isMobileMenuOpen && (
             <div className="xl:hidden absolute left-4 right-4 top-[82px] z-50 bg-white rounded-[15px] shadow-lg border border-gray-100 p-2">
               {menu.map((m) => {
-                const color = isItemActive(m.path) ? "#308BF9" : "#A1A1A1";
+                const color = isMenuActive(m) ? "#308BF9" : "#A1A1A1";
 
                 if (m.submenu) {
                   const isOpen = mobileSubmenuOpen === m.name;
@@ -271,7 +273,7 @@ const handleLogout = async () => {
         {/* Center: desktop pill nav (hidden below xl) */}
         <div className="hidden xl:flex gap-2 items-center">
           {menu.map((m) => {
-            const color = isItemActive(m.path) ? "#308BF9" : "#A1A1A1";
+            const color = isMenuActive(m) ? "#308BF9" : "#A1A1A1";
 
             if (m.submenu) {
               const isOpen = openSubmenu === m.name;
