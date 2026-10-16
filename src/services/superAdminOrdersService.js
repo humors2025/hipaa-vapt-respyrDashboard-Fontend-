@@ -6,7 +6,9 @@
 //
 // shipping → { status, addresses: [ { id, purchased_at (ISO UTC), customer: { name, email },
 //              ship_to: { name, phone, line1, line2, city, state, postal_code, country },
-//              partner_code, subscription_status (active | expired | cancelled | …; "expired" is
+//              partner_code, facility: { id, name, partner_code, status, admin_user_id, admin_name } | null
+//              (the gym behind the partner code; null for website purchases and trainers outside
+//              a facility), subscription_status (active | expired | cancelled | …; "expired" is
 //              derived when an active plan's current_period_end has passed), stripe_status,
 //              current_period_start, current_period_end, canceled_at, stripe_subscription_id } ],
 //              pagination: { page, limit, total, total_pages } }
