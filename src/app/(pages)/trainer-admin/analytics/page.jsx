@@ -191,6 +191,7 @@ function buildFromGroupDetails(gd, now = new Date()) {
         email: t.email || "",
         partner_code: t.partner_code || "",
         dietician_id: t.partner_code || "",
+        role: t.role || "trainer",
         created_at: t.created_at || null,
         total_tests: typeof t.total_tests === "number" ? t.total_tests : null,
         total_clients: typeof t.total_clients === "number" ? t.total_clients : null,
@@ -888,10 +889,13 @@ export default function AnalyticsDashboard() {
   const atRiskTrainers = tabTr.filter(t => t.pct < ACTIVE_THRESHOLD);
   const eliteCount = eliteTrainers.length;
   const atRiskTrainerCount = atRiskTrainers.length;
+  // Facility admins (gym owners) in this tab's scope: a filter tab, not a
+  // status bucket, so it is not part of the All = Active + Elite + At Risk sum.
+  const facilityTrainers = tabTr.filter(t => t.role === "facility_admin");
   // Rows behind the Trainer Adoption table: the active tab's list, narrowed by the
   // search box. The "All" tab uses the UNFILTERED list so a checkbox-excluded
   // trainer stays visible (dimmed) and can be unchecked.
-  const trainerTabRows = ({ all: tabTrAll, active: activeTrainers, elite: eliteTrainers, atrisk: atRiskTrainers })[trainerTab] || [];
+  const trainerTabRows = ({ all: tabTrAll, active: activeTrainers, elite: eliteTrainers, atrisk: atRiskTrainers, facility: facilityTrainers })[trainerTab] || [];
   const trainerRows = trainerSearch.trim()
     ? trainerTabRows.filter(t => rowMatches(trainerSearchFields(t), trainerSearch))
     : trainerTabRows;
@@ -1082,11 +1086,14 @@ export default function AnalyticsDashboard() {
   // Trainer name → opens the client-list pop-up for that trainer (data from
   // TRAINERCLIENTSOVERVIEWFORSUPERADMIN, keyed by the row's partner_code).
   const trainerNameCell = r => (
-    <button type="button" onClick={e => { e.stopPropagation(); setClientsModalTrainer(r); }}
-      title="View this trainer's clients" className="cursor-pointer hover:underline text-[#252525] hover:text-[#308BF9] transition-colors"
-      style={{ border: "none", background: "transparent", padding: 0, font: "inherit", fontWeight: 600, textAlign: "left" }}>
-      {r.name || "—"}
-    </button>
+    <span className="inline-flex items-center gap-1.5 flex-wrap">
+      <button type="button" onClick={e => { e.stopPropagation(); setClientsModalTrainer(r); }}
+        title="View this trainer's clients" className="cursor-pointer hover:underline text-[#252525] hover:text-[#308BF9] transition-colors"
+        style={{ border: "none", background: "transparent", padding: 0, font: "inherit", fontWeight: 600, textAlign: "left" }}>
+        {r.name || "—"}
+      </button>
+      {r.role === "facility_admin" && <span style={badgeStyle("#f3e8ff", "#7c3aed")}>Facility admin</span>}
+    </span>
   );
 
   const trainerCols = [
@@ -1576,6 +1583,7 @@ export default function AnalyticsDashboard() {
                 { key: "active", dotColor: R.green, count: activeTrainers.length, label: `Active` },
                 { key: "elite", dotColor: "#10B981", count: eliteCount, label: "Elite" },
                 { key: "atrisk", dotColor: R.red, count: atRiskTrainerCount, label: "At Risk" },
+                { key: "facility", dotColor: "#7c3aed", count: facilityTrainers.length, label: "Facility admins" },
               ].map(t => (
                 <button key={t.key} onClick={() => setTrainerTab(t.key)} className="flex-1 flex items-center justify-center gap-1.5 cursor-pointer" style={{
                   padding: "7px 10px", borderRadius: "8px", border: "none", fontSize: "12px", fontWeight: 600, letterSpacing: "-0.24px", transition: "all 0.2s ease",

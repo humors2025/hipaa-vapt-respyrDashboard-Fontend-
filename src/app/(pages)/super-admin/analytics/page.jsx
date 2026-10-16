@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { useDispatch, useSelector } from "react-redux";
 import { getAdminGroups, selectAdminGroups, selectAdminGroupsRaw, selectPrimaryGroupName } from "@/store/adminGroupsSlice";
 import { getGroupDetails, selectGroupDetails, selectGroupDetailsLoading, selectGroupCounts } from "@/store/groupDetailsSlice";
-import { fetchGroupPeriodOverviewService } from "@/services/authService";
+import { fetchGroupPeriodOverviewService, fetchGroupDetailsService } from "@/services/authService";
 import TrainerClientsModal from "@/components/super-admin/TrainerClientsModal";
 
 const TIMEZONES = { "America/Chicago": "Houston, TX", "Asia/Kolkata": "India (IST)" };
@@ -49,14 +49,29 @@ const TRAINER_PAGE_SIZE = 6;
 const CLIENT_PAGE_SIZE = 6;
 // Case-insensitive "contains" across a row's searchable fields. Client names and
 // emails arrive masked from the API (e.g. "Ch******e"), so a search matches
-// whatever characters the mask leaves visible.
+// whatever characters the mask leaves visible — the full name/email match comes
+// from the server-side clients_search (see clientServerMatch).
 function rowMatches(fields, q) {
   const needle = q.trim().toLowerCase();
   if (!needle) return true;
   return fields.some(f => f != null && String(f).toLowerCase().includes(needle));
 }
 const trainerSearchFields = t => [t.name, t.partner_code, t.dietician_id, t.email, t.taName];
-const clientSearchFields = c => [c.name, c.profile_id, c.email, c.trainerName, c.trainer_name, c.trainer_code, goalLabel(c.fitness_goal), c.dietitian_id];
+const clientSearchFields = c => [c.name, c.profile_id, c.email, c.phone_no, c.trainerName, c.trainer_name, c.trainer_code, goalLabel(c.fitness_goal), c.dietitian_id];
+// Phone numbers are stored in mixed formats ("+1 (555) 123-4567"), so a search
+// made of digits also matches on the digits alone.
+const digitsOnly = s => String(s || "").replace(/\D/g, "");
+function clientRowMatches(c, q) {
+  if (rowMatches(clientSearchFields(c), q)) return true;
+  const qd = digitsOnly(q);
+  return qd.length >= 3 && /^[\d\s()+.-]+$/.test(q.trim()) && digitsOnly(c.phone_no).includes(qd);
+}
+// The API searches the real (unmasked) profile_name / email / phone_no. Below this
+// many characters only the local filter runs, so a 1–2 letter term doesn't pull
+// back most of the group.
+const CLIENT_SERVER_SEARCH_MIN = 3;
+const CLIENT_SERVER_SEARCH_PAGE = 50; // backend MAX_LIMIT
+const CLIENT_SERVER_SEARCH_MAX_PAGES = 20;
 
 function isMaskedMatch(m, r) {
   if (!m || !r) return false;
@@ -191,6 +206,7 @@ function buildFromGroupDetails(gd, now = new Date()) {
         email: t.email || "",
         partner_code: t.partner_code || "",
         dietician_id: t.partner_code || "",
+        role: t.role || "trainer",
         created_at: t.created_at || null,
         total_tests: typeof t.total_tests === "number" ? t.total_tests : null,
         total_clients: typeof t.total_clients === "number" ? t.total_clients : null,
@@ -262,6 +278,8 @@ function buildFromGroupDetails(gd, now = new Date()) {
       profile_id: pid,
       name: c.profile_name || "—",
       email: c.email || "",
+      // Not masked by the API; "NA" means none on file.
+      phone_no: c.phone_no && c.phone_no !== "NA" ? c.phone_no : "",
       dietitian_id: c.dietician_id || c.owner?.partner_code || "",
       fitness_goal: c.fitness_goal || "",
       total_tests: typeof c.total_tests === "number" ? c.total_tests : null,
@@ -353,8 +371,9 @@ function Donut({ pct, size = 120, thickness = 10, color = R.blue, label, bg, tra
 
 /* Compact search input used by the Trainer Adoption / Client Engagement tables.
    Filtering is client-side over the fully-loaded group data (every clients/trainers
-   page is merged in groupDetailsSlice), so a search never re-queries the API and
-   never narrows the data the dashboard's totals are derived from. */
+   page is merged in groupDetailsSlice), so a search never narrows the data the
+   dashboard's totals are derived from. The client search also asks the API which
+   profiles match the real name/email/phone, and only uses the answer to pick rows. */
 function SearchBox({ value, onChange, placeholder }) {
   const [focus, setFocus] = useState(false);
   return (
@@ -544,6 +563,9 @@ export default function AnalyticsDashboard() {
   // so the dashboard's totals/cohorts (derived from the unfiltered set) are untouched.
   const [trainerSearch, setTrainerSearch] = useState("");
   const [clientSearch, setClientSearch] = useState("");
+  // Profiles the API says match clientSearch on the real (unmasked) name, email or
+  // phone. ids is null until a lookup for `term` has finished.
+  const [clientServerMatch, setClientServerMatch] = useState({ term: "", ids: null });
   const [cohortTab, setCohortTab] = useState(0);
   const [cohortSubTab, setCohortSubTab] = useState("trainers");
   // Trainer rows temporarily excluded via the Trainer Adoption checkboxes. A
@@ -703,6 +725,38 @@ export default function AnalyticsDashboard() {
       .catch(() => { if (!cancelled) setPeriodReads(p => ({ ...p, loading: false })); });
     return () => { cancelled = true; };
   }, [primaryGroupName, period, selectedDate, timezone, overviewMemberCode, readsNonce]);
+
+  // Client Engagement search on the real name / email / phone. Client rows come back
+  // masked, so the local filter can't see "john@…" in "jo**n@…". Debounced, the term
+  // goes to get_group_details as clients_search (matches profile_id, profile_name,
+  // email, phone_no server-side); every result page is walked and only the matching
+  // profile_ids are kept. Those ids then pick rows out of the already-loaded clients,
+  // so the tab scope, trainer exclusions and computed columns all still apply.
+  useEffect(() => {
+    const term = clientSearch.trim();
+    if (!primaryGroupName || term.length < CLIENT_SERVER_SEARCH_MIN) {
+      setClientServerMatch({ term: "", ids: null });
+      return;
+    }
+    let cancelled = false;
+    setClientServerMatch({ term, ids: null });
+    const timer = setTimeout(async () => {
+      const ids = new Set();
+      try {
+        let page = 1, hasMore = true;
+        while (hasMore && page <= CLIENT_SERVER_SEARCH_MAX_PAGES && !cancelled) {
+          const res = await fetchGroupDetailsService({ groupName: primaryGroupName, page, limit: CLIENT_SERVER_SEARCH_PAGE, search: term, trainerPage: 1, trainerLimit: 1 });
+          (res?.clients || []).forEach(c => { if (c?.profile_id) ids.add(c.profile_id); });
+          hasMore = !!res?.clients_pagination?.has_more;
+          page++;
+        }
+      } catch {
+        // Fall back to the local (masked) filter alone.
+      }
+      if (!cancelled) setClientServerMatch({ term, ids });
+    }, 400);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [clientSearch, primaryGroupName]);
 
   const now = tzNow(timezone);
 
@@ -890,16 +944,23 @@ export default function AnalyticsDashboard() {
   const atRiskTrainers = tabTr.filter(t => t.pct < ACTIVE_THRESHOLD);
   const eliteCount = eliteTrainers.length;
   const atRiskTrainerCount = atRiskTrainers.length;
+  // Facility admins (gym owners) in this tab's scope: a filter tab, not a
+  // status bucket, so it is not part of the All = Active + Elite + At Risk sum.
+  const facilityTrainers = tabTr.filter(t => t.role === "facility_admin");
   // Rows behind the Trainer Adoption table: the active tab's list, narrowed by the
   // search box. The "All" tab uses the UNFILTERED list so a checkbox-excluded
   // trainer stays visible (dimmed) and can be unchecked.
-  const trainerTabRows = ({ all: tabTrAll, active: activeTrainers, elite: eliteTrainers, atrisk: atRiskTrainers })[trainerTab] || [];
+  const trainerTabRows = ({ all: tabTrAll, active: activeTrainers, elite: eliteTrainers, atrisk: atRiskTrainers, facility: facilityTrainers })[trainerTab] || [];
   const trainerRows = trainerSearch.trim()
     ? trainerTabRows.filter(t => rowMatches(trainerSearchFields(t), trainerSearch))
     : trainerTabRows;
-  // Rows behind the Client Engagement table — same idea, over this tab's clients.
-  const clientRows = clientSearch.trim()
-    ? tabCl.filter(c => rowMatches(clientSearchFields(c), clientSearch))
+  // Rows behind the Client Engagement table — same idea, over this tab's clients:
+  // a local match on the visible fields, or a server match on the real name/email/phone.
+  const clientTerm = clientSearch.trim();
+  const serverIds = clientServerMatch.term === clientTerm ? clientServerMatch.ids : null;
+  const clientSearchPending = clientTerm.length >= CLIENT_SERVER_SEARCH_MIN && !serverIds;
+  const clientRows = clientTerm
+    ? tabCl.filter(c => clientRowMatches(c, clientSearch) || (serverIds && serverIds.has(c.profile_id)))
     : tabCl;
   const highestRate = tabCl.length > 0 ? Math.max(...tabCl.map(c => c.pct)) : 0;
   const lowestRate = tabCl.length > 0 ? Math.min(...tabCl.map(c => c.pct)) : 0;
@@ -1084,11 +1145,14 @@ export default function AnalyticsDashboard() {
   // Trainer name → opens the client-list pop-up for that trainer (data from
   // TRAINERCLIENTSOVERVIEWFORSUPERADMIN, keyed by the row's partner_code).
   const trainerNameCell = r => (
-    <button type="button" onClick={e => { e.stopPropagation(); setClientsModalTrainer(r); }}
-      title="View this trainer's clients" className="cursor-pointer hover:underline text-[#252525] hover:text-[#308BF9] transition-colors"
-      style={{ border: "none", background: "transparent", padding: 0, font: "inherit", fontWeight: 600, textAlign: "left" }}>
-      {r.name || "—"}
-    </button>
+    <span className="inline-flex items-center gap-1.5 flex-wrap">
+      <button type="button" onClick={e => { e.stopPropagation(); setClientsModalTrainer(r); }}
+        title="View this trainer's clients" className="cursor-pointer hover:underline text-[#252525] hover:text-[#308BF9] transition-colors"
+        style={{ border: "none", background: "transparent", padding: 0, font: "inherit", fontWeight: 600, textAlign: "left" }}>
+        {r.name || "—"}
+      </button>
+      {r.role === "facility_admin" && <span style={badgeStyle("#f3e8ff", "#7c3aed")}>Facility admin</span>}
+    </span>
   );
 
   const trainerCols = [
@@ -1578,6 +1642,7 @@ export default function AnalyticsDashboard() {
                 { key: "active", dotColor: R.green, count: activeTrainers.length, label: `Active` },
                 { key: "elite", dotColor: "#10B981", count: eliteCount, label: "Elite" },
                 { key: "atrisk", dotColor: R.red, count: atRiskTrainerCount, label: "At Risk" },
+                { key: "facility", dotColor: "#7c3aed", count: facilityTrainers.length, label: "Facility admins" },
               ].map(t => (
                 <button key={t.key} onClick={() => setTrainerTab(t.key)} className="flex-1 flex items-center justify-center gap-1.5 cursor-pointer" style={{
                   padding: "7px 10px", borderRadius: "8px", border: "none", fontSize: "12px", fontWeight: 600, letterSpacing: "-0.24px", transition: "all 0.2s ease",
@@ -1699,10 +1764,10 @@ export default function AnalyticsDashboard() {
 
             {/* Search — filters this tab's clients */}
             <div className="flex items-center gap-2 mt-3">
-              <SearchBox value={clientSearch} onChange={setClientSearch} placeholder="Search clients" />
-              {clientSearch.trim() && (
+              <SearchBox value={clientSearch} onChange={setClientSearch} placeholder="Search by name, email or phone" />
+              {clientTerm && (
                 <span className="shrink-0" style={{ fontSize: "10px", fontWeight: 600, color: R.blue, backgroundColor: R.blueLight, borderRadius: R.rBadge, padding: "4px 8px", letterSpacing: "-0.2px", whiteSpace: "nowrap" }}>
-                  {clientRows.length} {clientRows.length === 1 ? "match" : "matches"}
+                  {clientSearchPending ? "Searching…" : `${clientRows.length} ${clientRows.length === 1 ? "match" : "matches"}`}
                 </span>
               )}
             </div>
@@ -1715,8 +1780,8 @@ export default function AnalyticsDashboard() {
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M5 21v-1a7 7 0 0114 0v1" /></svg>
                   </div>
                   <div className="text-center">
-                    <div style={{ fontSize: "13px", fontWeight: 600, color: R.ts }}>{clientSearch.trim() ? `No clients match “${clientSearch.trim()}”` : "No clients in this group"}</div>
-                    {clientSearch.trim() && (
+                    <div style={{ fontSize: "13px", fontWeight: 600, color: R.ts }}>{clientSearchPending ? "Searching clients…" : clientTerm ? `No clients match “${clientTerm}”` : "No clients in this group"}</div>
+                    {clientTerm && !clientSearchPending && (
                       <button onClick={() => setClientSearch("")} className="cursor-pointer mt-2" style={{ border: "none", background: R.blueLight, color: R.blue, fontSize: "11px", fontWeight: 600, borderRadius: R.rBadge, padding: "4px 10px" }}>Clear search</button>
                     )}
                   </div>

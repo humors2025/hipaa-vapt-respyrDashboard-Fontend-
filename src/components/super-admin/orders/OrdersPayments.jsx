@@ -142,12 +142,40 @@ function Customer({ customer }) {
   );
 }
 
+// Gym behind the partner code. An invited facility that was never set up has
+// only the name typed on the invitation.
+function FacilityName({ facility }) {
+  if (!facility?.name) return <Dash />;
+  return (
+    <>
+      <div className="text-[#252525] font-semibold break-words">{facility.name}</div>
+      {facility.status === "invited" && <div className="text-[#A1A1A1] text-[11px]">Invited</div>}
+    </>
+  );
+}
+
+function FacilityAdmin({ facility }) {
+  if (!facility?.admin_name && !facility?.admin_user_id) return <Dash />;
+  return (
+    <>
+      <div className="text-[#252525] truncate" title={facility.admin_user_id || undefined}>
+        {facility.admin_name || facility.admin_user_id}
+      </div>
+      {facility.admin_name && facility.admin_user_id && (
+        <div className="text-[#A1A1A1] text-[11px] truncate" title={facility.admin_user_id}>
+          {facility.admin_user_id}
+        </div>
+      )}
+    </>
+  );
+}
+
 function ShippingTable({ rows, ...shell }) {
   return (
     <TableShell
       {...shell}
       empty={!rows?.length}
-      minWidth="min-w-[1100px]"
+      minWidth="min-w-[1420px]"
       head={
         <>
           <th scope="col" className={th}>Purchased</th>
@@ -156,6 +184,8 @@ function ShippingTable({ rows, ...shell }) {
           <th scope="col" className={th}>Phone</th>
           <th scope="col" className={th}>Address</th>
           <th scope="col" className={th}>Code</th>
+          <th scope="col" className={th}>Facility</th>
+          <th scope="col" className={th}>Facility admin</th>
           <th scope="col" className={th}>Plan period</th>
           <th scope="col" className={th}>Subscription</th>
         </>
@@ -203,6 +233,12 @@ function ShippingTable({ rows, ...shell }) {
             </td>
             <td className={`${td} whitespace-nowrap`}>
               {r.partner_code ? <span className="font-mono text-[11px] text-[#535359]">{r.partner_code}</span> : <Dash />}
+            </td>
+            <td className={`${td} max-w-[200px]`}>
+              <FacilityName facility={r.facility} />
+            </td>
+            <td className={`${td} max-w-[200px]`}>
+              <FacilityAdmin facility={r.facility} />
             </td>
             <td className={`${td} text-[#535359] whitespace-nowrap`}>
               {r.current_period_start || r.current_period_end ? (
