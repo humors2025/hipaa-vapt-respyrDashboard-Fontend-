@@ -171,7 +171,7 @@ export default function TrainerDetailPage({ params }) {
               {trainer?.name || trainerId}
             </h1>
             <span className="rounded-full bg-[#2EAF6A] text-white text-[10px] font-semibold px-2.5 py-1 uppercase tracking-wide">
-              {trainer?.display_role || "Trainer"}
+              {trainer?.actual_role === "facility_admin" ? "Facility admin" : (trainer?.display_role || "Trainer")}
             </span>
           </div>
           {trainer?.email && (
