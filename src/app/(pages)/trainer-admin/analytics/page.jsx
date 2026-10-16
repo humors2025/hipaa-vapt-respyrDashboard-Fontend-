@@ -176,9 +176,15 @@ function buildFromGroupDetails(gd, now = new Date()) {
       created_at: m.created_at || null, // admin join date (added to group_members by the backend)
     });
 
-    // Trainers whose parent admin is this member.
+    // Trainers and facility admins whose parent admin is this member, plus the
+    // trainers those facility admins invited (parented to the facility admin).
+    const memberEmail = (m.email || "").toLowerCase();
+    const myFacilityEmails = new Set(trainers
+      .filter(t => t.role === "facility_admin" && (t.parent_admin_email || "").toLowerCase() === memberEmail)
+      .map(t => (t.email || "").toLowerCase())
+      .filter(Boolean));
     const myTrainers = trainers
-      .filter(t => (t.parent_admin_email || "").toLowerCase() === (m.email || "").toLowerCase())
+      .filter(t => { const p = (t.parent_admin_email || "").toLowerCase(); return p === memberEmail || myFacilityEmails.has(p); })
       .map(t => ({
         user_id: t.partner_code,
         name: t.name && t.name !== "NA" ? t.name : (t.email || "—"),
