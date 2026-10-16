@@ -29,7 +29,9 @@ const contentSecurityPolicy = [
 
   "style-src 'self' 'unsafe-inline'",
 
-  `img-src 'self' data: blob: ${API_BASE_URL} https://respyr.in https://production-us.fitchef.cloud https://humorstech.com`,
+  // FitChef recipe photos: older plans point at production-us.fitchef.cloud,
+  // plans from the newer week engine point at app.fitchef.com.
+  `img-src 'self' data: blob: ${API_BASE_URL} https://respyr.in https://production-us.fitchef.cloud https://app.fitchef.com https://humorstech.com`,
 
   "font-src 'self' data:",
 
