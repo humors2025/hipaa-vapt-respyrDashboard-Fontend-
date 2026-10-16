@@ -79,6 +79,35 @@ function addressLine(a) {
   return [a.line1, a.line2, a.city, [a.state, a.postal_code].filter(Boolean).join(" "), a.country].filter(Boolean).join(", ");
 }
 
+// What the address copy button puts on the clipboard: a block ready to paste
+// into a shipping request.
+//   Name: Mayra Alvarado
+//   Email: mayraalvarado18@gmail.com
+//   Phone: +19565170972
+//   Address: 915 W Price Rd, A, Brownsville, TX 78520, US
+//
+//   Referred by: Meta Training, Ernesto Torres
+// Referred by is the facility and its admin; the partner code when the code
+// is not under a facility; left out for website purchases. Empty fields are
+// left out too.
+function shippingDetails(r) {
+  const a = r.ship_to || {};
+  const f = r.facility;
+  const lines = [
+    ["Name", a.name || r.customer?.name],
+    ["Email", r.customer?.email],
+    ["Phone", a.phone],
+    ["Address", addressLine(a)],
+  ]
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k}: ${v}`);
+  const referredBy = f?.name
+    ? [f.name, f.admin_name || f.admin_user_id].filter(Boolean).join(", ")
+    : r.partner_code;
+  if (referredBy) lines.push("", `Referred by: ${referredBy}`);
+  return lines.join("\n");
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Status badge + note for a shipping row. The backend already reports "expired"
@@ -205,17 +234,17 @@ function ShippingTable({ rows, ...shell }) {
             <td className={`${td} text-[#535359] whitespace-nowrap`}>{a.phone || <Dash />}</td>
             <td className={`${td} text-[#535359] max-w-[320px]`}>
               {a.line1 || cityLine ? (
-                // Click anywhere on the address to copy it.
+                // Click anywhere on the address to copy the shipping details.
                 <button
                   type="button"
                   onClick={() =>
-                    copyText(addressLine(a), {
-                      copied: "Address copied",
+                    copyText(shippingDetails(r), {
+                      copied: "Shipping details copied",
                       failed: "Could not copy — select the address and copy manually.",
                     })
                   }
-                  title="Copy address"
-                  aria-label={`Copy address${a.name ? ` for ${a.name}` : ""}`}
+                  title="Copy name, email, phone, address and referrer"
+                  aria-label={`Copy shipping details${a.name ? ` for ${a.name}` : ""}`}
                   className="group inline-flex items-start gap-1.5 text-left rounded-[8px] -mx-1.5 -my-1 px-1.5 py-1 hover:bg-[#EEF4FE] cursor-pointer transition-colors"
                 >
                   <span className="min-w-0">
