@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { logClientEvent } from '@/lib/clientLogger'
 import { blocksFromTermsElement, buildSignedAgreementPdf, loadAgreementLogo } from '@/lib/signedAgreementPdf'
-import AgreementSignSection from '@/components/AgreementSignSection'
+import AgreementSignSection, { renderSignaturePng } from '@/components/AgreementSignSection'
 
 const RespyrIcon = () => (
   <div className="w-[38px] h-[38px] bg-[#308bf9] rounded-[15px] flex items-center justify-center flex-shrink-0">
@@ -38,9 +38,7 @@ export default function Agreement({ onAccept, onDecline, userName, userEmail, ro
   const [checks, setChecks] = useState(Array(5).fill(false))
   const [selectAll, setSelectAll] = useState(false)
   const [scrolledToBottom, setScrolledToBottom] = useState(false)
-  const [signed, setSigned] = useState(false)
   const [generating, setGenerating] = useState(false)
-  const padRef = useRef(null)
 
   // The rendered terms are read into the signed PDF on accept.
   const termsRef = useRef(null)
@@ -51,7 +49,6 @@ export default function Agreement({ onAccept, onDecline, userName, userEmail, ro
   }, [])
 
   const allChecked = checks.every(Boolean)
-  const canAccept = allChecked && signed
 
   function handleSelectAll() {
     const next = !selectAll
@@ -79,18 +76,13 @@ export default function Agreement({ onAccept, onDecline, userName, userEmail, ro
   }
 
   async function handleAccept() {
-    if (!canAccept || generating) return
-    logClientEvent('agreement_agree_continue_click', { all_checked: allChecked, signed, user_email: userEmail || undefined }, 'Terms and condition page')
+    if (!allChecked || generating) return
+    logClientEvent('agreement_agree_continue_click', { all_checked: allChecked, user_email: userEmail || undefined }, 'Terms and condition page')
     setGenerating(true)
     try {
-      const signaturePng = padRef.current?.toPng()
-      if (!signaturePng) {
-        toast.error('Please sign in the box before continuing.')
-        return
-      }
       const termsEl = termsRef.current?.querySelector('.tc-scroll')
       if (!termsEl) throw new Error('Agreement terms not rendered')
-      const logoPng = await loadAgreementLogo()
+      const [signaturePng, logoPng] = await Promise.all([renderSignaturePng(userName), loadAgreementLogo()])
       const pdf = buildSignedAgreementPdf({
         fileName: 'device-evaluation-agreement.pdf',
         title: 'Device Evaluation Program Terms and Conditions',
@@ -300,7 +292,7 @@ export default function Agreement({ onAccept, onDecline, userName, userEmail, ro
         ))}
       </div>
 
-      <AgreementSignSection ref={padRef} userName={userName} userEmail={userEmail} onSignatureChange={setSigned} />
+      <AgreementSignSection userName={userName} userEmail={userEmail} />
 
       <div className="flex items-center gap-3 px-7 py-4 pb-[22px] sticky bottom-0 bg-white border-t border-[#e1e6ed] z-10">
         <button
@@ -312,7 +304,7 @@ export default function Agreement({ onAccept, onDecline, userName, userEmail, ro
 
         <button
           onClick={handleAccept}
-          disabled={!canAccept || generating}
+          disabled={!allChecked || generating}
           className="flex-1 h-11 bg-[#252525] text-white rounded-[15px] text-[13px] font-semibold tracking-[-0.02em] cursor-pointer flex items-center justify-center gap-2 transition-all duration-150 shadow-btn hover:bg-[#3a3a3a] hover:-translate-y-px active:translate-y-0 disabled:opacity-55 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
         >
           {generating ? (
