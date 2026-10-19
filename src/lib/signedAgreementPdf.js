@@ -1,6 +1,6 @@
 // Builds the signed agreement PDF that signup uploads to S3: Rysflo logo on
 // every page, the terms, then an acceptance record with the signer's name,
-// email, role, the boxes they ticked and their drawn signature.
+// email, role, the boxes they ticked, their signature and the date.
 //
 // Laid out with jsPDF's text API. html2canvas is deliberately not used: it
 // can't parse the oklch/oklab colours Tailwind v4 emits.
@@ -28,10 +28,20 @@ const C = {
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const pad2 = (n) => String(n).padStart(2, '0')
 
-function formatUtc(d) {
-  const p = (n) => String(n).padStart(2, '0')
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} UTC`
+// Dates are the signer's local date, so the date shown beside the signature
+// on screen is the date in the PDF even late in the evening in the US.
+export function formatAgreementDate(d) {
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+}
+
+// Local date and time with the UTC offset, e.g. "19 Oct 2026, 16:25 (UTC+05:30)".
+function formatAcceptedAt(d) {
+  const off = -d.getTimezoneOffset()
+  const sign = off >= 0 ? '+' : '-'
+  const abs = Math.abs(off)
+  return `${formatAgreementDate(d)}, ${pad2(d.getHours())}:${pad2(d.getMinutes())} (UTC${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)})`
 }
 
 let logoPromise = null
@@ -108,7 +118,7 @@ function drawTick(pdf, x, y, s) {
  * @param {Array}    opts.blocks         { type: heading|paragraph|effective|notice, text, lead? }
  * @param {string[]} opts.confirmations  Checkbox texts the signer ticked.
  * @param {object}   opts.signer         { name, email, role }
- * @param {string}   opts.signaturePng   Data URL of the drawn signature.
+ * @param {string}   opts.signaturePng   Data URL of the signature image.
  * @param {string}   [opts.logoPng]      Data URL of the Rysflo logo.
  * @param {Date}     [opts.acceptedAt]
  * @returns {File}
@@ -135,7 +145,8 @@ export function buildSignedAgreementPdf({
   const LH = 4.6
   let y = top
 
-  const accepted = formatUtc(acceptedAt)
+  const accepted = formatAcceptedAt(acceptedAt)
+  const acceptedDate = formatAgreementDate(acceptedAt)
   const roleLabel = ROLE_LABELS[signer.role] || signer.role || ''
 
   pdf.setProperties({
@@ -245,7 +256,7 @@ export function buildSignedAgreementPdf({
   const confLines = confirmations.map((t) => pdf.splitTextToSize(t, maxW - 8))
   const confH = confLines.reduce((s, l) => s + l.length * LH + 2.2, 0)
   const sigBoxH = 34
-  const recordH = 14 + 4 * 6.5 + 10 + confH + 5 + sigBoxH + 4
+  const recordH = 14 + 4 * 6.5 + 10 + confH + 5 + sigBoxH + 5 + 10
   if (y + 4 + recordH > bottom) {
     newPage()
   } else {
@@ -307,16 +318,29 @@ export function buildSignedAgreementPdf({
   font('normal', 7.5, C.muted)
   pdf.text('Signature', M + 5, y + sigBoxH - 3)
 
-  const sx = M + boxW + 8
-  font('bold', 10, C.dark)
-  pdf.text(signer.name, sx, y + 10)
-  font('normal', 9, C.body)
-  pdf.text(signer.email, sx, y + 15.5)
+  // Date box beside the signature, like the Signature / Date lines on a form.
+  const dx = M + boxW + 6
+  const dateW = 50
+  pdf.setDrawColor(...C.border)
+  pdf.setLineWidth(0.3)
+  pdf.roundedRect(dx, y, dateW, sigBoxH, 2, 2, 'S')
+  font('bold', 13, C.dark)
+  pdf.text(acceptedDate, dx + 5, y + sigBoxH - 10)
+  pdf.setDrawColor(...C.muted)
+  pdf.setLineWidth(0.2)
+  pdf.line(dx + 5, y + sigBoxH - 7, dx + dateW - 5, y + sigBoxH - 7)
+  font('normal', 7.5, C.muted)
+  pdf.text('Date', dx + 5, y + sigBoxH - 3)
+  y += sigBoxH + 5
+
   font('normal', 8.5, C.muted)
   pdf.text(
-    pdf.splitTextToSize(`Signed electronically on ${accepted} while setting up a Rysflo dashboard account.`, W - M - sx),
-    sx,
-    y + 22
+    pdf.splitTextToSize(
+      `Signed electronically by ${signer.name} (${signer.email}) on ${accepted} while setting up a Rysflo dashboard account.`,
+      maxW
+    ),
+    M,
+    y + 3
   )
 
   // ── Header and footer on every page ────────────────────────────────────────

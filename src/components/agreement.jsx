@@ -292,7 +292,7 @@ export default function Agreement({ onAccept, onDecline, userName, userEmail, ro
         ))}
       </div>
 
-      <AgreementSignSection userName={userName} userEmail={userEmail} />
+      <AgreementSignSection userName={userName} userEmail={userEmail} signed={allChecked} />
 
       <div className="flex items-center gap-3 px-7 py-4 pb-[22px] sticky bottom-0 bg-white border-t border-[#e1e6ed] z-10">
         <button
