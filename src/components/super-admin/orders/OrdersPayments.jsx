@@ -3,6 +3,8 @@
 // Website (/order) purchases as the Stripe webhook records them:
 //   Shipping    one row per purchase: who to ship the device to
 //   Payments    one row per Stripe invoice: first payment, renewals, failures, refunds
+//   Renewals    the renewal invoices only, with which renewal each is and where
+//               the plan stands now
 //   Test codes  super admin only (showTestCodes)
 //
 // Rendered by /super-admin/orders and, read-only, by /trainer-admin/orders for
@@ -28,10 +30,18 @@ const DEFAULT_PAYMENT_STATUSES = ["paid", "failed", "refunded", "partially_refun
 const TABS = [
   { value: "shipping", label: "Shipping" },
   { value: "payments", label: "Payments" },
+  { value: "renewals", label: "Renewals" },
   { value: "codes", label: "Test codes" },
 ];
 
 const PAYMENT_TYPE_LABEL = { first_payment: "First payment", renewal: "Renewal" };
+
+// 1 → "1st", 2 → "2nd", 11 → "11th", 22 → "22nd".
+function ordinal(n) {
+  const v = n % 100;
+  const suffix = v >= 11 && v <= 13 ? "th" : { 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th";
+  return `${n}${suffix}`;
+}
 
 function errorMessage(err, fallback) {
   return err?.data?.message || err?.message || fallback;
@@ -348,6 +358,73 @@ function PaymentsTable({ rows, ...shell }) {
   );
 }
 
+function RenewalsTable({ rows, ...shell }) {
+  return (
+    <TableShell
+      {...shell}
+      empty={!rows?.length}
+      minWidth="min-w-[1380px]"
+      head={
+        <>
+          <th scope="col" className={th}>Renewed</th>
+          <th scope="col" className={th}>Customer</th>
+          <th scope="col" className={th}>Code</th>
+          <th scope="col" className={th}>Facility</th>
+          <th scope="col" className={th}>Facility admin</th>
+          <th scope="col" className={th}>Renewal</th>
+          <th scope="col" className={th}>Billing period</th>
+          <th scope="col" className={`${th} text-right`}>Paid</th>
+          <th scope="col" className={th}>Method</th>
+          <th scope="col" className={th}>Status</th>
+          <th scope="col" className={th}>Plan now</th>
+        </>
+      }
+    >
+      {rows?.map((r) => {
+        const cur = r.currency;
+        const method = r.payment_method?.type
+          ? `${humanizeStatus(r.payment_method.type)}${r.payment_method.last4 ? ` •••• ${r.payment_method.last4}` : ""}`
+          : null;
+        const plan = describePlan(r.plan || {});
+        return (
+          <tr key={r.id} className="border-t border-[#F5F7FA] align-top">
+            <td className={`${td} text-[#535359] whitespace-nowrap`}>{formatDate(r.date, true)}</td>
+            <td className={`${td} max-w-[200px]`}>
+              <Customer customer={r.customer} />
+            </td>
+            <td className={`${td} whitespace-nowrap`}>
+              {r.partner_code ? <span className="font-mono text-[11px] text-[#535359]">{r.partner_code}</span> : <Dash />}
+            </td>
+            <td className={`${td} max-w-[200px]`}>
+              <FacilityName facility={r.facility} />
+            </td>
+            <td className={`${td} max-w-[200px]`}>
+              <FacilityAdmin facility={r.facility} />
+            </td>
+            <td className={`${td} text-[#252525] whitespace-nowrap`}>{r.renewal_number ? ordinal(r.renewal_number) : <Dash />}</td>
+            <td className={`${td} text-[#535359] whitespace-nowrap`}>
+              {r.period_start ? `${formatDate(r.period_start)} – ${formatDate(r.period_end)}` : <Dash />}
+            </td>
+            <td className={`${td} text-right tabular-nums whitespace-nowrap`}>
+              <div className="text-[#252525] font-semibold">{formatMoney(r.amount_paid, cur)}</div>
+              {Number(r.amount_refunded) > 0 && <div className="text-[#A66B00] text-[11px]">−{formatMoney(r.amount_refunded, cur)} refunded</div>}
+            </td>
+            <td className={`${td} text-[#535359] whitespace-nowrap`}>{method || <Dash />}</td>
+            <td className={td}>
+              <StatusBadge status={r.status} />
+              {r.failure_message && <div className="text-[#B5363A] text-[11px] mt-1 max-w-[200px]">{r.failure_message}</div>}
+            </td>
+            <td className={td}>
+              {plan.status ? <StatusBadge status={plan.status} /> : <Dash />}
+              {plan.note && <div className={`text-[11px] mt-1 whitespace-nowrap ${plan.note.tone}`}>{plan.note.text}</div>}
+            </td>
+          </tr>
+        );
+      })}
+    </TableShell>
+  );
+}
+
 const CODE_STATE = {
   unused: { label: "Unused", cls: "bg-[#EEF4FE] text-[#308BF9]" },
   redeemed: { label: "Redeemed", cls: "bg-[#E5F6EE] text-[#1F7A4A]" },
@@ -545,13 +622,20 @@ export default function OrdersPayments({ showTestCodes = false }) {
       const res =
         tab === "shipping"
           ? await fetchShippingAddressesService({ search, page, limit: PAGE_LIMIT })
-          : tab === "payments"
-            ? await fetchPaymentTransactionsService({ status, search, page, limit: PAGE_LIMIT })
+          : tab === "payments" || tab === "renewals"
+            ? await fetchPaymentTransactionsService({
+                status,
+                type: tab === "renewals" ? "renewal" : "all",
+                search,
+                page,
+                limit: PAGE_LIMIT,
+              })
             : await fetchTestCodesService({ page, limit: PAGE_LIMIT });
       if (id !== reqId.current) return;
       if (res?.status === false) throw new Error(res?.message || "Failed to load data");
-      // The test-codes endpoint answers with action: "list" instead of view.
-      setData(tab === "codes" ? { ...res, view: "codes" } : res);
+      // The test-codes endpoint answers with action: "list" instead of view, and
+      // renewals come back as view "payments": tag both with their tab.
+      setData(tab === "codes" || tab === "renewals" ? { ...res, view: tab } : res);
     } catch (err) {
       if (id !== reqId.current) return;
       const msg = errorMessage(err, "Failed to load data");
@@ -584,6 +668,9 @@ export default function OrdersPayments({ showTestCodes = false }) {
   const tooShort = trimmed.length > 0 && trimmed.length < ORDERS_SEARCH_MIN_LENGTH;
   const filtersActive = Boolean(search) || status !== "all";
   const statusOptions = current?.status_options || DEFAULT_PAYMENT_STATUSES;
+  // Renewals is the Payments list narrowed to renewal invoices: same search,
+  // status filter and summary chips.
+  const paymentsLike = tab === "payments" || tab === "renewals";
 
   const shell = {
     loading: loading && !current,
@@ -602,13 +689,23 @@ export default function OrdersPayments({ showTestCodes = false }) {
       </div>
 
       <SalesCard
-        title={tab === "shipping" ? "Shipping addresses" : tab === "payments" ? "Payment transactions" : "Test onboarding codes"}
+        title={
+          tab === "shipping"
+            ? "Shipping addresses"
+            : tab === "payments"
+              ? "Payment transactions"
+              : tab === "renewals"
+                ? "Renewals"
+                : "Test onboarding codes"
+        }
         subtitle={
           tab === "shipping"
             ? "Name, phone and address entered on Stripe Checkout"
             : tab === "payments"
               ? "One row per Stripe invoice. Stripe fee is shown only when it is in the same currency as the payment."
-              : "Free single-use codes for testing app onboarding — redeemed like a purchase code, but with no payment, sales or commission behind them."
+              : tab === "renewals"
+                ? "Members whose plan renewed: one row per monthly renewal invoice, newest first. Plan now shows where the subscription stands today."
+                : "Free single-use codes for testing app onboarding — redeemed like a purchase code, but with no payment, sales or commission behind them."
         }
         action={<UpdatingPill show={loading && Boolean(current)} />}
       >
@@ -632,7 +729,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
           })}
         </div>
 
-        {tab === "payments" && <PaymentSummary summary={current?.summary} />}
+        {paymentsLike && <PaymentSummary summary={current?.summary} />}
 
         {tab === "codes" && <GenerateTestCodes onGenerated={load} disabled={loading} trainer={current?.trainer} />}
 
@@ -649,7 +746,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
               className="w-full rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] text-[#252525] placeholder:text-[#A1A1A1] focus:outline-none focus:border-[#308BF9] transition-colors"
             />
           </label>
-          {tab === "payments" && (
+          {paymentsLike && (
             <label className="flex flex-col gap-1 min-w-[170px]">
               <span className="text-[#535359] text-[11px] font-semibold">Status</span>
               <select
@@ -688,6 +785,12 @@ export default function OrdersPayments({ showTestCodes = false }) {
             {...shell}
             emptyMessage={filtersActive ? "No payments match these filters." : "No payments recorded yet."}
           />
+        ) : tab === "renewals" ? (
+          <RenewalsTable
+            rows={current?.payments}
+            {...shell}
+            emptyMessage={filtersActive ? "No renewals match these filters." : "No renewals recorded yet."}
+          />
         ) : (
           <TestCodesTable rows={current?.codes} {...shell} />
         )}
@@ -699,7 +802,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
             total={pagination?.total || 0}
             totalPages={totalPages}
             disabled={loading}
-            noun={tab === "shipping" ? "addresses" : tab === "payments" ? "payments" : "codes"}
+            noun={tab === "shipping" ? "addresses" : tab === "payments" ? "payments" : tab === "renewals" ? "renewals" : "codes"}
             onPageChange={(p) => p >= 1 && p <= totalPages && p !== page && setPage(p)}
           />
         )}

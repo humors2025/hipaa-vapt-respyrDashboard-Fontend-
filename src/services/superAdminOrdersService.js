@@ -13,12 +13,18 @@
 //              current_period_start, current_period_end, canceled_at, stripe_subscription_id } ],
 //              pagination: { page, limit, total, total_pages } }
 // payments → { status, payments: [ { id, date, customer: { name, email }, partner_code,
-//              type: "first_payment" | "renewal" | …, period_start, period_end, currency,
+//              facility (same shape as a shipping row's, or null),
+//              type: "first_payment" | "renewal" | …, renewal_number (1 = first renewal,
+//              null for other invoices), period_start, period_end, currency,
 //              amount_paid, amount_refunded, fee, net, status, failure_message,
 //              payment_method: { type, last4 },
-//              stripe: { subscription_id, invoice_id, payment_intent_id, charge_id } } ],
+//              stripe: { subscription_id, invoice_id, payment_intent_id, charge_id },
+//              plan: { subscription_status, stripe_status, current_period_start,
+//                      current_period_end, canceled_at } (the subscription as it stands now) } ],
 //              summary: [ { status, currency, count, amount_paid, amount_refunded } ],
 //              status_options: [...], pagination: { … } }
+//            type "renewal" (Renewals tab) keeps renewal invoices only; the summary
+//            then counts renewals only.
 
 import { apiFetcher } from "@/config/fetcher";
 import { API_ENDPOINTS } from "@/config/apiConfig";
@@ -35,8 +41,8 @@ const post = (payload) =>
 export const fetchShippingAddressesService = async ({ search = "", page = 1, limit = 20 }) =>
   post({ view: "shipping", ...(search ? { search } : {}), page, limit });
 
-export const fetchPaymentTransactionsService = async ({ status = "all", search = "", page = 1, limit = 20 }) =>
-  post({ view: "payments", status, ...(search ? { search } : {}), page, limit });
+export const fetchPaymentTransactionsService = async ({ status = "all", type = "all", search = "", page = 1, limit = 20 }) =>
+  post({ view: "payments", status, ...(type !== "all" ? { type } : {}), ...(search ? { search } : {}), page, limit });
 
 // Free app-onboarding test codes (super-admin-test-codes.js): rows shaped like a
 // paid purchase in trainer_client_plan_subscriptions, so the app redeems them
