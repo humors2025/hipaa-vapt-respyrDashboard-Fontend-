@@ -418,7 +418,9 @@ payload.agreement_pdf_name =
     const AgreementStep = role === "facility_admin" ? FacilityAdminAgreement : Agreement;
     return (
       <AgreementStep
+        userName={fullName}
         userEmail={email}
+        role={role}
         onAccept={(pdf) => {
           setAgreementPdf(pdf);
           setAgreed(true);
