@@ -3,8 +3,9 @@
 // Website (/order) purchases as the Stripe webhook records them:
 //   Shipping    one row per purchase: who to ship the device to
 //   Payments    one row per Stripe invoice: first payment, renewals, failures, refunds
-//   Renewals    the renewal invoices only, with which renewal each is and where
-//               the plan stands now
+//   Renewals    renewals that went through (paid; refunds still shown), with
+//               which renewal each is and where the plan stands now
+//   Upcoming    plans still set to renew within the next 7 days, soonest first
 //   Test codes  super admin only (showTestCodes)
 //
 // Rendered by /super-admin/orders and, read-only, by /trainer-admin/orders for
@@ -18,6 +19,7 @@ import {
   fetchPaymentTransactionsService,
   fetchShippingAddressesService,
   fetchTestCodesService,
+  fetchUpcomingRenewalsService,
   generateTestCodesService,
 } from "@/services/superAdminOrdersService";
 import { formatDate, formatMoney, humanizeStatus } from "@/components/super-admin/sales/salesFormat";
@@ -26,11 +28,14 @@ import { SalesPagination } from "@/components/super-admin/sales/PurchaseTable";
 
 const PAGE_LIMIT = 20;
 const DEFAULT_PAYMENT_STATUSES = ["paid", "failed", "refunded", "partially_refunded", "open"];
+const RENEWED_STATUSES = ["paid", "partially_refunded", "refunded"];
+const UPCOMING_DAYS = 7;
 
 const TABS = [
   { value: "shipping", label: "Shipping" },
   { value: "payments", label: "Payments" },
   { value: "renewals", label: "Renewals" },
+  { value: "upcoming", label: "Upcoming renewals" },
   { value: "codes", label: "Test codes" },
 ];
 
@@ -425,6 +430,81 @@ function RenewalsTable({ rows, ...shell }) {
   );
 }
 
+// "Today" / "Tomorrow" / "In 5 days", counted in calendar days on this
+// computer's clock.
+function renewsIn(iso) {
+  const end = iso ? new Date(iso) : null;
+  if (!end || Number.isNaN(end.getTime())) return null;
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOfDay(end) - startOfDay(new Date())) / DAY_MS);
+  if (days <= 0) return { text: "Today", tone: "text-[#A66B00]" };
+  if (days === 1) return { text: "Tomorrow", tone: "text-[#A66B00]" };
+  return { text: `In ${days} days`, tone: "text-[#A1A1A1]" };
+}
+
+function UpcomingRenewalsTable({ rows, ...shell }) {
+  return (
+    <TableShell
+      {...shell}
+      empty={!rows?.length}
+      minWidth="min-w-[1240px]"
+      head={
+        <>
+          <th scope="col" className={th}>Renews on</th>
+          <th scope="col" className={th}>Customer</th>
+          <th scope="col" className={th}>Code</th>
+          <th scope="col" className={th}>Facility</th>
+          <th scope="col" className={th}>Facility admin</th>
+          <th scope="col" className={th}>Renewal</th>
+          <th scope="col" className={th}>Member since</th>
+          <th scope="col" className={`${th} text-right`}>Last paid</th>
+          <th scope="col" className={th}>Plan now</th>
+        </>
+      }
+    >
+      {rows?.map((r) => {
+        const when = renewsIn(r.renews_at);
+        const last = r.last_payment;
+        return (
+          <tr key={r.id} className="border-t border-[#F5F7FA] align-top">
+            <td className={`${td} whitespace-nowrap`}>
+              <div className="text-[#252525] font-semibold">{formatDate(r.renews_at, true)}</div>
+              {when && <div className={`text-[11px] ${when.tone}`}>{when.text}</div>}
+            </td>
+            <td className={`${td} max-w-[200px]`}>
+              <Customer customer={r.customer} />
+            </td>
+            <td className={`${td} whitespace-nowrap`}>
+              {r.partner_code ? <span className="font-mono text-[11px] text-[#535359]">{r.partner_code}</span> : <Dash />}
+            </td>
+            <td className={`${td} max-w-[200px]`}>
+              <FacilityName facility={r.facility} />
+            </td>
+            <td className={`${td} max-w-[200px]`}>
+              <FacilityAdmin facility={r.facility} />
+            </td>
+            <td className={`${td} text-[#252525] whitespace-nowrap`}>{ordinal((Number(r.renewals_so_far) || 0) + 1)}</td>
+            <td className={`${td} text-[#535359] whitespace-nowrap`}>{formatDate(r.purchased_at)}</td>
+            <td className={`${td} text-right tabular-nums whitespace-nowrap`}>
+              {last ? (
+                <>
+                  <div className="text-[#252525] font-semibold">{formatMoney(last.amount_paid, last.currency)}</div>
+                  <div className="text-[#A1A1A1] text-[11px]">
+                    {PAYMENT_TYPE_LABEL[last.type] || humanizeStatus(last.type)} · {formatDate(last.date)}
+                  </div>
+                </>
+              ) : (
+                <Dash />
+              )}
+            </td>
+            <td className={td}>{r.subscription_status ? <StatusBadge status={r.subscription_status} /> : <Dash />}</td>
+          </tr>
+        );
+      })}
+    </TableShell>
+  );
+}
+
 const CODE_STATE = {
   unused: { label: "Unused", cls: "bg-[#EEF4FE] text-[#308BF9]" },
   redeemed: { label: "Redeemed", cls: "bg-[#E5F6EE] text-[#1F7A4A]" },
@@ -626,16 +706,21 @@ export default function OrdersPayments({ showTestCodes = false }) {
             ? await fetchPaymentTransactionsService({
                 status,
                 type: tab === "renewals" ? "renewal" : "all",
+                // Renewals lists members who did renew: no failed / open attempts.
+                paidOnly: tab === "renewals",
                 search,
                 page,
                 limit: PAGE_LIMIT,
               })
-            : await fetchTestCodesService({ page, limit: PAGE_LIMIT });
+            : tab === "upcoming"
+              ? await fetchUpcomingRenewalsService({ days: UPCOMING_DAYS, search, page, limit: PAGE_LIMIT })
+              : await fetchTestCodesService({ page, limit: PAGE_LIMIT });
       if (id !== reqId.current) return;
       if (res?.status === false) throw new Error(res?.message || "Failed to load data");
-      // The test-codes endpoint answers with action: "list" instead of view, and
-      // renewals come back as view "payments": tag both with their tab.
-      setData(tab === "codes" || tab === "renewals" ? { ...res, view: tab } : res);
+      // The test-codes endpoint answers with action: "list" instead of view,
+      // renewals come back as view "payments" and upcoming as
+      // "upcoming_renewals": tag them with their tab.
+      setData(tab === "codes" || tab === "renewals" || tab === "upcoming" ? { ...res, view: tab } : res);
     } catch (err) {
       if (id !== reqId.current) return;
       const msg = errorMessage(err, "Failed to load data");
@@ -667,9 +752,9 @@ export default function OrdersPayments({ showTestCodes = false }) {
   const trimmed = searchInput.trim();
   const tooShort = trimmed.length > 0 && trimmed.length < ORDERS_SEARCH_MIN_LENGTH;
   const filtersActive = Boolean(search) || status !== "all";
-  const statusOptions = current?.status_options || DEFAULT_PAYMENT_STATUSES;
-  // Renewals is the Payments list narrowed to renewal invoices: same search,
-  // status filter and summary chips.
+  const statusOptions = current?.status_options || (tab === "renewals" ? RENEWED_STATUSES : DEFAULT_PAYMENT_STATUSES);
+  // Renewals is the Payments list narrowed to paid renewal invoices: same
+  // search, status filter and summary chips.
   const paymentsLike = tab === "payments" || tab === "renewals";
 
   const shell = {
@@ -696,7 +781,9 @@ export default function OrdersPayments({ showTestCodes = false }) {
               ? "Payment transactions"
               : tab === "renewals"
                 ? "Renewals"
-                : "Test onboarding codes"
+                : tab === "upcoming"
+                  ? "Upcoming renewals"
+                  : "Test onboarding codes"
         }
         subtitle={
           tab === "shipping"
@@ -704,8 +791,10 @@ export default function OrdersPayments({ showTestCodes = false }) {
             : tab === "payments"
               ? "One row per Stripe invoice. Stripe fee is shown only when it is in the same currency as the payment."
               : tab === "renewals"
-                ? "Members whose plan renewed: one row per monthly renewal invoice, newest first. Plan now shows where the subscription stands today."
-                : "Free single-use codes for testing app onboarding — redeemed like a purchase code, but with no payment, sales or commission behind them."
+                ? "Members whose plan renewed: one row per paid renewal, newest first. Failed renewal attempts are left out (see Payments). Plan now shows where the subscription stands today."
+                : tab === "upcoming"
+                  ? `Members whose plan renews in the next ${UPCOMING_DAYS} days, soonest first. Cancelled plans are left out. Last paid is their most recent payment, a guide to the next charge.`
+                  : "Free single-use codes for testing app onboarding — redeemed like a purchase code, but with no payment, sales or commission behind them."
         }
         action={<UpdatingPill show={loading && Boolean(current)} />}
       >
@@ -731,6 +820,17 @@ export default function OrdersPayments({ showTestCodes = false }) {
 
         {paymentsLike && <PaymentSummary summary={current?.summary} />}
 
+        {tab === "upcoming" && current && !search && (
+          <div className="flex flex-wrap gap-2">
+            <div className="rounded-[10px] bg-[#F5F7FA] px-3 py-2 text-[12px] flex items-center gap-2">
+              <span className="text-[#252525] font-semibold tabular-nums">{pagination?.total || 0}</span>
+              <span className="text-[#535359]">
+                plan{pagination?.total === 1 ? "" : "s"} renewing in the next {current.filters?.days || UPCOMING_DAYS} days
+              </span>
+            </div>
+          </div>
+        )}
+
         {tab === "codes" && <GenerateTestCodes onGenerated={load} disabled={loading} trainer={current?.trainer} />}
 
         {tab !== "codes" && (
@@ -741,7 +841,13 @@ export default function OrdersPayments({ showTestCodes = false }) {
               type="search"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder={tab === "shipping" ? "Search name, email, phone, city, postal code or code" : "Search name, email, invoice or code"}
+              placeholder={
+                tab === "shipping"
+                  ? "Search name, email, phone, city, postal code or code"
+                  : tab === "upcoming"
+                    ? "Search name, email or code"
+                    : "Search name, email, invoice or code"
+              }
               aria-label="Search"
               className="w-full rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] text-[#252525] placeholder:text-[#A1A1A1] focus:outline-none focus:border-[#308BF9] transition-colors"
             />
@@ -791,6 +897,14 @@ export default function OrdersPayments({ showTestCodes = false }) {
             {...shell}
             emptyMessage={filtersActive ? "No renewals match these filters." : "No renewals recorded yet."}
           />
+        ) : tab === "upcoming" ? (
+          <UpcomingRenewalsTable
+            rows={current?.upcoming}
+            {...shell}
+            emptyMessage={
+              filtersActive ? "No upcoming renewals match this search." : `No plans renew in the next ${UPCOMING_DAYS} days.`
+            }
+          />
         ) : (
           <TestCodesTable rows={current?.codes} {...shell} />
         )}
@@ -802,7 +916,15 @@ export default function OrdersPayments({ showTestCodes = false }) {
             total={pagination?.total || 0}
             totalPages={totalPages}
             disabled={loading}
-            noun={tab === "shipping" ? "addresses" : tab === "payments" ? "payments" : tab === "renewals" ? "renewals" : "codes"}
+            noun={
+              tab === "shipping"
+                ? "addresses"
+                : tab === "payments"
+                  ? "payments"
+                  : tab === "renewals" || tab === "upcoming"
+                    ? "renewals"
+                    : "codes"
+            }
             onPageChange={(p) => p >= 1 && p <= totalPages && p !== page && setPage(p)}
           />
         )}
