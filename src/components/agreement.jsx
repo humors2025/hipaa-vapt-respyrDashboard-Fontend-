@@ -1,9 +1,10 @@
 'use client'
 
-import { useRef, useState } from 'react'
-import { jsPDF } from 'jspdf'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { logClientEvent } from '@/lib/clientLogger'
+import { blocksFromTermsElement, buildSignedAgreementPdf, loadAgreementLogo } from '@/lib/signedAgreementPdf'
+import AgreementSignSection from '@/components/AgreementSignSection'
 
 const RespyrIcon = () => (
   <div className="w-[38px] h-[38px] bg-[#308bf9] rounded-[15px] flex items-center justify-center flex-shrink-0">
@@ -22,24 +23,35 @@ const CheckIcon = ({ size = 10 }) => (
   </svg>
 )
 
+// Each confirmation as plain text with its emphasised part, so the screen can
+// bold it and the signed PDF can list it verbatim.
 const CHECKBOX_ITEMS = [
-  <>I have read and agree to the <strong>NDA &amp; Device Evaluation Program Terms and Conditions</strong> above.</>,
-  <>I agree that I am <strong>financially responsible</strong> for the device(s) assigned to me for the duration of this testing period.</>,
-  <>I agree to <strong>ship the Rysflo device(s)</strong> back upon request once the trial / feedback period has ended, after receiving a free return shipping label from Atlas Human Systems LLC.</>,
-  <>I agree to <strong>fill out and submit the feedback forms</strong> provided at least twice monthly.</>,
-  <>I agree to <strong>join at least one monthly video conference call</strong> (1–2 hours) with the Rysflo Team to give feedback and discuss with other trainers.</>,
+  { pre: 'I have read and agree to the ', bold: 'NDA & Device Evaluation Program Terms and Conditions', post: ' above.' },
+  { pre: 'I agree that I am ', bold: 'financially responsible', post: ' for the device(s) assigned to me for the duration of this testing period.' },
+  { pre: 'I agree to ', bold: 'ship the Rysflo device(s)', post: ' back upon request once the trial / feedback period has ended, after receiving a free return shipping label from Atlas Human Systems LLC.' },
+  { pre: 'I agree to ', bold: 'fill out and submit the feedback forms', post: ' provided at least twice monthly.' },
+  { pre: 'I agree to ', bold: 'join at least one monthly video conference call', post: ' (1–2 hours) with the Rysflo Team to give feedback and discuss with other trainers.' },
 ]
+const itemText = (c) => `${c.pre}${c.bold}${c.post}`
 
-export default function Agreement({ onAccept, onDecline, userEmail }) {
+export default function Agreement({ onAccept, onDecline, userName, userEmail, role }) {
   const [checks, setChecks] = useState(Array(5).fill(false))
   const [selectAll, setSelectAll] = useState(false)
   const [scrolledToBottom, setScrolledToBottom] = useState(false)
+  const [signed, setSigned] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const padRef = useRef(null)
 
-  // The T&C section (header + full terms) is snapshotted into a PDF on accept.
+  // The rendered terms are read into the signed PDF on accept.
   const termsRef = useRef(null)
 
+  // Warm the logo so building the PDF on accept doesn't wait for it.
+  useEffect(() => {
+    loadAgreementLogo()
+  }, [])
+
   const allChecked = checks.every(Boolean)
+  const canAccept = allChecked && signed
 
   function handleSelectAll() {
     const next = !selectAll
@@ -59,56 +71,6 @@ export default function Agreement({ onAccept, onDecline, userEmail }) {
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 40) setScrolledToBottom(true)
   }
 
-  // Build a multi-page A4 PDF of the agreement directly from the rendered text.
-  // We deliberately avoid html2canvas here: it can't parse the modern CSS color
-  // functions (oklch/oklab/color-mix) that Tailwind v4 emits and was failing to
-  // produce a PDF at all. Reading the text and laying it out with jsPDF's native
-  // text API is dependency-free and reliable.
-  function buildAgreementPdf(el) {
-    const scrollEl = el.querySelector('.tc-scroll')
-    const body = ((scrollEl || el).innerText || (scrollEl || el).textContent || '').trim()
-
-    const pdf = new jsPDF('p', 'mm', 'a4')
-    const pageWidth = pdf.internal.pageSize.getWidth()
-    const pageHeight = pdf.internal.pageSize.getHeight()
-    const margin = 15
-    const maxWidth = pageWidth - margin * 2
-    const lineHeight = 5
-    let y = margin
-
-    const writeLines = (lines) => {
-      for (const line of lines) {
-        if (y + lineHeight > pageHeight - margin) {
-          pdf.addPage()
-          y = margin
-        }
-        pdf.text(line, margin, y)
-        y += lineHeight
-      }
-    }
-
-    // Title
-    pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(12)
-    writeLines(pdf.splitTextToSize('DEVICE EVALUATION PROGRAM TERMS AND CONDITIONS', maxWidth))
-    y += lineHeight
-
-    // Body
-    pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(10)
-    for (const para of body.split('\n')) {
-      const text = para.trim()
-      if (!text) {
-        y += lineHeight / 2
-        continue
-      }
-      writeLines(pdf.splitTextToSize(text, maxWidth))
-    }
-
-    const blob = pdf.output('blob')
-    return new File([blob], 'device-evaluation-agreement.pdf', { type: 'application/pdf' })
-  }
-
   function handleDecline() {
     // keepalive:true in the logger keeps this request alive across the
     // immediate router.push("/") that onDecline triggers.
@@ -117,12 +79,27 @@ export default function Agreement({ onAccept, onDecline, userEmail }) {
   }
 
   async function handleAccept() {
-    if (!allChecked || generating) return
-    logClientEvent('agreement_agree_continue_click', { all_checked: allChecked, user_email: userEmail || undefined }, 'Terms and condition page')
+    if (!canAccept || generating) return
+    logClientEvent('agreement_agree_continue_click', { all_checked: allChecked, signed, user_email: userEmail || undefined }, 'Terms and condition page')
     setGenerating(true)
     try {
-      const pdf = termsRef.current ? await buildAgreementPdf(termsRef.current) : null
-      if (!pdf) throw new Error('Agreement PDF could not be generated')
+      const signaturePng = padRef.current?.toPng()
+      if (!signaturePng) {
+        toast.error('Please sign in the box before continuing.')
+        return
+      }
+      const termsEl = termsRef.current?.querySelector('.tc-scroll')
+      if (!termsEl) throw new Error('Agreement terms not rendered')
+      const logoPng = await loadAgreementLogo()
+      const pdf = buildSignedAgreementPdf({
+        fileName: 'device-evaluation-agreement.pdf',
+        title: 'Device Evaluation Program Terms and Conditions',
+        blocks: blocksFromTermsElement(termsEl),
+        confirmations: CHECKBOX_ITEMS.map(itemText),
+        signer: { name: userName, email: userEmail, role },
+        signaturePng,
+        logoPng,
+      })
       onAccept?.(pdf)
     } catch (err) {
       console.error('Failed to generate agreement PDF', err)
@@ -188,11 +165,11 @@ export default function Agreement({ onAccept, onDecline, userEmail }) {
 
         <div className="tc-scroll max-h-[260px] overflow-y-auto px-[22px] py-[18px] scroll-smooth" onScroll={handleScroll}>
           <div className="text-[11px] text-[#535359] leading-[1.7] tracking-[-0.02em]">
-            <p className="text-[10px] text-[#738298] mb-3 px-2.5 py-2 bg-[#f5f7fa] rounded-[6px] border-l-[3px] border-[#308bf9]">
+            <p data-pdf="effective" className="text-[10px] text-[#738298] mb-3 px-2.5 py-2 bg-[#f5f7fa] rounded-[6px] border-l-[3px] border-[#308bf9]">
               Effective Date: The date on which Physical Trainer (&ldquo;PT&rdquo;) enrolls in the Device Evaluation Program and accepts these Terms and Conditions.
             </p>
 
-            <p className="text-[11px] font-medium text-[#252525] mb-3.5 px-3 py-2.5 bg-[#fff8ed] border border-[#e48326]/20 rounded-[8px]">
+            <p data-pdf="notice" className="text-[11px] font-medium text-[#252525] mb-3.5 px-3 py-2.5 bg-[#fff8ed] border border-[#e48326]/20 rounded-[8px]">
               PLEASE READ THESE TERMS CAREFULLY. By selecting the checkbox indicating acceptance of these Terms and Conditions and enrolling in the Device Evaluation Program, PT agrees to be bound by these Terms and Conditions. If PT does not agree to these Terms and Conditions, PT may not enroll in the Device Evaluation Program or receive any Devices. These Terms and Conditions constitute a legally binding agreement between Atlas Sales Partners (&ldquo;Atlas Sales Partners&rdquo;) and the enrolling Physical Trainer (&ldquo;PT&rdquo;).
             </p>
 
@@ -308,7 +285,7 @@ export default function Agreement({ onAccept, onDecline, userEmail }) {
 
         <div className="h-px bg-[#e1e6ed]" />
 
-        {CHECKBOX_ITEMS.map((text, idx) => (
+        {CHECKBOX_ITEMS.map((c, idx) => (
           <label key={idx} className="flex items-start gap-2.5 cursor-pointer select-none">
             <input type="checkbox" className="sr-only" checked={checks[idx]} onChange={() => handleItemCheck(idx)} />
             <span className={`flex-shrink-0 w-[18px] h-[18px] rounded-[4px] border-[1.5px] flex items-center justify-center mt-px transition-all duration-150 ${checks[idx] ? 'bg-[#3faf58] border-[#3faf58]' : 'bg-white border-[#e1e6ed]'}`}>
@@ -317,11 +294,13 @@ export default function Agreement({ onAccept, onDecline, userEmail }) {
               </span>
             </span>
             <span className="text-[11px] text-[#535359] tracking-[-0.02em] leading-[1.5]">
-              {text}
+              {c.pre}<strong>{c.bold}</strong>{c.post}
             </span>
           </label>
         ))}
       </div>
+
+      <AgreementSignSection ref={padRef} userName={userName} userEmail={userEmail} onSignatureChange={setSigned} />
 
       <div className="flex items-center gap-3 px-7 py-4 pb-[22px] sticky bottom-0 bg-white border-t border-[#e1e6ed] z-10">
         <button
@@ -333,7 +312,7 @@ export default function Agreement({ onAccept, onDecline, userEmail }) {
 
         <button
           onClick={handleAccept}
-          disabled={!allChecked || generating}
+          disabled={!canAccept || generating}
           className="flex-1 h-11 bg-[#252525] text-white rounded-[15px] text-[13px] font-semibold tracking-[-0.02em] cursor-pointer flex items-center justify-center gap-2 transition-all duration-150 shadow-btn hover:bg-[#3a3a3a] hover:-translate-y-px active:translate-y-0 disabled:opacity-55 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
         >
           {generating ? (
