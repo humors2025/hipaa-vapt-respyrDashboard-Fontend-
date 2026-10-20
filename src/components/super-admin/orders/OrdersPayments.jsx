@@ -6,8 +6,8 @@
 //   Renewals    renewals that went through (paid; refunds still shown), with
 //               which renewal each is and where the plan stands now
 //   Upcoming    plans still set to renew within the next 7 days, soonest first
-//   Test codes  super admin only (showTestCodes), behind the same Google
-//               Authenticator unlock as Settings
+//   Test codes  super admin only (showTestCodes), behind its own Google
+//               Authenticator unlock (same authenticator as Settings)
 //
 // Rendered by /super-admin/orders and, read-only, by /trainer-admin/orders for
 // the trainer admins in src/lib/ordersAccess.js.
@@ -26,7 +26,7 @@ import {
 import { formatDate, formatMoney, humanizeStatus } from "@/components/super-admin/sales/salesFormat";
 import { SalesCard, UpdatingPill, Skeleton, EmptyState, SectionError, StatusBadge } from "@/components/super-admin/sales/SalesUi";
 import { SalesPagination } from "@/components/super-admin/sales/PurchaseTable";
-import SettingsLockGate, { isSettingsLocked } from "@/components/super-admin/SettingsLockGate";
+import SettingsLockGate, { isTestCodesLocked } from "@/components/super-admin/SettingsLockGate";
 
 const PAGE_LIMIT = 20;
 const DEFAULT_PAYMENT_STATUSES = ["paid", "failed", "refunded", "partially_refunded", "open"];
@@ -591,7 +591,7 @@ function GenerateTestCodes({ onGenerated, onLocked, disabled, trainer }) {
       toast.success(`${res.codes.length} code${res.codes.length === 1 ? "" : "s"} generated`);
       onGenerated?.();
     } catch (err) {
-      if (isSettingsLocked(err)) return onLocked?.();
+      if (isTestCodesLocked(err)) return onLocked?.();
       toast.error(errorMessage(err, "Failed to generate codes"));
     } finally {
       setBusy(false);
@@ -658,7 +658,7 @@ function GenerateTestCodes({ onGenerated, onLocked, disabled, trainer }) {
 
 // The Test codes tab once SettingsLockGate has unlocked it. It loads its own
 // list so nothing is requested while the tab is still locked; a
-// SETTINGS_LOCKED answer (unlock expired) sends it back to the code screen.
+// TEST_CODES_LOCKED answer (unlock expired) sends it back to the code screen.
 function TestCodesPanel({ onLocked }) {
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
@@ -677,7 +677,7 @@ function TestCodesPanel({ onLocked }) {
       setData(res);
     } catch (err) {
       if (id !== reqId.current) return;
-      if (isSettingsLocked(err)) return onLocked();
+      if (isTestCodesLocked(err)) return onLocked();
       const msg = errorMessage(err, "Failed to load data");
       setError(msg);
       toast.error(msg);
@@ -899,7 +899,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
         )}
 
         {tab === "codes" && (
-          <SettingsLockGate area="Test codes">{(relock) => <TestCodesPanel onLocked={relock} />}</SettingsLockGate>
+          <SettingsLockGate kind="testCodes">{(relock) => <TestCodesPanel onLocked={relock} />}</SettingsLockGate>
         )}
 
         {tab !== "codes" && (

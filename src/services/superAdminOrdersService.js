@@ -91,3 +91,18 @@ const postTestCodes = (payload) =>
 export const generateTestCodesService = async ({ count = 1 }) => postTestCodes({ action: "generate", count });
 
 export const fetchTestCodesService = async ({ page = 1, limit = 20 }) => postTestCodes({ action: "list", page, limit });
+
+// Google Authenticator gate for the Test codes tab (test-codes-lock.js). Same
+// authenticator as Settings, but its own unlock: super-admin-test-codes answers
+// 403 TEST_CODES_LOCKED until test-codes-mfa-verify accepts a code.
+// status → { ok, unlocked, mfa_enrolled, expires_in_seconds }
+// verify → { ok, unlocked, used_backup, backup_codes_left, expires_in_seconds }
+const postTestCodesLock = (endpoint, payload = {}) =>
+  apiFetcher(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+export const fetchTestCodesLockStatusService = () => postTestCodesLock(API_ENDPOINTS.SALES.TESTCODESLOCKSTATUS);
+export const verifyTestCodesMfaService = ({ code }) => postTestCodesLock(API_ENDPOINTS.SALES.TESTCODESMFAVERIFY, { code });
