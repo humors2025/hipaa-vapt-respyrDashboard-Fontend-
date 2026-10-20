@@ -92,11 +92,14 @@ export const generateTestCodesService = async ({ count = 1 }) => postTestCodes({
 
 export const fetchTestCodesService = async ({ page = 1, limit = 20 }) => postTestCodes({ action: "list", page, limit });
 
-// Google Authenticator gate for the Test codes tab (test-codes-lock.js). Same
-// authenticator as Settings, but its own unlock: super-admin-test-codes answers
-// 403 TEST_CODES_LOCKED until test-codes-mfa-verify accepts a code.
-// status → { ok, unlocked, mfa_enrolled, expires_in_seconds }
-// verify → { ok, unlocked, used_backup, backup_codes_left, expires_in_seconds }
+// Google Authenticator gate for the Test codes tab (test-codes-lock.js). Its own
+// authenticator entry ("Rysflo Test codes"), backup codes and unlock, separate
+// from Settings: super-admin-test-codes answers 403 TEST_CODES_LOCKED until
+// test-codes-mfa-verify accepts a code. First time: email code → QR → confirm.
+// status  → { ok, unlocked, mfa_enrolled, expires_in_seconds, sent_to }
+// setup   → { ok, secret, otpauth_url, issuer }
+// confirm → { ok, unlocked, backup_codes }
+// verify  → { ok, unlocked, used_backup, backup_codes_left, expires_in_seconds }
 const postTestCodesLock = (endpoint, payload = {}) =>
   apiFetcher(endpoint, {
     method: "POST",
@@ -105,4 +108,8 @@ const postTestCodesLock = (endpoint, payload = {}) =>
   });
 
 export const fetchTestCodesLockStatusService = () => postTestCodesLock(API_ENDPOINTS.SALES.TESTCODESLOCKSTATUS);
+export const requestTestCodesCodeService = () => postTestCodesLock(API_ENDPOINTS.SALES.TESTCODESLOCKREQUEST);
+export const verifyTestCodesCodeService = ({ code }) => postTestCodesLock(API_ENDPOINTS.SALES.TESTCODESLOCKVERIFY, { code });
+export const startTestCodesMfaSetupService = () => postTestCodesLock(API_ENDPOINTS.SALES.TESTCODESMFASETUP);
+export const confirmTestCodesMfaSetupService = ({ code }) => postTestCodesLock(API_ENDPOINTS.SALES.TESTCODESMFACONFIRM, { code });
 export const verifyTestCodesMfaService = ({ code }) => postTestCodesLock(API_ENDPOINTS.SALES.TESTCODESMFAVERIFY, { code });
