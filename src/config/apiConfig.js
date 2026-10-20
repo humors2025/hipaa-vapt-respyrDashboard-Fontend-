@@ -199,6 +199,9 @@ export const API_ENDPOINTS = {
     SUPERADMINSALESANALYTICS: `/${API_VERSION}/dietitian/api/web/super-admin-sales-analytics`,
     SUPERADMINORDERS: `/${API_VERSION}/dietitian/api/web/super-admin-orders`,
     SUPERADMINTESTCODES: `/${API_VERSION}/dietitian/api/web/super-admin-test-codes`,
+    // Google Authenticator gate for the Test codes tab (own unlock, separate from Settings).
+    TESTCODESLOCKSTATUS: `/${API_VERSION}/dietitian/api/web/test-codes-lock-status`,
+    TESTCODESMFAVERIFY: `/${API_VERSION}/dietitian/api/web/test-codes-mfa-verify`,
   },
 
   // Super Admin audit log (app_auth_logs): sign-ins, API access, privileged
