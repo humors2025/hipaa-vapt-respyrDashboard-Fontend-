@@ -13,14 +13,17 @@ import {
 } from "@/services/commissionService";
 
 /**
- * Google Authenticator gate for Super Admin › Settings. The backend owns the
- * lock: the unlock is tied to this login session (ends on logout, capped
- * server-side) and set-pricing / set-commission-rate refuse with
- * SETTINGS_LOCKED without it.
+ * Google Authenticator gate for Super Admin › Settings and the Test codes tab
+ * on Orders. The backend owns the lock: one unlock covers both, it is tied to
+ * this login session (ends on logout, capped server-side), and set-pricing /
+ * set-commission-rate / super-admin-test-codes refuse with SETTINGS_LOCKED
+ * without it.
  *
  * Stages: first visit -> email code (proves the admin may enrol) -> scan QR
  * and confirm an app code -> save backup codes. Later visits -> app code only.
  * children is a render function receiving `relock`, for a SETTINGS_LOCKED error.
+ * `area` names what is locked in the copy; `title` / `subtitle` add a page
+ * heading (leave them out to render the lock inline, e.g. inside a tab).
  */
 export const isSettingsLocked = (err) => err?.status === 403 && err?.data?.code === "SETTINGS_LOCKED";
 
@@ -47,7 +50,7 @@ function CodeForm({ value, onChange, onSubmit, busy, label, placeholder = "•�
   );
 }
 
-export default function SettingsLockGate({ children }) {
+export default function SettingsLockGate({ children, area = "Settings", title, subtitle }) {
   // checking | error | email | setup | backup | app | unlocked
   const [stage, setStage] = useState("checking");
   const [sentTo, setSentTo] = useState("");
@@ -67,10 +70,10 @@ export default function SettingsLockGate({ children }) {
       if (d.mfa_enrolled) setStage(d.unlocked ? "unlocked" : "app");
       else setStage(d.unlocked ? "setup" : "email");
     } catch (err) {
-      toast.error(err?.message || "Could not check settings access");
+      toast.error(err?.message || `Could not check ${area.toLowerCase()} access`);
       setStage("error");
     }
-  }, []);
+  }, [area]);
 
   useEffect(() => {
     check();
@@ -94,9 +97,9 @@ export default function SettingsLockGate({ children }) {
   }, [stage, setup, check]);
 
   const relock = useCallback(() => {
-    toast.error("Settings access expired. Enter a new code.");
+    toast.error(`${area} access expired. Enter a new code.`);
     check();
-  }, [check]);
+  }, [area, check]);
 
   const run = async (fn) => {
     setBusy(true);
@@ -155,7 +158,7 @@ export default function SettingsLockGate({ children }) {
       const d = await verifySettingsMfaService({ code });
       setCode("");
       if (d.used_backup) toast.warning(`Backup code used. ${d.backup_codes_left} left.`);
-      else toast.success("Settings unlocked");
+      else toast.success(`${area} unlocked`);
       setStage("unlocked");
     } catch (err) {
       toast.error(err?.message || "Incorrect code");
@@ -172,96 +175,105 @@ export default function SettingsLockGate({ children }) {
     );
   };
 
+  const lockSection = (
+    <section
+      className={`flex flex-col gap-4 max-w-[440px] ${
+        title ? "bg-white rounded-[15px] p-6" : "bg-[#FBFCFE] border border-[#E1E6ED] rounded-[10px] p-5"
+      }`}
+    >
+      {stage === "checking" && <p className="text-[#535359] text-[12px]">Checking access…</p>}
+
+      {stage === "error" && (
+        <>
+          <h2 className="text-[#252525] text-[14px] font-bold">{area} are locked</h2>
+          <button type="button" onClick={check} className={primary}>Try again</button>
+        </>
+      )}
+
+      {stage === "app" && (
+        <>
+          <div>
+            <h2 className="text-[#252525] text-[14px] font-bold">{area} are locked</h2>
+            <p className="text-[#535359] text-[12px] mt-1">
+              Enter the 6-digit code from Google Authenticator (under &ldquo;Rysflo Settings&rdquo;). Lost your phone? Enter one of your backup codes instead. Access stays open until you log out, and the same unlock opens both Settings and Test codes.
+            </p>
+          </div>
+          <CodeForm value={code} onChange={setCode} onSubmit={verifyApp} busy={busy} label="Authenticator or backup code" allowBackup submitText={`Unlock ${area.toLowerCase()}`} />
+        </>
+      )}
+
+      {stage === "email" && (
+        <>
+          <div>
+            <h2 className="text-[#252525] text-[14px] font-bold">Set up Google Authenticator</h2>
+            <p className="text-[#535359] text-[12px] mt-1">
+              {area} are protected with Google Authenticator. To set it up, first enter the 6-digit code emailed to {sentTo || "the settings inbox"}.
+            </p>
+          </div>
+          {!codeSent ? (
+            <button type="button" onClick={sendEmailCode} disabled={busy} className={primary}>{busy ? "Sending…" : "Send email code"}</button>
+          ) : (
+            <>
+              <CodeForm value={code} onChange={setCode} onSubmit={verifyEmailCode} busy={busy} label="6-digit email code" submitText="Continue" />
+              <button type="button" onClick={sendEmailCode} disabled={busy || cooldown > 0} className={link}>
+                {cooldown > 0 ? `Resend code in ${cooldown}s` : "Resend code"}
+              </button>
+            </>
+          )}
+        </>
+      )}
+
+      {stage === "setup" && (
+        <>
+          <div>
+            <h2 className="text-[#252525] text-[14px] font-bold">Scan with Google Authenticator</h2>
+            <p className="text-[#535359] text-[12px] mt-1">
+              In Google Authenticator tap <b>+</b> › <b>Scan a QR code</b>, then enter the 6-digit code it shows.
+            </p>
+          </div>
+          {setup ? (
+            <>
+              <div className="self-center p-3 bg-white border border-[#E1E6ED] rounded-[10px]">
+                <QRCodeSVG value={setup.otpauth_url} size={180} />
+              </div>
+              <p className="text-[#A1A1A1] text-[11px] text-center break-all">
+                Can&rsquo;t scan? Choose &ldquo;Enter a setup key&rdquo; and type: <span className="font-mono text-[#535359]">{setup.secret}</span>
+              </p>
+              <CodeForm value={code} onChange={setCode} onSubmit={confirmSetup} busy={busy} label="6-digit app code" submitText="Verify and turn on" />
+            </>
+          ) : (
+            <p className="text-[#535359] text-[12px]">Preparing QR code…</p>
+          )}
+        </>
+      )}
+
+      {stage === "backup" && (
+        <>
+          <div>
+            <h2 className="text-[#252525] text-[14px] font-bold">Save your backup codes</h2>
+            <p className="text-[#535359] text-[12px] mt-1">
+              Google Authenticator is on. If you lose your phone, each of these codes works once in place of an app code. They are shown only now — store them somewhere safe.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 font-mono text-[14px] text-[#252525] bg-[#F5F7FA] rounded-[10px] p-4">
+            {backupCodes.map((c) => <span key={c} className="text-center">{c}</span>)}
+          </div>
+          <button type="button" onClick={copyBackup} className={link}>Copy codes</button>
+          <button type="button" onClick={() => setStage("unlocked")} className={primary}>I&rsquo;ve saved them — open {area}</button>
+        </>
+      )}
+    </section>
+  );
+
+  if (!title) return lockSection;
+
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-[#252525] text-[20px] font-bold">Settings</h1>
-        <p className="text-[#535359] text-[13px] mt-1">Platform-wide configuration for the referral programme.</p>
+        <h1 className="text-[#252525] text-[20px] font-bold">{title}</h1>
+        {subtitle && <p className="text-[#535359] text-[13px] mt-1">{subtitle}</p>}
       </div>
-
-      <section className="bg-white rounded-[15px] p-6 flex flex-col gap-4 max-w-[440px]">
-        {stage === "checking" && <p className="text-[#535359] text-[12px]">Checking access…</p>}
-
-        {stage === "error" && (
-          <>
-            <h2 className="text-[#252525] text-[14px] font-bold">Settings are locked</h2>
-            <button type="button" onClick={check} className={primary}>Try again</button>
-          </>
-        )}
-
-        {stage === "app" && (
-          <>
-            <div>
-              <h2 className="text-[#252525] text-[14px] font-bold">Settings are locked</h2>
-              <p className="text-[#535359] text-[12px] mt-1">
-                Enter the 6-digit code from Google Authenticator (under &ldquo;Rysflo Settings&rdquo;). Lost your phone? Enter one of your backup codes instead. Access stays open until you log out.
-              </p>
-            </div>
-            <CodeForm value={code} onChange={setCode} onSubmit={verifyApp} busy={busy} label="Authenticator or backup code" allowBackup submitText="Unlock settings" />
-          </>
-        )}
-
-        {stage === "email" && (
-          <>
-            <div>
-              <h2 className="text-[#252525] text-[14px] font-bold">Set up Google Authenticator</h2>
-              <p className="text-[#535359] text-[12px] mt-1">
-                Settings are protected with Google Authenticator. To set it up, first enter the 6-digit code emailed to {sentTo || "the settings inbox"}.
-              </p>
-            </div>
-            {!codeSent ? (
-              <button type="button" onClick={sendEmailCode} disabled={busy} className={primary}>{busy ? "Sending…" : "Send email code"}</button>
-            ) : (
-              <>
-                <CodeForm value={code} onChange={setCode} onSubmit={verifyEmailCode} busy={busy} label="6-digit email code" submitText="Continue" />
-                <button type="button" onClick={sendEmailCode} disabled={busy || cooldown > 0} className={link}>
-                  {cooldown > 0 ? `Resend code in ${cooldown}s` : "Resend code"}
-                </button>
-              </>
-            )}
-          </>
-        )}
-
-        {stage === "setup" && (
-          <>
-            <div>
-              <h2 className="text-[#252525] text-[14px] font-bold">Scan with Google Authenticator</h2>
-              <p className="text-[#535359] text-[12px] mt-1">
-                In Google Authenticator tap <b>+</b> › <b>Scan a QR code</b>, then enter the 6-digit code it shows.
-              </p>
-            </div>
-            {setup ? (
-              <>
-                <div className="self-center p-3 bg-white border border-[#E1E6ED] rounded-[10px]">
-                  <QRCodeSVG value={setup.otpauth_url} size={180} />
-                </div>
-                <p className="text-[#A1A1A1] text-[11px] text-center break-all">
-                  Can&rsquo;t scan? Choose &ldquo;Enter a setup key&rdquo; and type: <span className="font-mono text-[#535359]">{setup.secret}</span>
-                </p>
-                <CodeForm value={code} onChange={setCode} onSubmit={confirmSetup} busy={busy} label="6-digit app code" submitText="Verify and turn on" />
-              </>
-            ) : (
-              <p className="text-[#535359] text-[12px]">Preparing QR code…</p>
-            )}
-          </>
-        )}
-
-        {stage === "backup" && (
-          <>
-            <div>
-              <h2 className="text-[#252525] text-[14px] font-bold">Save your backup codes</h2>
-              <p className="text-[#535359] text-[12px] mt-1">
-                Google Authenticator is on. If you lose your phone, each of these codes unlocks Settings once. They are shown only now — store them somewhere safe.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-2 font-mono text-[14px] text-[#252525] bg-[#F5F7FA] rounded-[10px] p-4">
-              {backupCodes.map((c) => <span key={c} className="text-center">{c}</span>)}
-            </div>
-            <button type="button" onClick={copyBackup} className={link}>Copy codes</button>
-            <button type="button" onClick={() => setStage("unlocked")} className={primary}>I&rsquo;ve saved them — open Settings</button>
-          </>
-        )}
-      </section>
+      {lockSection}
     </div>
   );
 }
