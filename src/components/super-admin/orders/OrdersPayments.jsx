@@ -6,7 +6,8 @@
 //   Renewals    renewals that went through (paid; refunds still shown), with
 //               which renewal each is and where the plan stands now
 //   Upcoming    plans still set to renew within the next 7 days, soonest first
-//   Test codes  super admin only (showTestCodes)
+//   Test codes  super admin only (showTestCodes), behind the same Google
+//               Authenticator unlock as Settings
 //
 // Rendered by /super-admin/orders and, read-only, by /trainer-admin/orders for
 // the trainer admins in src/lib/ordersAccess.js.
@@ -25,6 +26,7 @@ import {
 import { formatDate, formatMoney, humanizeStatus } from "@/components/super-admin/sales/salesFormat";
 import { SalesCard, UpdatingPill, Skeleton, EmptyState, SectionError, StatusBadge } from "@/components/super-admin/sales/SalesUi";
 import { SalesPagination } from "@/components/super-admin/sales/PurchaseTable";
+import SettingsLockGate, { isSettingsLocked } from "@/components/super-admin/SettingsLockGate";
 
 const PAGE_LIMIT = 20;
 const DEFAULT_PAYMENT_STATUSES = ["paid", "failed", "refunded", "partially_refunded", "open"];
@@ -575,7 +577,7 @@ function TestCodesTable({ rows, ...shell }) {
 
 // Generate panel + the codes a generate call just returned (copy them from
 // here; they are also first in the table below after the reload).
-function GenerateTestCodes({ onGenerated, disabled, trainer }) {
+function GenerateTestCodes({ onGenerated, onLocked, disabled, trainer }) {
   const [count, setCount] = useState(1);
   const [busy, setBusy] = useState(false);
   const [lastBatch, setLastBatch] = useState(null);
@@ -589,6 +591,7 @@ function GenerateTestCodes({ onGenerated, disabled, trainer }) {
       toast.success(`${res.codes.length} code${res.codes.length === 1 ? "" : "s"} generated`);
       onGenerated?.();
     } catch (err) {
+      if (isSettingsLocked(err)) return onLocked?.();
       toast.error(errorMessage(err, "Failed to generate codes"));
     } finally {
       setBusy(false);
@@ -653,6 +656,68 @@ function GenerateTestCodes({ onGenerated, disabled, trainer }) {
   );
 }
 
+// The Test codes tab once SettingsLockGate has unlocked it. It loads its own
+// list so nothing is requested while the tab is still locked; a
+// SETTINGS_LOCKED answer (unlock expired) sends it back to the code screen.
+function TestCodesPanel({ onLocked }) {
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const reqId = useRef(0);
+
+  const load = useCallback(async () => {
+    const id = ++reqId.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetchTestCodesService({ page, limit: PAGE_LIMIT });
+      if (id !== reqId.current) return;
+      if (res?.status === false) throw new Error(res?.message || "Failed to load data");
+      setData(res);
+    } catch (err) {
+      if (id !== reqId.current) return;
+      if (isSettingsLocked(err)) return onLocked();
+      const msg = errorMessage(err, "Failed to load data");
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      if (id === reqId.current) setLoading(false);
+    }
+  }, [page, onLocked]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const pagination = data?.pagination;
+  const totalPages = Math.max(1, pagination?.total_pages || 1);
+
+  return (
+    <>
+      <GenerateTestCodes onGenerated={load} onLocked={onLocked} disabled={loading} trainer={data?.trainer} />
+      <TestCodesTable
+        rows={data?.codes}
+        loading={loading && !data}
+        updating={loading && Boolean(data)}
+        error={error}
+        onRetry={load}
+      />
+      {data && !error && (
+        <SalesPagination
+          page={page}
+          limit={PAGE_LIMIT}
+          total={pagination?.total || 0}
+          totalPages={totalPages}
+          disabled={loading}
+          noun="codes"
+          onPageChange={(p) => p >= 1 && p <= totalPages && p !== page && setPage(p)}
+        />
+      )}
+    </>
+  );
+}
+
 function PaymentSummary({ summary }) {
   if (!summary?.length) return null;
   // One chip per status and currency, e.g. "Paid · 12 · $348.00".
@@ -696,8 +761,13 @@ export default function OrdersPayments({ showTestCodes = false }) {
 
   const load = useCallback(async () => {
     const id = ++reqId.current;
-    setLoading(true);
     setError(null);
+    // TestCodesPanel loads the codes itself, after the unlock.
+    if (tab === "codes") {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     try {
       const res =
         tab === "shipping"
@@ -712,15 +782,12 @@ export default function OrdersPayments({ showTestCodes = false }) {
                 page,
                 limit: PAGE_LIMIT,
               })
-            : tab === "upcoming"
-              ? await fetchUpcomingRenewalsService({ days: UPCOMING_DAYS, search, page, limit: PAGE_LIMIT })
-              : await fetchTestCodesService({ page, limit: PAGE_LIMIT });
+            : await fetchUpcomingRenewalsService({ days: UPCOMING_DAYS, search, page, limit: PAGE_LIMIT });
       if (id !== reqId.current) return;
       if (res?.status === false) throw new Error(res?.message || "Failed to load data");
-      // The test-codes endpoint answers with action: "list" instead of view,
-      // renewals come back as view "payments" and upcoming as
+      // Renewals come back as view "payments" and upcoming as
       // "upcoming_renewals": tag them with their tab.
-      setData(tab === "codes" || tab === "renewals" || tab === "upcoming" ? { ...res, view: tab } : res);
+      setData(tab === "renewals" || tab === "upcoming" ? { ...res, view: tab } : res);
     } catch (err) {
       if (id !== reqId.current) return;
       const msg = errorMessage(err, "Failed to load data");
@@ -831,7 +898,9 @@ export default function OrdersPayments({ showTestCodes = false }) {
           </div>
         )}
 
-        {tab === "codes" && <GenerateTestCodes onGenerated={load} disabled={loading} trainer={current?.trainer} />}
+        {tab === "codes" && (
+          <SettingsLockGate area="Test codes">{(relock) => <TestCodesPanel onLocked={relock} />}</SettingsLockGate>
+        )}
 
         {tab !== "codes" && (
         <div className="flex flex-wrap items-end gap-3">
@@ -905,11 +974,9 @@ export default function OrdersPayments({ showTestCodes = false }) {
               filtersActive ? "No upcoming renewals match this search." : `No plans renew in the next ${UPCOMING_DAYS} days.`
             }
           />
-        ) : (
-          <TestCodesTable rows={current?.codes} {...shell} />
-        )}
+        ) : null}
 
-        {current && !error && (
+        {tab !== "codes" && current && !error && (
           <SalesPagination
             page={page}
             limit={PAGE_LIMIT}
@@ -917,13 +984,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
             totalPages={totalPages}
             disabled={loading}
             noun={
-              tab === "shipping"
-                ? "addresses"
-                : tab === "payments"
-                  ? "payments"
-                  : tab === "renewals" || tab === "upcoming"
-                    ? "renewals"
-                    : "codes"
+              tab === "shipping" ? "addresses" : tab === "payments" ? "payments" : "renewals"
             }
             onPageChange={(p) => p >= 1 && p <= totalPages && p !== page && setPage(p)}
           />
