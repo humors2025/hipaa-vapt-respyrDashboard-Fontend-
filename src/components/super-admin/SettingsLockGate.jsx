@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -12,20 +11,27 @@ import {
   confirmSettingsMfaSetupService,
   verifySettingsMfaService,
 } from "@/services/commissionService";
-import { fetchTestCodesLockStatusService, verifyTestCodesMfaService } from "@/services/superAdminOrdersService";
+import {
+  fetchTestCodesLockStatusService,
+  requestTestCodesCodeService,
+  verifyTestCodesCodeService,
+  startTestCodesMfaSetupService,
+  confirmTestCodesMfaSetupService,
+  verifyTestCodesMfaService,
+} from "@/services/superAdminOrdersService";
 
 /**
  * Google Authenticator gate for Super Admin › Settings (kind "settings") and
- * the Test codes tab on Orders (kind "testCodes"). Both use the same
- * authenticator entry, but each has its own APIs and its own unlock: opening
- * one never opens the other. The backend owns the lock: the unlock is tied to
+ * the Test codes tab on Orders (kind "testCodes"). Each has its own APIs, its
+ * own Google Authenticator entry ("Rysflo Settings" / "Rysflo Test codes"),
+ * backup codes and unlock: opening one never opens the other. The backend owns
+ * the lock: the unlock is tied to
  * this login session (ends on logout, capped server-side); set-pricing /
  * set-commission-rate refuse with SETTINGS_LOCKED and super-admin-test-codes
  * with TEST_CODES_LOCKED without it.
  *
  * Stages: first visit -> email code (proves the admin may enrol) -> scan QR
  * and confirm an app code -> save backup codes. Later visits -> app code only.
- * Enrolment happens on Settings only; Test codes points there until it is done.
  * children is a render function receiving `relock`, for a *_LOCKED error.
  * `title` / `subtitle` add a page heading (leave them out to render the lock
  * inline, e.g. inside a tab).
@@ -34,8 +40,26 @@ export const isSettingsLocked = (err) => err?.status === 403 && err?.data?.code 
 export const isTestCodesLocked = (err) => err?.status === 403 && err?.data?.code === "TEST_CODES_LOCKED";
 
 const KINDS = {
-  settings: { area: "Settings", status: fetchSettingsLockStatusService, verify: verifySettingsMfaService, canEnrol: true },
-  testCodes: { area: "Test codes", status: fetchTestCodesLockStatusService, verify: verifyTestCodesMfaService, canEnrol: false },
+  settings: {
+    area: "Settings",
+    entry: "Rysflo Settings",
+    status: fetchSettingsLockStatusService,
+    requestEmail: requestSettingsCodeService,
+    verifyEmail: verifySettingsCodeService,
+    startSetup: startSettingsMfaSetupService,
+    confirmSetup: confirmSettingsMfaSetupService,
+    verify: verifySettingsMfaService,
+  },
+  testCodes: {
+    area: "Test codes",
+    entry: "Rysflo Test codes",
+    status: fetchTestCodesLockStatusService,
+    requestEmail: requestTestCodesCodeService,
+    verifyEmail: verifyTestCodesCodeService,
+    startSetup: startTestCodesMfaSetupService,
+    confirmSetup: confirmTestCodesMfaSetupService,
+    verify: verifyTestCodesMfaService,
+  },
 };
 
 const field = "rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[18px] tracking-[6px] text-center text-[#252525] focus:outline-none focus:border-[#308BF9]";
@@ -62,31 +86,31 @@ function CodeForm({ value, onChange, onSubmit, busy, label, placeholder = "•�
 }
 
 export default function SettingsLockGate({ children, kind = "settings", title, subtitle }) {
-  const { area, status, verify, canEnrol } = KINDS[kind] || KINDS.settings;
-  // checking | error | email | setup | backup | app | enrolOnSettings | unlocked
+  const cfg = KINDS[kind] || KINDS.settings;
+  const { area, entry } = cfg;
+  // checking | error | email | setup | backup | app | unlocked
   const [stage, setStage] = useState("checking");
   const [sentTo, setSentTo] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
-  const [setup, setSetup] = useState(null); // { secret, otpauth_url }
+  const [setup, setSetup] = useState(null); // { secret, otpauth_url, issuer }
   const [backupCodes, setBackupCodes] = useState([]);
 
   const check = useCallback(async () => {
     setStage("checking");
     setCode("");
     try {
-      const d = await status();
+      const d = await cfg.status();
       setSentTo(d.sent_to || "");
       if (d.mfa_enrolled) setStage(d.unlocked ? "unlocked" : "app");
-      else if (!canEnrol) setStage("enrolOnSettings");
       else setStage(d.unlocked ? "setup" : "email");
     } catch (err) {
       toast.error(err?.message || `Could not check ${area.toLowerCase()} access`);
       setStage("error");
     }
-  }, [area, status, canEnrol]);
+  }, [area, cfg]);
 
   useEffect(() => {
     check();
@@ -101,13 +125,13 @@ export default function SettingsLockGate({ children, kind = "settings", title, s
   // Fetch a QR secret when the setup stage opens.
   useEffect(() => {
     if (stage !== "setup" || setup) return;
-    startSettingsMfaSetupService()
-      .then((d) => setSetup({ secret: d.secret, otpauth_url: d.otpauth_url }))
+    cfg.startSetup()
+      .then((d) => setSetup({ secret: d.secret, otpauth_url: d.otpauth_url, issuer: d.issuer || entry }))
       .catch((err) => {
         toast.error(err?.message || "Could not start Google Authenticator setup");
         check();
       });
-  }, [stage, setup, check]);
+  }, [stage, setup, check, cfg, entry]);
 
   const relock = useCallback(() => {
     toast.error(`${area} access expired. Enter a new code.`);
@@ -125,7 +149,7 @@ export default function SettingsLockGate({ children, kind = "settings", title, s
 
   const sendEmailCode = () => run(async () => {
     try {
-      const d = await requestSettingsCodeService();
+      const d = await cfg.requestEmail();
       setSentTo(d.sent_to || sentTo);
       setCodeSent(true);
       setCooldown(60);
@@ -141,7 +165,7 @@ export default function SettingsLockGate({ children, kind = "settings", title, s
 
   const verifyEmailCode = () => run(async () => {
     try {
-      await verifySettingsCodeService({ code });
+      await cfg.verifyEmail({ code });
       setCode("");
       setStage("setup");
     } catch (err) {
@@ -155,7 +179,7 @@ export default function SettingsLockGate({ children, kind = "settings", title, s
 
   const confirmSetup = () => run(async () => {
     try {
-      const d = await confirmSettingsMfaSetupService({ code });
+      const d = await cfg.confirmSetup({ code });
       setCode("");
       setSetup(null);
       setBackupCodes(d.backup_codes || []);
@@ -168,7 +192,7 @@ export default function SettingsLockGate({ children, kind = "settings", title, s
 
   const verifyApp = () => run(async () => {
     try {
-      const d = await verify({ code });
+      const d = await cfg.verify({ code });
       setCode("");
       if (d.used_backup) toast.warning(`Backup code used. ${d.backup_codes_left} left.`);
       else toast.success(`${area} unlocked`);
@@ -208,22 +232,10 @@ export default function SettingsLockGate({ children, kind = "settings", title, s
           <div>
             <h2 className="text-[#252525] text-[14px] font-bold">{area} are locked</h2>
             <p className="text-[#535359] text-[12px] mt-1">
-              Enter the 6-digit code from Google Authenticator (under &ldquo;Rysflo Settings&rdquo;). Lost your phone? Enter one of your backup codes instead. Access stays open until you log out.
+              Enter the 6-digit code from Google Authenticator (under &ldquo;{entry}&rdquo;). Lost your phone? Enter one of your backup codes instead. Access stays open until you log out.
             </p>
           </div>
           <CodeForm value={code} onChange={setCode} onSubmit={verifyApp} busy={busy} label="Authenticator or backup code" allowBackup submitText={`Unlock ${area.toLowerCase()}`} />
-        </>
-      )}
-
-      {stage === "enrolOnSettings" && (
-        <>
-          <div>
-            <h2 className="text-[#252525] text-[14px] font-bold">Set up Google Authenticator first</h2>
-            <p className="text-[#535359] text-[12px] mt-1">
-              {area} are protected with the same Google Authenticator as Settings. Open Settings once to set it up, then come back here.
-            </p>
-          </div>
-          <Link href="/super-admin/settings" className={`${primary} text-center`}>Go to Settings</Link>
         </>
       )}
 
@@ -232,7 +244,7 @@ export default function SettingsLockGate({ children, kind = "settings", title, s
           <div>
             <h2 className="text-[#252525] text-[14px] font-bold">Set up Google Authenticator</h2>
             <p className="text-[#535359] text-[12px] mt-1">
-              {area} are protected with Google Authenticator. To set it up, first enter the 6-digit code emailed to {sentTo || "the settings inbox"}.
+              {kind === "testCodes" ? "Test codes have their own Google Authenticator entry, separate from Settings." : "Settings are protected with Google Authenticator."} To set it up, first enter the 6-digit code emailed to {sentTo || "the settings inbox"}.
             </p>
           </div>
           {!codeSent ? (
@@ -254,6 +266,7 @@ export default function SettingsLockGate({ children, kind = "settings", title, s
             <h2 className="text-[#252525] text-[14px] font-bold">Scan with Google Authenticator</h2>
             <p className="text-[#535359] text-[12px] mt-1">
               In Google Authenticator tap <b>+</b> › <b>Scan a QR code</b>, then enter the 6-digit code it shows.
+              {setup?.issuer && <> The new entry is called <b>&ldquo;{setup.issuer}&rdquo;</b>: use that entry for {area.toLowerCase()} from now on.</>}
             </p>
           </div>
           {setup ? (
