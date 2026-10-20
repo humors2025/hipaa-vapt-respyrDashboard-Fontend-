@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { fetchCommissionRateService, setCommissionRateService, fetchPricingService, setPricingService, formatMinor } from "@/services/commissionService";
-import SettingsLockGate, { isSettingsLocked } from "./SettingsLockGate";
+import SettingsLockGate, { isSettingsLocked } from "@/components/super-admin/SettingsLockGate";
 
 /**
  * Super admin › Settings. Today: the platform commission rate (Rysflo -> facility).
@@ -106,7 +106,11 @@ function PricingSection({ onLocked }) {
 }
 
 export default function SuperAdminSettingsPage() {
-  return <SettingsLockGate>{(relock) => <SettingsContent onLocked={relock} />}</SettingsLockGate>;
+  return (
+    <SettingsLockGate title="Settings" subtitle="Platform-wide configuration for the referral programme.">
+      {(relock) => <SettingsContent onLocked={relock} />}
+    </SettingsLockGate>
+  );
 }
 
 function SettingsContent({ onLocked }) {
