@@ -4196,10 +4196,10 @@ export function FoodLogPanel({ profileId, weekStart, weekEnd, clientName, onClos
   const [error, setError] = useState(null);
   const [dayIdx, setDayIdx] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
-  // Day strip: scrolled with the arrows / wheel / visible scrollbar, and the
-  // selected day is brought into view whenever it changes.
+  // Day strip: the ‹ › arrows page the whole week back / forward (forward
+  // stops at today); the strip itself still scrolls by wheel / touch when the
+  // tiles don't all fit, and the selected day is brought into view.
   const dayStripRef = useRef(null);
-  const scrollDayStrip = (dir) => dayStripRef.current?.scrollBy({ left: dir * 260, behavior: "smooth" });
   useEffect(() => {
     if (loading) return;
     const strip = dayStripRef.current;
@@ -4269,6 +4269,18 @@ export function FoodLogPanel({ profileId, weekStart, weekEnd, clientName, onClos
     setRange(planWeek);
   };
 
+  // ‹ › arrows: previous / next week of the log (forward capped at today).
+  const atToday = range.end >= today;
+  const shiftWeek = (dir) => {
+    const start = foodLogAddDays(range.start, dir * 7);
+    if (start > today) return;
+    const weekEnd = foodLogAddDays(start, 6);
+    const end = weekEnd > today ? today : weekEnd;
+    setDraft({ start, end });
+    setDraftError(null);
+    setRange({ start, end });
+  };
+
   const days = Array.isArray(data?.days) ? data.days : [];
   const day = days[dayIdx] || null;
   const rangeTotals = data?.totals || null;
@@ -4321,9 +4333,11 @@ export function FoodLogPanel({ profileId, weekStart, weekEnd, clientName, onClos
         <div className="flex flex-none items-center gap-2 border-b border-[#E1E6ED] px-3 py-2.5">
           <button
             type="button"
-            onClick={() => scrollDayStrip(-1)}
-            aria-label="Scroll days left"
-            className="shrink-0 rounded-[8px] border border-[#E1E6ED] bg-white px-2 py-1.5 text-[#535359] leading-none cursor-pointer hover:bg-[#F5F7FA] transition-colors"
+            onClick={() => shiftWeek(-1)}
+            disabled={loading}
+            aria-label="Previous week"
+            title="Previous week"
+            className="shrink-0 rounded-[8px] border border-[#E1E6ED] bg-white px-2 py-1.5 text-[#535359] leading-none cursor-pointer hover:bg-[#F5F7FA] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             ‹
           </button>
@@ -4361,9 +4375,11 @@ export function FoodLogPanel({ profileId, weekStart, weekEnd, clientName, onClos
 
           <button
             type="button"
-            onClick={() => scrollDayStrip(1)}
-            aria-label="Scroll days right"
-            className="shrink-0 rounded-[8px] border border-[#E1E6ED] bg-white px-2 py-1.5 text-[#535359] leading-none cursor-pointer hover:bg-[#F5F7FA] transition-colors"
+            onClick={() => shiftWeek(1)}
+            disabled={loading || atToday}
+            aria-label="Next week"
+            title={atToday ? "Already showing the current week" : "Next week"}
+            className="shrink-0 rounded-[8px] border border-[#E1E6ED] bg-white px-2 py-1.5 text-[#535359] leading-none cursor-pointer hover:bg-[#F5F7FA] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             ›
           </button>
