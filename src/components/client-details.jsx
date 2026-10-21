@@ -1045,6 +1045,9 @@ const transformDatesToDisplay = () => {
                   clientName={
                     individualProfileData?.data?.profile_details?.profile_name
                   }
+                  joinedDate={
+                    individualProfileData?.data?.profile_details?.joined_dttm
+                  }
                 />
               </div>
             )}

@@ -4182,11 +4182,21 @@ function foodLogTime(ts) {
 
 const FOOD_LOG_SOURCE_LABEL = { plan: "Plan", chef: "Chef", manual: "Manual", search: "Search", photo: "Photo" };
 
-export function FoodLogPanel({ profileId, weekStart, weekEnd, clientName, onClose }) {
+export function FoodLogPanel({ profileId, weekStart, weekEnd, clientName, joinedDate, onClose }) {
   const today = foodLogToday();
   const planWeek = isYmd(weekStart) && isYmd(weekEnd) ? { start: weekStart, end: weekEnd } : null;
   // Without a plan week (the standalone Food log tab) start on the last 7 days.
   const initial = planWeek || { start: foodLogAddDays(today, -6), end: today };
+
+  // Earliest day the log can go back to — the client's join date, when the
+  // host passes it (client-details does; the popup fallback has no clamp).
+  const joinedYmd = (() => {
+    if (!joinedDate) return null;
+    const s = String(joinedDate).slice(0, 10);
+    if (isYmd(s)) return s;
+    const d = new Date(joinedDate);
+    return isNaN(d) ? null : d.toISOString().slice(0, 10);
+  })();
 
   const [range, setRange] = useState(initial); // what is loaded
   const [draft, setDraft] = useState(initial); // what the date pickers show
@@ -4254,6 +4264,8 @@ export function FoodLogPanel({ profileId, weekStart, weekEnd, clientName, onClos
   const applyDraft = () => {
     if (!isYmd(draft.start)) return setDraftError("Pick a date");
     if (draft.start > today) return setDraftError("Pick a date on or before today");
+    if (joinedYmd && draft.start < joinedYmd)
+      return setDraftError(`Client joined on ${foodLogDayLabel(joinedYmd)}, ${joinedYmd.slice(0, 4)}`);
     const weekEnd = foodLogAddDays(draft.start, 6);
     const end = weekEnd > today ? today : weekEnd;
     setDraftError(null);
@@ -4269,11 +4281,14 @@ export function FoodLogPanel({ profileId, weekStart, weekEnd, clientName, onClos
     setRange(planWeek);
   };
 
-  // ‹ › arrows: previous / next week of the log (forward capped at today).
+  // ‹ › arrows: previous / next week of the log. Forward stops at today,
+  // back stops at the client's join date.
   const atToday = range.end >= today;
+  const atJoin = Boolean(joinedYmd && range.start <= joinedYmd);
   const shiftWeek = (dir) => {
-    const start = foodLogAddDays(range.start, dir * 7);
-    if (start > today) return;
+    let start = foodLogAddDays(range.start, dir * 7);
+    if (dir < 0 && joinedYmd && start < joinedYmd) start = joinedYmd;
+    if (start > today || start === range.start) return;
     const weekEnd = foodLogAddDays(start, 6);
     const end = weekEnd > today ? today : weekEnd;
     setDraft({ start, end });
@@ -4306,6 +4321,7 @@ export function FoodLogPanel({ profileId, weekStart, weekEnd, clientName, onClos
         <input
           type="date"
           value={draft.start}
+          min={joinedYmd || undefined}
           max={today}
           onChange={(e) => setDraft((d) => ({ ...d, start: e.target.value }))}
           className={cn(UI.input, "w-auto py-1.5")}
@@ -4334,9 +4350,9 @@ export function FoodLogPanel({ profileId, weekStart, weekEnd, clientName, onClos
           <button
             type="button"
             onClick={() => shiftWeek(-1)}
-            disabled={loading}
+            disabled={loading || atJoin}
             aria-label="Previous week"
-            title="Previous week"
+            title={atJoin ? "The client joined this week" : "Previous week"}
             className="shrink-0 rounded-[8px] border border-[#E1E6ED] bg-white px-2 py-1.5 text-[#535359] leading-none cursor-pointer hover:bg-[#F5F7FA] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             ‹
