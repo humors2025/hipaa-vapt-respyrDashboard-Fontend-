@@ -4200,9 +4200,17 @@ export function FoodLogPanel({ profileId, weekStart, weekEnd, clientName, onClos
   const scrollDayStrip = (dir) => dayStripRef.current?.scrollBy({ left: dir * 260, behavior: "smooth" });
   useEffect(() => {
     if (loading) return;
-    dayStripRef.current
-      ?.querySelector("[data-active=\"true\"]")
-      ?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+    const strip = dayStripRef.current;
+    const el = strip?.querySelector("[data-active=\"true\"]");
+    if (!strip || !el) return;
+    // Scroll only the strip itself. scrollIntoView also scrolls every
+    // scrollable ancestor — rendered inline as the Food log tab it dragged the
+    // page's overflow-hidden layout wrapper sideways, cutting off the header.
+    const stripRect = strip.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const left =
+      strip.scrollLeft + (elRect.left - stripRect.left) - (strip.clientWidth - elRect.width) / 2;
+    strip.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
   }, [dayIdx, loading]);
 
   useEffect(() => {
