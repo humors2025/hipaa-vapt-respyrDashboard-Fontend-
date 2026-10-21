@@ -2578,7 +2578,7 @@ function pluralUnit(unit, n) {
 
 /* ============================================================ component */
 
-export default function DietPlanNew({ plan: planProp, clientName = "Client", clientGoal = "", onSave, onUndo }) {
+export default function DietPlanNew({ plan: planProp, clientName = "Client", clientGoal = "", onSave, onUndo, onOpenFoodLog }) {
   // Week picked in client-details (recorded by the dietAnalysis slice). The
   // week_start_date / week_end_date come from get-weekly-tab-list-newtest;
   // profileId is the ?profile_id from the URL.
@@ -3744,7 +3744,9 @@ const ingredients = rows.flatMap((r) =>
               )}
               <button
                 type="button"
-                onClick={() => setFoodLogOpen(true)}
+                // Goes to the page's own Food log tab when client-details wires
+                // the callback; the popup stays as a fallback for any other host.
+                onClick={() => (onOpenFoodLog ? onOpenFoodLog() : setFoodLogOpen(true))}
                 disabled={!profileId}
                 title="What the client actually logged in the app"
                 className={cn(UI.btnSecondary, "px-3 py-1.5")}
@@ -4044,7 +4046,7 @@ const ingredients = rows.flatMap((r) =>
 
       {/* ------------------------------------------------------ food log */}
       {foodLogOpen && (
-        <FoodLogDialog
+        <FoodLogPanel
           profileId={profileId}
           weekStart={weekStart}
           weekEnd={weekEnd}
@@ -4120,13 +4122,16 @@ const ingredients = rows.flatMap((r) =>
   );
 }
 
-/* ============================================================ FoodLogDialog */
+/* ============================================================ FoodLogPanel */
 
 /**
- * "Food log" popup — what the client actually logged in the app, read from
- * `POST /dietitian/api/web/food-log` (fetchFoodLogService). Opens on the plan's
- * week (weekStart..weekEnd) or today when no week is selected; the dietitian
- * can widen / move the range with the two date pickers (server cap: 92 days).
+ * "Food log" — what the client actually logged in the app, read from
+ * `POST /dietitian/api/web/food-log` (fetchFoodLogService). With `onClose` it
+ * renders as the popup DietPlanNew opens from the Weekly Diet Analysis tab;
+ * without it, as an inline card (the client profile's "Food log" tab). Opens
+ * on the plan's week (weekStart..weekEnd) or the last 7 days when no week is
+ * given; the dietitian can move the week with a single "Week from" date picker
+ * (the shown range is always that date + 6 days, capped at today).
  *
  * The API already returns every day in the range and all four slots (empty
  * ones with zero totals), so this only picks a day and renders it.
@@ -4139,8 +4144,6 @@ const FOOD_LOG_SLOTS = [
   { key: "snack", label: "Snacks" },
 ];
 
-const FOOD_LOG_MAX_DAYS = 92;
-
 const isYmd = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
 /** Local calendar date as YYYY-MM-DD (the app's log_date is a calendar day). */
@@ -4150,19 +4153,18 @@ function foodLogToday() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+/** "2026-09-05" + n days → YYYY-MM-DD (n may be negative). */
+function foodLogAddDays(ymd, n) {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
 /** "2026-09-05" → "Fri, Sep 5". */
 function foodLogDayLabel(ymd) {
   const d = new Date(`${ymd}T00:00:00Z`);
   if (isNaN(d)) return ymd;
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
-}
-
-/** Inclusive day count between two YYYY-MM-DD strings; 0 when start > end or invalid. */
-function foodLogDaysBetween(start, end) {
-  const a = new Date(`${start}T00:00:00Z`).getTime();
-  const b = new Date(`${end}T00:00:00Z`).getTime();
-  if (isNaN(a) || isNaN(b) || a > b) return 0;
-  return Math.floor((b - a) / 86400000) + 1;
 }
 
 /** 74.3 → "74.3", 4 → "4", null → "–". */
@@ -4180,10 +4182,21 @@ function foodLogTime(ts) {
 
 const FOOD_LOG_SOURCE_LABEL = { plan: "Plan", chef: "Chef", manual: "Manual", search: "Search", photo: "Photo" };
 
-function FoodLogDialog({ profileId, weekStart, weekEnd, clientName, onClose }) {
+export function FoodLogPanel({ profileId, weekStart, weekEnd, clientName, joinedDate, onClose }) {
   const today = foodLogToday();
   const planWeek = isYmd(weekStart) && isYmd(weekEnd) ? { start: weekStart, end: weekEnd } : null;
-  const initial = planWeek || { start: today, end: today };
+  // Without a plan week (the standalone Food log tab) start on the last 7 days.
+  const initial = planWeek || { start: foodLogAddDays(today, -6), end: today };
+
+  // Earliest day the log can go back to — the client's join date, when the
+  // host passes it (client-details does; the popup fallback has no clamp).
+  const joinedYmd = (() => {
+    if (!joinedDate) return null;
+    const s = String(joinedDate).slice(0, 10);
+    if (isYmd(s)) return s;
+    const d = new Date(joinedDate);
+    return isNaN(d) ? null : d.toISOString().slice(0, 10);
+  })();
 
   const [range, setRange] = useState(initial); // what is loaded
   const [draft, setDraft] = useState(initial); // what the date pickers show
@@ -4193,15 +4206,23 @@ function FoodLogDialog({ profileId, weekStart, weekEnd, clientName, onClose }) {
   const [error, setError] = useState(null);
   const [dayIdx, setDayIdx] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
-  // Day strip: scrolled with the arrows / wheel / visible scrollbar, and the
-  // selected day is brought into view whenever it changes.
+  // Day strip: the ‹ › arrows page the whole week back / forward (forward
+  // stops at today); the strip itself still scrolls by wheel / touch when the
+  // tiles don't all fit, and the selected day is brought into view.
   const dayStripRef = useRef(null);
-  const scrollDayStrip = (dir) => dayStripRef.current?.scrollBy({ left: dir * 260, behavior: "smooth" });
   useEffect(() => {
     if (loading) return;
-    dayStripRef.current
-      ?.querySelector("[data-active=\"true\"]")
-      ?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+    const strip = dayStripRef.current;
+    const el = strip?.querySelector("[data-active=\"true\"]");
+    if (!strip || !el) return;
+    // Scroll only the strip itself. scrollIntoView also scrolls every
+    // scrollable ancestor — rendered inline as the Food log tab it dragged the
+    // page's overflow-hidden layout wrapper sideways, cutting off the header.
+    const stripRect = strip.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const left =
+      strip.scrollLeft + (elRect.left - stripRect.left) - (strip.clientWidth - elRect.width) / 2;
+    strip.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
   }, [dayIdx, loading]);
 
   useEffect(() => {
@@ -4238,13 +4259,18 @@ function FoodLogDialog({ profileId, weekStart, weekEnd, clientName, onClose }) {
     };
   }, [profileId, range.start, range.end, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Single date picker: the chosen date is the first day shown, and the week
+  // runs forward from it (capped at today — no empty future days).
   const applyDraft = () => {
-    if (!isYmd(draft.start) || !isYmd(draft.end)) return setDraftError("Pick both dates");
-    const n = foodLogDaysBetween(draft.start, draft.end);
-    if (n === 0) return setDraftError("Start date must be on or before the end date");
-    if (n > FOOD_LOG_MAX_DAYS) return setDraftError(`At most ${FOOD_LOG_MAX_DAYS} days at a time`);
+    if (!isYmd(draft.start)) return setDraftError("Pick a date");
+    if (draft.start > today) return setDraftError("Pick a date on or before today");
+    if (joinedYmd && draft.start < joinedYmd)
+      return setDraftError(`Client joined on ${foodLogDayLabel(joinedYmd)}, ${joinedYmd.slice(0, 4)}`);
+    const weekEnd = foodLogAddDays(draft.start, 6);
+    const end = weekEnd > today ? today : weekEnd;
     setDraftError(null);
-    setRange({ start: draft.start, end: draft.end });
+    setDraft({ start: draft.start, end });
+    setRange({ start: draft.start, end });
     return undefined;
   };
 
@@ -4253,6 +4279,21 @@ function FoodLogDialog({ profileId, weekStart, weekEnd, clientName, onClose }) {
     setDraft(planWeek);
     setDraftError(null);
     setRange(planWeek);
+  };
+
+  // ‹ › arrows: previous / next week of the log. Forward stops at today,
+  // back stops at the client's join date.
+  const atToday = range.end >= today;
+  const atJoin = Boolean(joinedYmd && range.start <= joinedYmd);
+  const shiftWeek = (dir) => {
+    let start = foodLogAddDays(range.start, dir * 7);
+    if (dir < 0 && joinedYmd && start < joinedYmd) start = joinedYmd;
+    if (start > today || start === range.start) return;
+    const weekEnd = foodLogAddDays(start, 6);
+    const end = weekEnd > today ? today : weekEnd;
+    setDraft({ start, end });
+    setDraftError(null);
+    setRange({ start, end });
   };
 
   const days = Array.isArray(data?.days) ? data.days : [];
@@ -4272,26 +4313,19 @@ function FoodLogDialog({ profileId, weekStart, weekEnd, clientName, onClose }) {
     </span>
   );
 
-  return (
-    <ModalShell title="Food log" subtitle={subtitle} onClose={onClose} widthClass="max-w-[760px]" tall>
+  const inner = (
+    <>
       {/* ------------------------------------------------------ range bar */}
       <div className="flex flex-none flex-wrap items-center gap-2 border-b border-[#E1E6ED] px-5 py-3">
+        <span className={cn("text-[#738298]", UI.small)}>Week from</span>
         <input
           type="date"
           value={draft.start}
-          max={draft.end || undefined}
+          min={joinedYmd || undefined}
+          max={today}
           onChange={(e) => setDraft((d) => ({ ...d, start: e.target.value }))}
           className={cn(UI.input, "w-auto py-1.5")}
-          aria-label="From date"
-        />
-        <span className={cn("text-[#A1A1A1]", UI.small)}>to</span>
-        <input
-          type="date"
-          value={draft.end}
-          min={draft.start || undefined}
-          onChange={(e) => setDraft((d) => ({ ...d, end: e.target.value }))}
-          className={cn(UI.input, "w-auto py-1.5")}
-          aria-label="To date"
+          aria-label="First day of the week to show"
         />
         <button type="button" onClick={applyDraft} disabled={loading} className={cn(UI.btnSecondary, "px-3 py-1.5")}>
           Show
@@ -4315,9 +4349,11 @@ function FoodLogDialog({ profileId, weekStart, weekEnd, clientName, onClose }) {
         <div className="flex flex-none items-center gap-2 border-b border-[#E1E6ED] px-3 py-2.5">
           <button
             type="button"
-            onClick={() => scrollDayStrip(-1)}
-            aria-label="Scroll days left"
-            className="shrink-0 rounded-[8px] border border-[#E1E6ED] bg-white px-2 py-1.5 text-[#535359] leading-none cursor-pointer hover:bg-[#F5F7FA] transition-colors"
+            onClick={() => shiftWeek(-1)}
+            disabled={loading || atJoin}
+            aria-label="Previous week"
+            title={atJoin ? "The client joined this week" : "Previous week"}
+            className="shrink-0 rounded-[8px] border border-[#E1E6ED] bg-white px-2 py-1.5 text-[#535359] leading-none cursor-pointer hover:bg-[#F5F7FA] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             ‹
           </button>
@@ -4355,9 +4391,11 @@ function FoodLogDialog({ profileId, weekStart, weekEnd, clientName, onClose }) {
 
           <button
             type="button"
-            onClick={() => scrollDayStrip(1)}
-            aria-label="Scroll days right"
-            className="shrink-0 rounded-[8px] border border-[#E1E6ED] bg-white px-2 py-1.5 text-[#535359] leading-none cursor-pointer hover:bg-[#F5F7FA] transition-colors"
+            onClick={() => shiftWeek(1)}
+            disabled={loading || atToday}
+            aria-label="Next week"
+            title={atToday ? "Already showing the current week" : "Next week"}
+            className="shrink-0 rounded-[8px] border border-[#E1E6ED] bg-white px-2 py-1.5 text-[#535359] leading-none cursor-pointer hover:bg-[#F5F7FA] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             ›
           </button>
@@ -4448,7 +4486,26 @@ function FoodLogDialog({ profileId, weekStart, weekEnd, clientName, onClose }) {
           </>
         )}
       </div>
-    </ModalShell>
+    </>
+  );
+
+  if (onClose) {
+    return (
+      <ModalShell title="Food log" subtitle={subtitle} onClose={onClose} widthClass="max-w-[760px]" tall>
+        {inner}
+      </ModalShell>
+    );
+  }
+
+  // Inline card (the client profile's "Food log" tab).
+  return (
+    <div className="flex w-full flex-col rounded-[15px] border border-[#E1E6ED] bg-white">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 px-5 pt-4 pb-2">
+        <p className={cn("text-[#252525] font-semibold", UI.title)}>Food log</p>
+        <p className={cn("text-[#738298]", UI.small)}>{subtitle}</p>
+      </div>
+      {inner}
+    </div>
   );
 }
 
