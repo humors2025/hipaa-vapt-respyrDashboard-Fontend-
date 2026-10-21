@@ -198,6 +198,8 @@ export const API_ENDPOINTS = {
   SALES: {
     SUPERADMINSALESANALYTICS: `/${API_VERSION}/dietitian/api/web/super-admin-sales-analytics`,
     SUPERADMINORDERS: `/${API_VERSION}/dietitian/api/web/super-admin-orders`,
+    // Facility admin › Payments: the same payment rows, for their own facility only.
+    FACILITYADMINPAYMENTS: `/${API_VERSION}/dietitian/api/web/facility-admin-payments`,
     SUPERADMINTESTCODES: `/${API_VERSION}/dietitian/api/web/super-admin-test-codes`,
     // Google Authenticator gate for the Test codes tab (own authenticator and unlock, separate from Settings).
     TESTCODESLOCKSTATUS: `/${API_VERSION}/dietitian/api/web/test-codes-lock-status`,

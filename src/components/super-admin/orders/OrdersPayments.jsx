@@ -10,7 +10,8 @@
 //               Authenticator unlock (same authenticator as Settings)
 //
 // Rendered by /super-admin/orders and, read-only, by /trainer-admin/orders for
-// the trainer admins in src/lib/ordersAccess.js.
+// the trainer admins in src/lib/ordersAccess.js. The table helpers exported
+// here are also used by Facility admin › Payments (FacilityPaymentsPanel.jsx).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -44,7 +45,7 @@ const TABS = [
 const PAYMENT_TYPE_LABEL = { first_payment: "First payment", renewal: "Renewal" };
 
 // 1 → "1st", 2 → "2nd", 11 → "11th", 22 → "22nd".
-function ordinal(n) {
+export function ordinal(n) {
   const v = n % 100;
   const suffix = v >= 11 && v <= 13 ? "th" : { 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th";
   return `${n}${suffix}`;
@@ -54,7 +55,7 @@ function errorMessage(err, fallback) {
   return err?.data?.message || err?.message || fallback;
 }
 
-const Dash = () => <span className="text-[#A1A1A1]">—</span>;
+export const Dash = () => <span className="text-[#A1A1A1]">—</span>;
 
 // Older copy path: select a hidden textarea and copy it. Used where the
 // Clipboard API is missing (plain-http LAN dev URL) or refused by the browser.
@@ -130,7 +131,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // Status badge + note for a shipping row. The backend already reports "expired"
 // for an active plan whose current_period_end has passed; the same rule is
 // applied here so the badge never says Active past the end date.
-function describePlan(r) {
+export function describePlan(r) {
   let status = String(r.subscription_status || "").toLowerCase() || null;
   const end = r.current_period_end ? new Date(r.current_period_end) : null;
   const endMs = end && !Number.isNaN(end.getTime()) ? end.getTime() : null;
@@ -155,7 +156,7 @@ function describePlan(r) {
 const th = "py-2.5 px-2.5 font-semibold whitespace-nowrap";
 const td = "py-2.5 px-2.5";
 
-function TableShell({ loading, error, onRetry, empty, emptyMessage, updating, minWidth, head, children }) {
+export function TableShell({ loading, error, onRetry, empty, emptyMessage, updating, minWidth, head, children }) {
   if (error) return <SectionError message={error} onRetry={onRetry} />;
   if (loading) {
     return (
@@ -179,7 +180,7 @@ function TableShell({ loading, error, onRetry, empty, emptyMessage, updating, mi
   );
 }
 
-function Customer({ customer }) {
+export function Customer({ customer }) {
   return (
     <>
       <div className="text-[#252525] font-semibold truncate">{customer?.name || "—"}</div>
@@ -718,7 +719,7 @@ function TestCodesPanel({ onLocked }) {
   );
 }
 
-function PaymentSummary({ summary }) {
+export function PaymentSummary({ summary }) {
   if (!summary?.length) return null;
   // One chip per status and currency, e.g. "Paid · 12 · $348.00".
   return (
