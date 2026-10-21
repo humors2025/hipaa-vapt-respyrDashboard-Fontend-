@@ -4128,8 +4128,8 @@ const ingredients = rows.flatMap((r) =>
  * renders as the popup DietPlanNew opens from the Weekly Diet Analysis tab;
  * without it, as an inline card (the client profile's "Food log" tab). Opens
  * on the plan's week (weekStart..weekEnd) or the last 7 days when no week is
- * given; the dietitian can widen / move the range with the two date pickers
- * (server cap: 92 days).
+ * given; the dietitian can move the week with a single "Week from" date picker
+ * (the shown range is always that date + 6 days, capped at today).
  *
  * The API already returns every day in the range and all four slots (empty
  * ones with zero totals), so this only picks a day and renders it.
@@ -4141,8 +4141,6 @@ const FOOD_LOG_SLOTS = [
   { key: "dinner", label: "Dinner" },
   { key: "snack", label: "Snacks" },
 ];
-
-const FOOD_LOG_MAX_DAYS = 92;
 
 const isYmd = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
@@ -4165,14 +4163,6 @@ function foodLogDayLabel(ymd) {
   const d = new Date(`${ymd}T00:00:00Z`);
   if (isNaN(d)) return ymd;
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
-}
-
-/** Inclusive day count between two YYYY-MM-DD strings; 0 when start > end or invalid. */
-function foodLogDaysBetween(start, end) {
-  const a = new Date(`${start}T00:00:00Z`).getTime();
-  const b = new Date(`${end}T00:00:00Z`).getTime();
-  if (isNaN(a) || isNaN(b) || a > b) return 0;
-  return Math.floor((b - a) / 86400000) + 1;
 }
 
 /** 74.3 → "74.3", 4 → "4", null → "–". */
@@ -4249,13 +4239,16 @@ export function FoodLogPanel({ profileId, weekStart, weekEnd, clientName, onClos
     };
   }, [profileId, range.start, range.end, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Single date picker: the chosen date is the first day shown, and the week
+  // runs forward from it (capped at today — no empty future days).
   const applyDraft = () => {
-    if (!isYmd(draft.start) || !isYmd(draft.end)) return setDraftError("Pick both dates");
-    const n = foodLogDaysBetween(draft.start, draft.end);
-    if (n === 0) return setDraftError("Start date must be on or before the end date");
-    if (n > FOOD_LOG_MAX_DAYS) return setDraftError(`At most ${FOOD_LOG_MAX_DAYS} days at a time`);
+    if (!isYmd(draft.start)) return setDraftError("Pick a date");
+    if (draft.start > today) return setDraftError("Pick a date on or before today");
+    const weekEnd = foodLogAddDays(draft.start, 6);
+    const end = weekEnd > today ? today : weekEnd;
     setDraftError(null);
-    setRange({ start: draft.start, end: draft.end });
+    setDraft({ start: draft.start, end });
+    setRange({ start: draft.start, end });
     return undefined;
   };
 
@@ -4287,22 +4280,14 @@ export function FoodLogPanel({ profileId, weekStart, weekEnd, clientName, onClos
     <>
       {/* ------------------------------------------------------ range bar */}
       <div className="flex flex-none flex-wrap items-center gap-2 border-b border-[#E1E6ED] px-5 py-3">
+        <span className={cn("text-[#738298]", UI.small)}>Week from</span>
         <input
           type="date"
           value={draft.start}
-          max={draft.end || undefined}
+          max={today}
           onChange={(e) => setDraft((d) => ({ ...d, start: e.target.value }))}
           className={cn(UI.input, "w-auto py-1.5")}
-          aria-label="From date"
-        />
-        <span className={cn("text-[#A1A1A1]", UI.small)}>to</span>
-        <input
-          type="date"
-          value={draft.end}
-          min={draft.start || undefined}
-          onChange={(e) => setDraft((d) => ({ ...d, end: e.target.value }))}
-          className={cn(UI.input, "w-auto py-1.5")}
-          aria-label="To date"
+          aria-label="First day of the week to show"
         />
         <button type="button" onClick={applyDraft} disabled={loading} className={cn(UI.btnSecondary, "px-3 py-1.5")}>
           Show
