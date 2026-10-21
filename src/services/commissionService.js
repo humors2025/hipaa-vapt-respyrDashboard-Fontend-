@@ -39,11 +39,12 @@ export const facilityEditLogsService = ({ facilityId }) =>
 // facility's counts; facilityId omitted = every facility in the caller's
 // scope (the total cards). A trainer admin only sees their own facilities.
 // Pass page/limit for one page (response then has `pagination`).
-export const listFacilityPeopleService = ({ facilityId, view, page, limit }) =>
+export const listFacilityPeopleService = ({ facilityId, view, page, limit, search }) =>
   post(API_ENDPOINTS.COMMISSION.FACILITYPEOPLE, {
     ...(facilityId && { facility_id: facilityId }),
     view,
     ...(page != null && { page, limit }),
+    ...(search && { search }),
   });
 
 export const inviteFacilityAdminService = ({ firstName, lastName, email, phone, facilityName }) =>
