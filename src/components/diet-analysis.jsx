@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 // import DietPlanLargeSize from "./dietplanlargesize";
 import DietPlanNew from "./Dietplannew";
 
-export default function DietAnalysis() {
+export default function DietAnalysis({ onOpenFoodLog }) {
   const [isLargeScreen, setIsLargeScreen] = useState(false);
 
   useEffect(() => {
@@ -28,7 +28,7 @@ export default function DietAnalysis() {
       {/* <MacrosUpdate />
 
       {isLargeScreen ? <DietPlanLargeSize /> : <DietPlan />} */}
-      <DietPlanNew/>
+      <DietPlanNew onOpenFoodLog={onOpenFoodLog} />
     </div>
   );
 }
