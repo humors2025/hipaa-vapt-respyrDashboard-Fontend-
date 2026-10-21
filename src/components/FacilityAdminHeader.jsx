@@ -32,7 +32,7 @@ const MENU = [
   { name: "Trainers",   icon: "/icons/hugeicons_home-05.svg",        path: "/facility-admin/trainers" },
   { name: "Referrals",  icon: "/icons/hugeicons_view.svg",           path: "/facility-admin/referrals" },
   { name: "Earnings",   icon: "/icons/hugeicons_award-01.svg",       path: "/facility-admin/earnings" },
-  { name: "Payments",   icon: "/icons/hugeicons_credit-card.svg",    path: "/facility-admin/payments" },
+  { name: "Sales & Payments", icon: "/icons/hugeicons_credit-card.svg", path: "/facility-admin/payments" },
   { name: "My clients", icon: "/icons/hugeicons_user-group.png",     path: "/trainer/dashboard" },
 ];
 

@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Search, X } from "lucide-react";
 import { listFacilityPeopleService, formatMinor } from "@/services/commissionService";
 
 /**
  * Facilities (super admin and trainer admin): the trainers or active members
  * behind a count — the API scopes a trainer admin to their own facilities.
- * FacilityPeopleList renders the list (also used inline by the Trainers /
- * Active members tabs); the default export wraps it in a popup for one
- * facility's counts. facility null = every facility, which adds a Facility
- * column. Escape / overlay / × close the popup.
+ * FacilityPeopleList renders the list with its search box (also used inline
+ * by the Trainers / Active members tabs); the default export wraps it in a
+ * popup for one facility's counts. facility null = every facility, which adds
+ * a Facility column. Escape / overlay / × close the popup.
  */
 
 const STATUS = {
@@ -31,6 +31,19 @@ const TH = "py-2.5 px-3 font-semibold whitespace-nowrap";
 const TD = "py-2.5 px-3 whitespace-nowrap";
 // Rows per page (super-admin-facility-people `limit`).
 const PAGE_SIZE = 10;
+// Search box → API `search` after this pause, once the trimmed term has
+// SEARCH_MIN_LENGTH characters (same 400 ms / 3-char rule as the facilities
+// search; the API rejects shorter terms with 422).
+const SEARCH_DEBOUNCE_MS = 400;
+const SEARCH_MIN_LENGTH = 3;
+// What the API's `search` matches on. Also applied client-side to the page
+// that came back when the response has no `search` echo, i.e. the API in
+// front of us predates the search support — the box still narrows that page.
+const SEARCH_FIELDS = {
+  trainers: ["name", "user_id", "phone", "partner_code", "facility_name"],
+  members: ["name", "email", "partner_code", "qr_id", "code_owner_name", "facility_name"],
+};
+const rowMatches = (row, fields, term) => fields.some((k) => String(row?.[k] || "").toLowerCase().includes(term));
 
 export function FacilityPeopleList({ facility, view, onCount }) {
   const [items, setItems] = useState(null);
@@ -38,50 +51,150 @@ export function FacilityPeopleList({ facility, view, onCount }) {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
+  // Search box text, and the trimmed term the list is asked for (after the debounce).
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const searchRef = useRef("");
+  // True when this page was narrowed here because the API ignored `search`.
+  const [narrowedHere, setNarrowedHere] = useState(false);
   const facilityId = facility?.id ?? null;
 
-  // A different list starts again at page 1, without showing the old rows.
+  // A different list starts again at page 1 with an empty search, without
+  // showing the old rows.
   useEffect(() => {
     setPage(1);
     setItems(null);
     setPagination(null);
+    setSearchInput("");
+    setSearch("");
+    searchRef.current = "";
   }, [facilityId, view]);
+
+  // Debounce the search box. Fewer than SEARCH_MIN_LENGTH characters is not a
+  // search yet: the unfiltered list stays (with a hint by the box). A new term
+  // always starts from page 1.
+  useEffect(() => {
+    const trimmed = searchInput.trim();
+    const next = trimmed.length >= SEARCH_MIN_LENGTH ? trimmed : "";
+    const t = setTimeout(() => {
+      if (next === searchRef.current) return;
+      searchRef.current = next;
+      setSearch(next);
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   useEffect(() => {
     if (!view) return undefined;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    listFacilityPeopleService({ facilityId, view, page, limit: PAGE_SIZE })
+    listFacilityPeopleService({ facilityId, view, page, limit: PAGE_SIZE, search })
       .then((res) => {
         if (cancelled) return;
-        setItems(res.items || []);
+        let rows = res.items || [];
+        // API without search support (no echo): narrow the page we got.
+        const narrow = Boolean(search) && typeof res.search !== "string";
+        if (narrow) {
+          const term = search.toLowerCase();
+          rows = rows.filter((r) => rowMatches(r, SEARCH_FIELDS[view] || [], term));
+        }
+        setNarrowedHere(narrow);
+        setItems(rows);
         setPagination(res.pagination || null);
-        onCount?.(res.total ?? (res.items || []).length);
+        // The popup title counts everyone, not the search matches.
+        if (!search) onCount?.(res.total ?? rows.length);
       })
       .catch((err) => !cancelled && setError(err?.message || "Could not load list"))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-    // onCount is a setter from the parent; refetch only when the list or page changes.
+    // onCount is a setter from the parent; refetch only when the list, page or term changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facilityId, view, page]);
+  }, [facilityId, view, page, search]);
 
   const isTrainers = view === "trainers";
   const all = !facility;
   const facilityCell = (row) =>
     all && <td className={`${TD} text-[#252525]`}>{row.facility_name || "—"}</td>;
+  const typedLength = searchInput.trim().length;
+  const tooShort = typedLength > 0 && typedLength < SEARCH_MIN_LENGTH;
+  // Matches for the current term: the API's count when it searched for us,
+  // else what is left of this page after the client-side narrowing.
+  const matchTotal = narrowedHere ? items?.length ?? 0 : pagination?.total ?? items?.length ?? 0;
+  const noun = isTrainers ? "trainer" : "member";
 
   return (
     <>
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <div className="relative w-full md:max-w-[440px]">
+          <Search className="size-4 text-[#A1A1A1] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => {
+              // Escape clears the box first; with nothing typed it closes the popup as before.
+              if (e.key === "Escape" && searchInput) {
+                e.stopPropagation();
+                e.nativeEvent.stopImmediatePropagation();
+                setSearchInput("");
+              }
+            }}
+            placeholder={
+              isTrainers
+                ? `Search trainer name, email, phone or code${all ? ", or facility" : ""}`
+                : `Search member name, email, code or referrer${all ? ", or facility" : ""}`
+            }
+            aria-label={isTrainers ? "Search trainers" : "Search members"}
+            autoComplete="off"
+            className="w-full rounded-[10px] border border-[#E1E6ED] bg-white pl-9 pr-9 py-2 text-[12px] text-[#252525] placeholder:text-[#A1A1A1] focus:outline-none focus:border-[#308BF9] transition-colors"
+          />
+          {searchInput && (
+            <button
+              type="button"
+              onClick={() => setSearchInput("")}
+              aria-label="Clear search"
+              title="Clear"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-[#A1A1A1] hover:bg-[#EEF4FE] hover:text-[#308BF9] cursor-pointer"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+        {tooShort ? (
+          <span className="text-[#A1A1A1] text-[12px]" aria-live="polite">
+            Type at least {SEARCH_MIN_LENGTH} characters to search.
+          </span>
+        ) : !!search && !!items && (loading || matchTotal > 0) && (
+          <span className="text-[#535359] text-[12px]" aria-live="polite">
+            {loading ? (
+              "Searching…"
+            ) : (
+              <>
+                {matchTotal} {matchTotal === 1 ? `${noun} matches` : `${noun}s match`}{" "}
+                <span className="font-semibold text-[#252525]">&ldquo;{search}&rdquo;</span>
+              </>
+            )}
+          </span>
+        )}
+      </div>
+
       {error ? (
         <div className="rounded-[10px] bg-[#FCEAEB] text-[#B5363A] text-[12px] px-4 py-3">{error}</div>
       ) : !items ? (
         <div className="text-[#A1A1A1] text-[13px] py-10 text-center">Loading&hellip;</div>
       ) : items.length === 0 ? (
         <div className="rounded-[10px] border border-dashed border-[#E1E6ED] p-6 text-[#A1A1A1] text-[12px] text-center">
-          {`No ${isTrainers ? "active trainers" : "active members"} in ${all ? "any facility" : "this facility"}.`}
+          {search ? (
+            <>
+              No {isTrainers ? "trainers" : "members"} match &ldquo;{search}&rdquo;.
+            </>
+          ) : (
+            `No ${isTrainers ? "active trainers" : "active members"} in ${all ? "any facility" : "this facility"}.`
+          )}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-[10px] border border-[#E1E6ED]">
