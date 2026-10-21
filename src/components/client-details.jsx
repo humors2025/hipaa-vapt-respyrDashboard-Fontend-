@@ -1010,7 +1010,7 @@ const transformDatesToDisplay = () => {
             className={`scroll-target ${activeTab === "diet" ? "flex-1 overflow-y-auto scroll-hide" : "hidden"
               }`}
           >
-            <DietAnalysis />
+            <DietAnalysis onOpenFoodLog={() => handleTabChange("foodlog")} />
           </div>
 
           <div

@@ -2578,7 +2578,7 @@ function pluralUnit(unit, n) {
 
 /* ============================================================ component */
 
-export default function DietPlanNew({ plan: planProp, clientName = "Client", clientGoal = "", onSave, onUndo }) {
+export default function DietPlanNew({ plan: planProp, clientName = "Client", clientGoal = "", onSave, onUndo, onOpenFoodLog }) {
   // Week picked in client-details (recorded by the dietAnalysis slice). The
   // week_start_date / week_end_date come from get-weekly-tab-list-newtest;
   // profileId is the ?profile_id from the URL.
@@ -3744,7 +3744,9 @@ const ingredients = rows.flatMap((r) =>
               )}
               <button
                 type="button"
-                onClick={() => setFoodLogOpen(true)}
+                // Goes to the page's own Food log tab when client-details wires
+                // the callback; the popup stays as a fallback for any other host.
+                onClick={() => (onOpenFoodLog ? onOpenFoodLog() : setFoodLogOpen(true))}
                 disabled={!profileId}
                 title="What the client actually logged in the app"
                 className={cn(UI.btnSecondary, "px-3 py-1.5")}
