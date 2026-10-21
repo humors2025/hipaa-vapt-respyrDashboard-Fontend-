@@ -10,6 +10,7 @@ import DietAnalysis from "./diet-analysis";
 import MacrosAnalysis from "./macros-analysis";
 import HabitsAnalysis from "./habits-analysis";
 import WeightTrackingTab from "./weight-tracking-tab";
+import { FoodLogPanel } from "./Dietplannew";
 // import TrainerDirection from "./trainer-direction";
 import TrainerDirection from "./training-direction/TrainerDirection";
 import RightSidebar from "./rightSidebar";
@@ -804,6 +805,21 @@ const transformDatesToDisplay = () => {
                 </p>
               </div>
 
+              <div
+                onClick={() => handleTabChange("foodlog")}
+                className={`flex items-center gap-2.5 rounded-[6px] py-[11px] px-[31px] max-xl:px-4 transition-all duration-200 ${activeTab === "foodlog"
+                  ? "bg-[#252525] cursor-pointer hover:bg-[#3a3a3a]"
+                  : "bg-[#F5F7FA] cursor-pointer hover:bg-[#e8eaed]"
+                  }`}
+              >
+                <p
+                  className={`text-[12px] font-semibold leading-[110%] tracking-[-0.24px] ${activeTab === "foodlog" ? "text-white" : "text-[#535359]"
+                    }`}
+                >
+                  Food log
+                </p>
+              </div>
+
              {/* <div
   onClick={() => handleTabChange("trainer")}
   className={`flex items-center gap-2.5 rounded-[6px] py-[11px] px-[31px] transition-all duration-200 ${
@@ -837,7 +853,7 @@ const transformDatesToDisplay = () => {
             </div>
           </div>
 
-          {activeTab === "habits" || activeTab === "weight" ? (
+          {activeTab === "habits" || activeTab === "weight" || activeTab === "foodlog" ? (
             <div className="border-b border-[#E1E6ED]"></div>
           ) : (
             <div className="flex items-center gap-[26px] max-xl:gap-3 border-t border-b border-[#E1E6ED] pl-[38px] max-xl:pl-3 py-[5px]">
@@ -1014,6 +1030,24 @@ const transformDatesToDisplay = () => {
               profileId={profileId}
               isActive={activeTab === "weight"}
             />
+          </div>
+
+          <div
+            className={`scroll-target ${activeTab === "foodlog" ? "flex-1 overflow-y-auto scroll-hide" : "hidden"
+              }`}
+          >
+            {/* Mounted only while open so the log is fetched (and refreshed)
+                each time the tab is visited, like the Food log popup. */}
+            {activeTab === "foodlog" && (
+              <div className="mt-[16px] mb-[20px] mx-[5px]">
+                <FoodLogPanel
+                  profileId={profileId}
+                  clientName={
+                    individualProfileData?.data?.profile_details?.profile_name
+                  }
+                />
+              </div>
+            )}
           </div>
 
            <div

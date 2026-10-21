@@ -4044,7 +4044,7 @@ const ingredients = rows.flatMap((r) =>
 
       {/* ------------------------------------------------------ food log */}
       {foodLogOpen && (
-        <FoodLogDialog
+        <FoodLogPanel
           profileId={profileId}
           weekStart={weekStart}
           weekEnd={weekEnd}
@@ -4120,13 +4120,16 @@ const ingredients = rows.flatMap((r) =>
   );
 }
 
-/* ============================================================ FoodLogDialog */
+/* ============================================================ FoodLogPanel */
 
 /**
- * "Food log" popup — what the client actually logged in the app, read from
- * `POST /dietitian/api/web/food-log` (fetchFoodLogService). Opens on the plan's
- * week (weekStart..weekEnd) or today when no week is selected; the dietitian
- * can widen / move the range with the two date pickers (server cap: 92 days).
+ * "Food log" — what the client actually logged in the app, read from
+ * `POST /dietitian/api/web/food-log` (fetchFoodLogService). With `onClose` it
+ * renders as the popup DietPlanNew opens from the Weekly Diet Analysis tab;
+ * without it, as an inline card (the client profile's "Food log" tab). Opens
+ * on the plan's week (weekStart..weekEnd) or the last 7 days when no week is
+ * given; the dietitian can widen / move the range with the two date pickers
+ * (server cap: 92 days).
  *
  * The API already returns every day in the range and all four slots (empty
  * ones with zero totals), so this only picks a day and renders it.
@@ -4148,6 +4151,13 @@ function foodLogToday() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** "2026-09-05" + n days → YYYY-MM-DD (n may be negative). */
+function foodLogAddDays(ymd, n) {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
 }
 
 /** "2026-09-05" → "Fri, Sep 5". */
@@ -4180,10 +4190,11 @@ function foodLogTime(ts) {
 
 const FOOD_LOG_SOURCE_LABEL = { plan: "Plan", chef: "Chef", manual: "Manual", search: "Search", photo: "Photo" };
 
-function FoodLogDialog({ profileId, weekStart, weekEnd, clientName, onClose }) {
+export function FoodLogPanel({ profileId, weekStart, weekEnd, clientName, onClose }) {
   const today = foodLogToday();
   const planWeek = isYmd(weekStart) && isYmd(weekEnd) ? { start: weekStart, end: weekEnd } : null;
-  const initial = planWeek || { start: today, end: today };
+  // Without a plan week (the standalone Food log tab) start on the last 7 days.
+  const initial = planWeek || { start: foodLogAddDays(today, -6), end: today };
 
   const [range, setRange] = useState(initial); // what is loaded
   const [draft, setDraft] = useState(initial); // what the date pickers show
@@ -4272,8 +4283,8 @@ function FoodLogDialog({ profileId, weekStart, weekEnd, clientName, onClose }) {
     </span>
   );
 
-  return (
-    <ModalShell title="Food log" subtitle={subtitle} onClose={onClose} widthClass="max-w-[760px]" tall>
+  const inner = (
+    <>
       {/* ------------------------------------------------------ range bar */}
       <div className="flex flex-none flex-wrap items-center gap-2 border-b border-[#E1E6ED] px-5 py-3">
         <input
@@ -4448,7 +4459,26 @@ function FoodLogDialog({ profileId, weekStart, weekEnd, clientName, onClose }) {
           </>
         )}
       </div>
-    </ModalShell>
+    </>
+  );
+
+  if (onClose) {
+    return (
+      <ModalShell title="Food log" subtitle={subtitle} onClose={onClose} widthClass="max-w-[760px]" tall>
+        {inner}
+      </ModalShell>
+    );
+  }
+
+  // Inline card (the client profile's "Food log" tab).
+  return (
+    <div className="flex w-full flex-col rounded-[15px] border border-[#E1E6ED] bg-white">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 px-5 pt-4 pb-2">
+        <p className={cn("text-[#252525] font-semibold", UI.title)}>Food log</p>
+        <p className={cn("text-[#738298]", UI.small)}>{subtitle}</p>
+      </div>
+      {inner}
+    </div>
   );
 }
 
