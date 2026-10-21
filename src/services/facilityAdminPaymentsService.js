@@ -16,19 +16,37 @@
 //       (every payment of this type and code, ignoring status and search),
 //     sources: [ { code, kind, name, user_id, status } ] (the "Referred by" filter),
 //     status_options, filters, pagination: { page, limit, total, total_pages } }
+//
+// dateFrom / dateTo: YYYY-MM-DD, inclusive, in this browser's calendar (sent
+// with its UTC offset); either may be empty. They narrow the list and the
+// summary to payments made on those days.
 
 import { apiFetcher } from "@/config/fetcher";
 import { API_ENDPOINTS } from "@/config/apiConfig";
 
 export const FACILITY_PAYMENTS_SEARCH_MIN_LENGTH = 3;
 
-export const fetchFacilityPaymentsService = async ({ status = "all", type = "all", code = "all", search = "", page = 1, limit = 20 }) =>
+const tzOffsetMinutes = () => -new Date().getTimezoneOffset();
+
+export const fetchFacilityPaymentsService = async ({
+  status = "all",
+  type = "all",
+  code = "all",
+  dateFrom = "",
+  dateTo = "",
+  search = "",
+  page = 1,
+  limit = 20,
+}) =>
   apiFetcher(API_ENDPOINTS.SALES.FACILITYADMINPAYMENTS, {
     method: "POST",
     body: JSON.stringify({
       status,
       ...(type !== "all" ? { type } : {}),
       ...(code !== "all" ? { code } : {}),
+      ...(dateFrom ? { date_from: dateFrom } : {}),
+      ...(dateTo ? { date_to: dateTo } : {}),
+      ...(dateFrom || dateTo ? { tz_offset_minutes: tzOffsetMinutes() } : {}),
       ...(search ? { search } : {}),
       page,
       limit,
