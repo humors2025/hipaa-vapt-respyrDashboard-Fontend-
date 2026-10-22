@@ -448,6 +448,7 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
                 <th className="py-2.5 px-4 font-semibold">Facility</th>
                 <th className="py-2.5 px-4 font-semibold">Owner</th>
                 <th className="py-2.5 px-4 font-semibold">Code</th>
+                <th className="py-2.5 px-4 font-semibold">Sticker</th>
                 <th className="py-2.5 px-4 font-semibold text-right">Trainers</th>
                 <th className="py-2.5 px-4 font-semibold text-right">Members</th>
                 <th className="py-2.5 px-4 font-semibold text-right">Owed</th>
@@ -497,6 +498,7 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
                       <div className="text-[#A1A1A1] text-[11px]">{f.owner_user_id}</div>
                     </td>
                     <td className="py-2.5 px-4 text-[#535359] font-mono">{f.partner_code}</td>
+                    <td className="py-2.5 px-4 text-[#535359] font-mono">{f.qr_code_id || <span className="text-[#A1A1A1] font-sans">—</span>}</td>
                     {[["trainers", f.trainers_count], ["members", f.active_subscriptions]].map(([view, n]) => (
                       <td key={view} className="py-2.5 px-4 text-right text-[#252525]">
                         <button
