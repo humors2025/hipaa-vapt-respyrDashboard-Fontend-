@@ -39,6 +39,14 @@ export function LoginForm({ className, ...props }) {
 
   const B2B2C = ["Qua", "RespyrD01"];
 
+  // UAT-only login block: these accounts belong on the production site, so on
+  // this environment the form refuses them before any API call is made — no
+  // token is ever requested or stored. Do NOT promote this list to main.
+  const BLOCKED_LOGIN_EMAILS = [
+    "evan.gaudet@gmail.com",
+    "derek.lopez88@gmail.com",
+  ];
+
   // const handleSubmit = async (e) => {
   //   e.preventDefault();
   //   setLoading(true);
@@ -88,6 +96,13 @@ export function LoginForm({ className, ...props }) {
 
 const handleSubmit = async (e) => {
   e.preventDefault();
+
+  if (BLOCKED_LOGIN_EMAILS.includes(email.trim().toLowerCase())) {
+    setInputError("You don't have access to login");
+    toast.error("You don't have access to login");
+    return;
+  }
+
   setLoading(true);
 
   try {
