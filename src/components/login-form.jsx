@@ -45,6 +45,7 @@ export function LoginForm({ className, ...props }) {
   const BLOCKED_LOGIN_EMAILS = [
     "evan.gaudet@gmail.com",
     "derek.lopez88@gmail.com",
+    "jyotiprakash@gmail.com",
   ];
 
   // const handleSubmit = async (e) => {
