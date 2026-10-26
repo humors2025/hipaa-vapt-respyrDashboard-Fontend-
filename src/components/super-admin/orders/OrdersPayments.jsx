@@ -5,7 +5,7 @@
 //   Payments    one row per Stripe invoice: first payment, renewals, failures, refunds
 //   Renewals    renewals that went through (paid; refunds still shown), with
 //               which renewal each is and where the plan stands now
-//   Upcoming    plans still set to renew within the next 7 days, soonest first
+//   Upcoming    plans still set to renew within the next 10 days, soonest first
 //   Test codes  super admin only (showTestCodes), behind its own Google
 //               Authenticator unlock (same authenticator as Settings)
 //
@@ -32,7 +32,7 @@ import SettingsLockGate, { isTestCodesLocked } from "@/components/super-admin/Se
 const PAGE_LIMIT = 20;
 const DEFAULT_PAYMENT_STATUSES = ["paid", "failed", "refunded", "partially_refunded", "open"];
 const RENEWED_STATUSES = ["paid", "partially_refunded", "refunded"];
-const UPCOMING_DAYS = 7;
+const UPCOMING_DAYS = 10;
 
 const TABS = [
   { value: "shipping", label: "Shipping" },
