@@ -229,6 +229,23 @@ export default function Progress({ title = "Progress", showDetails = true, showC
     );
   }
 
+  // A client with no readings yet gets a 404 ("No graph data found...") from
+  // the trends API — show a quiet empty state instead of a red error.
+  const isNoGraphData =
+    typeof error === "string" && error.toLowerCase().includes("no graph data");
+
+  if (isNoGraphData && !graphData) {
+    return (
+      <div className="w-full flex flex-col border border-[#E1E6ED] px-5 pt-[18px] pb-5 rounded-[15px] bg-white">
+        <div className="flex justify-center items-center h-[300px]">
+          <p className="text-[#535359] text-sm">
+            No trend data yet — it will appear once the client starts tracking.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (error && !graphData) {
     return (
       <div className="w-full flex flex-col border border-[#E1E6ED] px-5 pt-[18px] pb-5 rounded-[15px] bg-white">
