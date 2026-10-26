@@ -906,7 +906,12 @@ const transformDatesToDisplay = () => {
             </div>
           </div>
 
-          {activeTab === "habits" || activeTab === "weight" || activeTab === "foodlog" ? (
+          {activeTab === "habits" ||
+          activeTab === "weight" ||
+          activeTab === "foodlog" ||
+          // No readings yet: hide the whole "Select a date/week" strip — the
+          // panes show the no-test notice instead.
+          currentData.length === 0 ? (
             <div className="border-b border-[#E1E6ED]"></div>
           ) : (
             <div className="flex items-center gap-[26px] max-xl:gap-3 border-t border-b border-[#E1E6ED] pl-[38px] max-xl:pl-3 py-[5px]">
