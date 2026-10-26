@@ -39,6 +39,26 @@ export function LoginForm({ className, ...props }) {
 
   const B2B2C = ["Qua", "RespyrD01"];
 
+  // UAT-only login block: these accounts belong on the production site, so the
+  // UAT site refuses them before any API call is made — no token is ever
+  // requested or stored. The block fires only when the page is served from the
+  // UAT host (or local dev), so this code is safe to merge to main: on the
+  // production domain the list does nothing and these users log in normally.
+  const BLOCKED_LOGIN_EMAILS = [
+    "evan.gaudet@gmail.com",
+    "derek.lopez88@gmail.com",
+    "jyotiprakash@gmail.com",
+  ];
+  const UAT_LOGIN_BLOCK_HOSTS = [
+    "uat-frontend.d2jln4krjgobeh.amplifyapp.com",
+    "localhost",
+    "127.0.0.1",
+  ];
+  const isUatLoginBlockHost = () =>
+    typeof window !== "undefined" &&
+    (UAT_LOGIN_BLOCK_HOSTS.includes(window.location.hostname) ||
+      window.location.hostname.startsWith("192.168."));
+
   // const handleSubmit = async (e) => {
   //   e.preventDefault();
   //   setLoading(true);
@@ -88,6 +108,13 @@ export function LoginForm({ className, ...props }) {
 
 const handleSubmit = async (e) => {
   e.preventDefault();
+
+  if (isUatLoginBlockHost() && BLOCKED_LOGIN_EMAILS.includes(email.trim().toLowerCase())) {
+    setInputError("You don't have access to login");
+    toast.error("You don't have access to login");
+    return;
+  }
+
   setLoading(true);
 
   try {
