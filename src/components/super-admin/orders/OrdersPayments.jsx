@@ -185,6 +185,9 @@ export function Customer({ customer }) {
     <>
       <div className="text-[#252525] font-semibold truncate">{customer?.name || "—"}</div>
       {customer?.email && <div className="text-[#A1A1A1] text-[11px] truncate">{customer.email}</div>}
+      {customer?.profile_id && (
+        <div className="font-mono text-[11px] text-[#535359] truncate">{customer.profile_id}</div>
+      )}
     </>
   );
 }
