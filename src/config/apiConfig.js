@@ -141,6 +141,10 @@ export const API_ENDPOINTS = {
           GETGROUPPERIODREADERS: `/${API_VERSION}/dietitian/api/web/get_group_period_readers`,
 
 
+    // Super-admin "View as" (read-only impersonation)
+    VIEWASLIST: `/${API_VERSION}/dietitian/api/web/super-admin-view-as-list`,
+    VIEWASSTART: `/${API_VERSION}/dietitian/api/web/super-admin-view-as`,
+
     VALIDATEINVITETOKEN: `/${API_VERSION}/dietitian/api/web/validate-invite-token`,
     ACCEPTINVITE: `/${API_VERSION}/dietitian/api/web/accept-invite`,
     AGREEMENTUPLOADURL: `/${API_VERSION}/dietitian/api/web/agreement-upload-url`,

@@ -61,6 +61,7 @@ const MENU = [
 const DROPDOWN_MENU = [
   { name: "Payouts",   icon: "/icons/hugeicons_file-export.svg",  path: "/super-admin/payouts" },
   { name: "Audit log", icon: "/icons/hugeicons_note-01.svg",      path: "/super-admin/audit-logs" },
+  { name: "View as",   icon: "/icons/hugeicons_user-group.png",   path: "/super-admin/view-as" },
   { name: "Settings",  icon: "/icons/hugeicons_settings-03.svg",  path: "/super-admin/settings" },
 ];
 
