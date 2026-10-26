@@ -260,6 +260,21 @@ const transformDatesToDisplay = () => {
       setActiveIndex(0);
       setStartIndex(0);
 
+      // With no test date to anchor on, fetch the profile shell (details +
+      // habits) for today so the header, Habits and Weight tabs still load.
+      const loadProfileWithoutTests = () => {
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+        dispatch(
+          getClientIndividualProfile({
+            profileId,
+            date: today,
+            dietitianId: dietitianId,
+            masking: isMaskingRoute,
+          })
+        );
+      };
+
       try {
         const response = await fetchClientProfileDatesList(profileId, dietitianId);
         if (response.status && response.data) {
@@ -275,14 +290,26 @@ const transformDatesToDisplay = () => {
                 masking: isMaskingRoute,
               })
             );
+          } else {
+            loadProfileWithoutTests();
           }
         } else {
           setProfileDates([]);
+          loadProfileWithoutTests();
         }
       } catch (error) {
         console.error("Error fetching profile dates:", error);
-        setDatesError(error.message || "Failed to load dates");
-        setProfileDates([]);
+        // A client with no readings yet comes back as a 404 ("No test dates
+        // found..."). That is not an error state: show the normal page with
+        // Habits / Weight tracking, and the no-test notice only on the
+        // test-dependent tabs.
+        if (error.message?.toLowerCase().includes("no test dates found")) {
+          setProfileDates([]);
+          loadProfileWithoutTests();
+        } else {
+          setDatesError(error.message || "Failed to load dates");
+          setProfileDates([]);
+        }
       } finally {
         setDatesLoading(false);
       }
@@ -566,6 +593,32 @@ const transformDatesToDisplay = () => {
 </div>
     );
   }
+
+  // Shown inside the test-dependent tabs (Test / Macros / Diet) while the
+  // client has no readings yet; the rest of the page (Habits Analysis,
+  // Weight Tracking, Food log) stays fully usable.
+  const noTestsYetNotice = (
+    <div className="w-full h-full min-h-[300px] flex items-center justify-center">
+      <div className="flex flex-col gap-2.5 text-center">
+        <div className="flex items-center justify-center">
+          <Image
+            src="/icons/freepic-sad.png"
+            alt="freepic-sad.png"
+            width={80}
+            height={80}
+          />
+        </div>
+        <div className="flex flex-col">
+          <p className="text-gray-600 font-medium mb-1">
+            Client hasn't taken their first test yet
+          </p>
+          <p className="text-gray-500 text-sm">
+            Data will appear after the first test is completed.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -996,21 +1049,29 @@ const transformDatesToDisplay = () => {
             className={`scroll-target ${activeTab === "test" ? "flex-1 overflow-y-auto scroll-hide" : "hidden"
               }`}
           >
-            <TestAnalysis />
+            {testDateData.length === 0 ? noTestsYetNotice : <TestAnalysis />}
           </div>
 
           <div
             className={`scroll-target ${activeTab === "macros" ? "flex-1 overflow-y-auto scroll-hide" : "hidden"
               }`}
           >
-            <MacrosAnalysis activeTab={activeTab} />
+            {testDateData.length === 0 ? (
+              noTestsYetNotice
+            ) : (
+              <MacrosAnalysis activeTab={activeTab} />
+            )}
           </div>
 
           <div
             className={`scroll-target ${activeTab === "diet" ? "flex-1 overflow-y-auto scroll-hide" : "hidden"
               }`}
           >
-            <DietAnalysis onOpenFoodLog={() => handleTabChange("foodlog")} />
+            {weekData.length === 0 ? (
+              noTestsYetNotice
+            ) : (
+              <DietAnalysis onOpenFoodLog={() => handleTabChange("foodlog")} />
+            )}
           </div>
 
           <div
