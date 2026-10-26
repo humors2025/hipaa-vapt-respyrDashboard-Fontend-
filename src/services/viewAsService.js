@@ -29,3 +29,22 @@ export const startViewAsService = async (targetUserId) => {
     body: JSON.stringify({ target_user_id: targetUserId }),
   });
 };
+
+// Google Authenticator gate for View as (view-as-lock.js). Its own
+// authenticator entry ("Rysflo View as"), backup codes and unlock, separate
+// from Settings and Test codes: both view-as endpoints answer 403
+// VIEW_AS_LOCKED until view-as-mfa-verify accepts a code. First time:
+// email code → QR → confirm (same flow as the other gates).
+const postViewAsLock = (endpoint, payload = {}) =>
+  apiFetcher(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+export const fetchViewAsLockStatusService = () => postViewAsLock(API_ENDPOINTS.ADMINPANEL.VIEWASLOCKSTATUS);
+export const requestViewAsCodeService = () => postViewAsLock(API_ENDPOINTS.ADMINPANEL.VIEWASLOCKREQUEST);
+export const verifyViewAsCodeService = ({ code }) => postViewAsLock(API_ENDPOINTS.ADMINPANEL.VIEWASLOCKVERIFY, { code });
+export const startViewAsMfaSetupService = () => postViewAsLock(API_ENDPOINTS.ADMINPANEL.VIEWASMFASETUP);
+export const confirmViewAsMfaSetupService = ({ code }) => postViewAsLock(API_ENDPOINTS.ADMINPANEL.VIEWASMFACONFIRM, { code });
+export const verifyViewAsMfaService = ({ code }) => postViewAsLock(API_ENDPOINTS.ADMINPANEL.VIEWASMFAVERIFY, { code });

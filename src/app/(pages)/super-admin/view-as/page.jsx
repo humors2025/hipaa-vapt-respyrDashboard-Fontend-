@@ -1,16 +1,23 @@
 "use client";
 
-// Super Admin › View as — read-only impersonation.
+// Super Admin › View as — read-only impersonation, behind its own Google
+// Authenticator gate (same pattern as Settings and the Test codes tab).
 //
-// Lists every active trainer admin, facility admin and trainer that can log
-// in (super-admin-view-as-list). "View" asks the backend for a view-only
-// access token carrying that user's identity (super-admin-view-as), swaps the
-// session to it (lib/viewAs.js) and lands on that role's home page — the
-// dashboard then shows exactly what the user sees after login. The orange
+// SettingsLockGate (kind "viewAs") owns the lock UI: first visit = email code
+// → scan QR ("Rysflo View as" entry) → backup codes; later visits = app code.
+// The backend refuses both view-as endpoints with 403 VIEW_AS_LOCKED until
+// view-as-mfa-verify accepts a code, so the user list is never fetched while
+// locked, and an expired unlock sends the panel back to the code screen.
+//
+// Once unlocked: lists every active trainer admin, facility admin and trainer
+// that can log in (super-admin-view-as-list). "View" asks the backend for a
+// view-only access token carrying that user's identity (super-admin-view-as),
+// swaps the session to it (lib/viewAs.js) and lands on that role's home page —
+// the dashboard then shows exactly what the user sees after login. The orange
 // ViewAsBanner carries the "Exit view" that restores the super admin session.
 //
-// Every list view and every started view is written to the audit log; write
-// endpoints are refused server-side while the view token is in use.
+// Every view is written to the audit log; write endpoints are refused
+// server-side while the view token is in use.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -18,6 +25,7 @@ import { Eye, Search } from "lucide-react";
 import { fetchViewAsUsersService, startViewAsService } from "@/services/viewAsService";
 import { enterViewAs } from "@/lib/viewAs";
 import { landingPathForUser } from "@/lib/user";
+import SettingsLockGate, { isViewAsLocked } from "@/components/super-admin/SettingsLockGate";
 import { SalesCard, Skeleton, EmptyState, SectionError } from "@/components/super-admin/sales/SalesUi";
 import { SalesPagination } from "@/components/super-admin/sales/PurchaseTable";
 
@@ -49,7 +57,10 @@ function RoleBadge({ role }) {
   );
 }
 
-export default function ViewAsPage() {
+// The users list once SettingsLockGate has unlocked it. It loads its own data
+// so nothing is requested while still locked; a VIEW_AS_LOCKED answer (unlock
+// expired) sends it back to the code screen via onLocked.
+function ViewAsUsersPanel({ onLocked }) {
   const [role, setRole] = useState("all");
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
@@ -75,11 +86,12 @@ export default function ViewAsPage() {
       setData(res);
     } catch (err) {
       if (seq !== requestSeq.current) return;
+      if (isViewAsLocked(err)) return onLocked();
       setError(err?.data?.message || err?.message || "Failed to load users");
     } finally {
       if (seq === requestSeq.current) setLoading(false);
     }
-  }, []);
+  }, [onLocked]);
 
   useEffect(() => {
     load(role, page, search);
@@ -115,6 +127,10 @@ export default function ViewAsPage() {
       const target = res.target || {};
       window.location.assign(landingPathForUser({ role: target.role || user.role }));
     } catch (err) {
+      if (isViewAsLocked(err)) {
+        setStartingFor(null);
+        return onLocked();
+      }
       toast.error(err?.data?.message || err?.message || "Could not start View as");
       setStartingFor(null);
     }
@@ -123,6 +139,104 @@ export default function ViewAsPage() {
   const items = data?.items || [];
   const pagination = data?.pagination || null;
 
+  return (
+    <SalesCard
+      title="Users"
+      action={
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1A1]" aria-hidden />
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search name, email, code… (3+ chars)"
+            className="w-[260px] max-w-full rounded-[10px] border border-[#E1E6ED] bg-white pl-8 pr-3 py-2 text-[12px] text-[#252525] placeholder:text-[#A1A1A1] outline-none focus:border-[#308BF9]"
+          />
+        </div>
+      }
+    >
+      <div className="flex items-center gap-2 flex-wrap">
+        {ROLE_TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => handleRole(t.key)}
+            className={`rounded-full px-3.5 py-1.5 text-[12px] font-semibold cursor-pointer transition-colors ${
+              role === t.key
+                ? "bg-[#252525] text-white"
+                : "bg-[#F5F7FA] text-[#535359] hover:bg-[#ECF0F5]"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {error ? (
+        <SectionError message={error} onRetry={() => load(role, page, search)} />
+      ) : loading ? (
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-[44px]" />
+          ))}
+        </div>
+      ) : !items.length ? (
+        <EmptyState message={search ? "No users match this search." : "No users to show."} />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="text-[#A1A1A1] text-[11px] uppercase tracking-wide">
+                <th className="font-semibold px-3 py-2">Name</th>
+                <th className="font-semibold px-3 py-2">Email</th>
+                <th className="font-semibold px-3 py-2">Role</th>
+                <th className="font-semibold px-3 py-2">Partner code</th>
+                <th className="font-semibold px-3 py-2">Facility</th>
+                <th className="font-semibold px-3 py-2 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((u) => (
+                <tr key={`${u.user_id}-${u.role}`} className="border-t border-[#F0F3F7] text-[12px] text-[#252525]">
+                  <td className="px-3 py-2.5 font-semibold">{u.name || <Dash />}</td>
+                  <td className="px-3 py-2.5">{u.user_id}</td>
+                  <td className="px-3 py-2.5"><RoleBadge role={u.role} /></td>
+                  <td className="px-3 py-2.5 font-mono text-[11px]">{u.partner_code || <Dash />}</td>
+                  <td className="px-3 py-2.5">{u.facility_name || <Dash />}</td>
+                  <td className="px-3 py-2.5 text-right">
+                    <button
+                      type="button"
+                      onClick={() => handleView(u)}
+                      disabled={!!startingFor}
+                      className="inline-flex items-center gap-1.5 rounded-[8px] bg-[#308BF9] text-white text-[11px] font-bold px-3 py-1.5 hover:bg-[#1E78E8] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Eye size={13} aria-hidden />
+                      {startingFor === u.user_id ? "Starting…" : "View"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {pagination && (
+        <SalesPagination
+          page={pagination.page}
+          limit={pagination.limit}
+          total={pagination.total}
+          totalPages={pagination.total_pages}
+          onPageChange={setPage}
+          disabled={loading}
+          noun="users"
+        />
+      )}
+    </SalesCard>
+  );
+}
+
+export default function ViewAsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
@@ -134,99 +248,9 @@ export default function ViewAsPage() {
         </p>
       </div>
 
-      <SalesCard
-        title="Users"
-        action={
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1A1]" aria-hidden />
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search name, email, code… (3+ chars)"
-              className="w-[260px] max-w-full rounded-[10px] border border-[#E1E6ED] bg-white pl-8 pr-3 py-2 text-[12px] text-[#252525] placeholder:text-[#A1A1A1] outline-none focus:border-[#308BF9]"
-            />
-          </div>
-        }
-      >
-        <div className="flex items-center gap-2 flex-wrap">
-          {ROLE_TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => handleRole(t.key)}
-              className={`rounded-full px-3.5 py-1.5 text-[12px] font-semibold cursor-pointer transition-colors ${
-                role === t.key
-                  ? "bg-[#252525] text-white"
-                  : "bg-[#F5F7FA] text-[#535359] hover:bg-[#ECF0F5]"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {error ? (
-          <SectionError message={error} onRetry={() => load(role, page, search)} />
-        ) : loading ? (
-          <div className="flex flex-col gap-2">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-[44px]" />
-            ))}
-          </div>
-        ) : !items.length ? (
-          <EmptyState message={search ? "No users match this search." : "No users to show."} />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="text-[#A1A1A1] text-[11px] uppercase tracking-wide">
-                  <th className="font-semibold px-3 py-2">Name</th>
-                  <th className="font-semibold px-3 py-2">Email</th>
-                  <th className="font-semibold px-3 py-2">Role</th>
-                  <th className="font-semibold px-3 py-2">Partner code</th>
-                  <th className="font-semibold px-3 py-2">Facility</th>
-                  <th className="font-semibold px-3 py-2 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((u) => (
-                  <tr key={`${u.user_id}-${u.role}`} className="border-t border-[#F0F3F7] text-[12px] text-[#252525]">
-                    <td className="px-3 py-2.5 font-semibold">{u.name || <Dash />}</td>
-                    <td className="px-3 py-2.5">{u.user_id}</td>
-                    <td className="px-3 py-2.5"><RoleBadge role={u.role} /></td>
-                    <td className="px-3 py-2.5 font-mono text-[11px]">{u.partner_code || <Dash />}</td>
-                    <td className="px-3 py-2.5">{u.facility_name || <Dash />}</td>
-                    <td className="px-3 py-2.5 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleView(u)}
-                        disabled={!!startingFor}
-                        className="inline-flex items-center gap-1.5 rounded-[8px] bg-[#308BF9] text-white text-[11px] font-bold px-3 py-1.5 hover:bg-[#1E78E8] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Eye size={13} aria-hidden />
-                        {startingFor === u.user_id ? "Starting…" : "View"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {pagination && (
-          <SalesPagination
-            page={pagination.page}
-            limit={pagination.limit}
-            total={pagination.total}
-            totalPages={pagination.total_pages}
-            onPageChange={setPage}
-            disabled={loading}
-            noun="users"
-          />
-        )}
-      </SalesCard>
+      <SettingsLockGate kind="viewAs">
+        {(relock) => <ViewAsUsersPanel onLocked={relock} />}
+      </SettingsLockGate>
     </div>
   );
 }
