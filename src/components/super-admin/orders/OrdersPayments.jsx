@@ -5,7 +5,7 @@
 //   Payments    one row per Stripe invoice: first payment, renewals, failures, refunds
 //   Renewals    renewals that went through (paid; refunds still shown), with
 //               which renewal each is and where the plan stands now
-//   Upcoming    plans still set to renew within the next 7 days, soonest first
+//   Upcoming    plans still set to renew within the next 10 days, soonest first
 //   Test codes  super admin only (showTestCodes), behind its own Google
 //               Authenticator unlock (same authenticator as Settings)
 //
@@ -32,7 +32,7 @@ import SettingsLockGate, { isTestCodesLocked } from "@/components/super-admin/Se
 const PAGE_LIMIT = 20;
 const DEFAULT_PAYMENT_STATUSES = ["paid", "failed", "refunded", "partially_refunded", "open"];
 const RENEWED_STATUSES = ["paid", "partially_refunded", "refunded"];
-const UPCOMING_DAYS = 7;
+const UPCOMING_DAYS = 10;
 
 const TABS = [
   { value: "shipping", label: "Shipping" },
@@ -450,7 +450,7 @@ function UpcomingRenewalsTable({ rows, ...shell }) {
     <TableShell
       {...shell}
       empty={!rows?.length}
-      minWidth="min-w-[1240px]"
+      minWidth="min-w-[1360px]"
       head={
         <>
           <th scope="col" className={th}>Renews on</th>
@@ -461,6 +461,7 @@ function UpcomingRenewalsTable({ rows, ...shell }) {
           <th scope="col" className={th}>Renewal</th>
           <th scope="col" className={th}>Member since</th>
           <th scope="col" className={`${th} text-right`}>Last paid</th>
+          <th scope="col" className={`${th} text-right`}>Renewal amount</th>
           <th scope="col" className={th}>Plan now</th>
         </>
       }
@@ -468,6 +469,11 @@ function UpcomingRenewalsTable({ rows, ...shell }) {
       {rows?.map((r) => {
         const when = renewsIn(r.renews_at);
         const last = r.last_payment;
+        const next = r.next_charge;
+        // A renewal costing more than the member's last payment usually means
+        // their referral coupon fell off — worth a warning colour.
+        const nextUp =
+          next && last && Number(next.amount) > Number(last.amount_paid);
         return (
           <tr key={r.id} className="border-t border-[#F5F7FA] align-top">
             <td className={`${td} whitespace-nowrap`}>
@@ -495,6 +501,31 @@ function UpcomingRenewalsTable({ rows, ...shell }) {
                   <div className="text-[#A1A1A1] text-[11px]">
                     {PAYMENT_TYPE_LABEL[last.type] || humanizeStatus(last.type)} · {formatDate(last.date)}
                   </div>
+                </>
+              ) : (
+                <Dash />
+              )}
+            </td>
+            <td className={`${td} text-right tabular-nums whitespace-nowrap`}>
+              {next ? (
+                <>
+                  <div className={`font-semibold ${nextUp ? "text-[#A66B00]" : "text-[#252525]"}`}>
+                    {formatMoney(next.amount, next.currency)}
+                  </div>
+                  <div className="text-[#A1A1A1] text-[11px]">
+                    {Number(next.discount) > 0
+                      ? `after ${formatMoney(next.discount, next.currency)} off`
+                      : nextUp
+                        ? "no discount applied"
+                        : "from Stripe"}
+                  </div>
+                </>
+              ) : r.plan_price?.amount != null ? (
+                <>
+                  <div className="text-[#535359] font-semibold">
+                    {formatMoney(r.plan_price.amount, r.plan_price.currency)}
+                  </div>
+                  <div className="text-[#A1A1A1] text-[11px]">list price</div>
                 </>
               ) : (
                 <Dash />
@@ -861,7 +892,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
               : tab === "renewals"
                 ? "Members whose plan renewed: one row per paid renewal, newest first. Failed renewal attempts are left out (see Payments). Plan now shows where the subscription stands today."
                 : tab === "upcoming"
-                  ? `Members whose plan renews in the next ${UPCOMING_DAYS} days, soonest first. Cancelled plans are left out. Last paid is their most recent payment, a guide to the next charge.`
+                  ? `Members whose plan renews in the next ${UPCOMING_DAYS} days, soonest first. Cancelled plans are left out. Renewal amount is what Stripe will charge next, discounts included.`
                   : "Free single-use codes for testing app onboarding — redeemed like a purchase code, but with no payment, sales or commission behind them."
         }
         action={<UpdatingPill show={loading && Boolean(current)} />}

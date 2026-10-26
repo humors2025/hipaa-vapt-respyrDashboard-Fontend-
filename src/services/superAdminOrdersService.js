@@ -34,7 +34,7 @@
 //              current_period_start, current_period_end, stripe_subscription_id } ],
 //              filters: { days, … }, pagination: { … } }
 //            Plans still set to renew (active / trialing, not cancelled) whose
-//            period ends in the next `days` days (default 7), soonest first.
+//            period ends in the next `days` days (default 10), soonest first.
 
 import { apiFetcher } from "@/config/fetcher";
 import { API_ENDPOINTS } from "@/config/apiConfig";
@@ -62,7 +62,7 @@ export const fetchPaymentTransactionsService = async ({ status = "all", type = "
     limit,
   });
 
-export const fetchUpcomingRenewalsService = async ({ days = 7, search = "", page = 1, limit = 20 }) =>
+export const fetchUpcomingRenewalsService = async ({ days = 10, search = "", page = 1, limit = 20 }) =>
   post({ view: "upcoming_renewals", days, ...(search ? { search } : {}), page, limit });
 
 // Free app-onboarding test codes (super-admin-test-codes.js): rows shaped like a
