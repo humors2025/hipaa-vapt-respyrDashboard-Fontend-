@@ -144,6 +144,13 @@ export const API_ENDPOINTS = {
     // Super-admin "View as" (read-only impersonation)
     VIEWASLIST: `/${API_VERSION}/dietitian/api/web/super-admin-view-as-list`,
     VIEWASSTART: `/${API_VERSION}/dietitian/api/web/super-admin-view-as`,
+    // Its Google Authenticator gate (view-as-lock.js), separate from Settings/Test codes
+    VIEWASLOCKSTATUS: `/${API_VERSION}/dietitian/api/web/view-as-lock-status`,
+    VIEWASLOCKREQUEST: `/${API_VERSION}/dietitian/api/web/view-as-lock-request`,
+    VIEWASLOCKVERIFY: `/${API_VERSION}/dietitian/api/web/view-as-lock-verify`,
+    VIEWASMFASETUP: `/${API_VERSION}/dietitian/api/web/view-as-mfa-setup`,
+    VIEWASMFACONFIRM: `/${API_VERSION}/dietitian/api/web/view-as-mfa-confirm`,
+    VIEWASMFAVERIFY: `/${API_VERSION}/dietitian/api/web/view-as-mfa-verify`,
 
     VALIDATEINVITETOKEN: `/${API_VERSION}/dietitian/api/web/validate-invite-token`,
     ACCEPTINVITE: `/${API_VERSION}/dietitian/api/web/accept-invite`,

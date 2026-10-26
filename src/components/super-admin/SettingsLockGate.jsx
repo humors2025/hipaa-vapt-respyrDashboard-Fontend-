@@ -19,6 +19,14 @@ import {
   confirmTestCodesMfaSetupService,
   verifyTestCodesMfaService,
 } from "@/services/superAdminOrdersService";
+import {
+  fetchViewAsLockStatusService,
+  requestViewAsCodeService,
+  verifyViewAsCodeService,
+  startViewAsMfaSetupService,
+  confirmViewAsMfaSetupService,
+  verifyViewAsMfaService,
+} from "@/services/viewAsService";
 
 /**
  * Google Authenticator gate for Super Admin › Settings (kind "settings") and
@@ -38,6 +46,7 @@ import {
  */
 export const isSettingsLocked = (err) => err?.status === 403 && err?.data?.code === "SETTINGS_LOCKED";
 export const isTestCodesLocked = (err) => err?.status === 403 && err?.data?.code === "TEST_CODES_LOCKED";
+export const isViewAsLocked = (err) => err?.status === 403 && err?.data?.code === "VIEW_AS_LOCKED";
 
 const KINDS = {
   settings: {
@@ -59,6 +68,16 @@ const KINDS = {
     startSetup: startTestCodesMfaSetupService,
     confirmSetup: confirmTestCodesMfaSetupService,
     verify: verifyTestCodesMfaService,
+  },
+  viewAs: {
+    area: "View as",
+    entry: "Rysflo View as",
+    status: fetchViewAsLockStatusService,
+    requestEmail: requestViewAsCodeService,
+    verifyEmail: verifyViewAsCodeService,
+    startSetup: startViewAsMfaSetupService,
+    confirmSetup: confirmViewAsMfaSetupService,
+    verify: verifyViewAsMfaService,
   },
 };
 
@@ -88,6 +107,8 @@ function CodeForm({ value, onChange, onSubmit, busy, label, placeholder = "•�
 export default function SettingsLockGate({ children, kind = "settings", title, subtitle }) {
   const cfg = KINDS[kind] || KINDS.settings;
   const { area, entry } = cfg;
+  // "Settings are locked" / "Test codes are locked", but "View as is locked".
+  const lockedHeading = kind === "viewAs" ? `${area} is locked` : `${area} are locked`;
   // checking | error | email | setup | backup | app | unlocked
   const [stage, setStage] = useState("checking");
   const [sentTo, setSentTo] = useState("");
@@ -222,7 +243,7 @@ export default function SettingsLockGate({ children, kind = "settings", title, s
 
       {stage === "error" && (
         <>
-          <h2 className="text-[#252525] text-[14px] font-bold">{area} are locked</h2>
+          <h2 className="text-[#252525] text-[14px] font-bold">{lockedHeading}</h2>
           <button type="button" onClick={check} className={primary}>Try again</button>
         </>
       )}
@@ -230,7 +251,7 @@ export default function SettingsLockGate({ children, kind = "settings", title, s
       {stage === "app" && (
         <>
           <div>
-            <h2 className="text-[#252525] text-[14px] font-bold">{area} are locked</h2>
+            <h2 className="text-[#252525] text-[14px] font-bold">{lockedHeading}</h2>
             <p className="text-[#535359] text-[12px] mt-1">
               Enter the 6-digit code from Google Authenticator (under &ldquo;{entry}&rdquo;). Lost your phone? Enter one of your backup codes instead. Access stays open until you log out.
             </p>
@@ -244,7 +265,11 @@ export default function SettingsLockGate({ children, kind = "settings", title, s
           <div>
             <h2 className="text-[#252525] text-[14px] font-bold">Set up Google Authenticator</h2>
             <p className="text-[#535359] text-[12px] mt-1">
-              {kind === "testCodes" ? "Test codes have their own Google Authenticator entry, separate from Settings." : "Settings are protected with Google Authenticator."} To set it up, first enter the 6-digit code emailed to {sentTo || "the settings inbox"}.
+              {kind === "testCodes"
+                ? "Test codes have their own Google Authenticator entry, separate from Settings."
+                : kind === "viewAs"
+                ? "View as has its own Google Authenticator entry, separate from Settings and Test codes."
+                : "Settings are protected with Google Authenticator."} To set it up, first enter the 6-digit code emailed to {sentTo || "the settings inbox"}.
             </p>
           </div>
           {!codeSent ? (
