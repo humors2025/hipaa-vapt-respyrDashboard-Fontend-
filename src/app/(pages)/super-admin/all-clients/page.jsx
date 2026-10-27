@@ -295,6 +295,7 @@ export default function SuperAdminAllClientsPage() {
               <th className="py-2.5 px-3 xl:px-4 font-semibold">Status</th>
               <th className="py-2.5 px-3 xl:px-4 font-semibold text-right">Score</th>
               <th className="py-2.5 px-3 xl:px-4 font-semibold">Zone</th>
+              <th className="py-2.5 px-3 xl:px-4 font-semibold text-right">Tests</th>
               <th className="hidden lg:table-cell py-2.5 px-3 xl:px-4 font-semibold text-right">Acetone</th>
               <th className="hidden lg:table-cell py-2.5 px-3 xl:px-4 font-semibold text-right">Ethanol</th>
               <th className="hidden lg:table-cell py-2.5 px-3 xl:px-4 font-semibold text-right">H₂</th>
@@ -306,7 +307,7 @@ export default function SuperAdminAllClientsPage() {
             {loading ? (
               <tr>
                 <td
-                  colSpan={12}
+                  colSpan={13}
                   className="py-8 px-4 text-center text-[#A1A1A1] text-[12px]"
                 >
                   Loading clients...
@@ -315,7 +316,7 @@ export default function SuperAdminAllClientsPage() {
             ) : clients.length === 0 ? (
               <tr>
                 <td
-                  colSpan={12}
+                  colSpan={13}
                   className="py-8 px-4 text-center text-[#A1A1A1] text-[12px]"
                 >
                   No clients match your filters.
@@ -399,6 +400,15 @@ export default function SuperAdminAllClientsPage() {
                         <div className="lg:hidden text-[#A1A1A1] text-[11px] mt-1 whitespace-nowrap">
                           {gasMeta}
                         </div>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3 xl:px-4 text-right">
+                      {c.test_history?.lifetime_test_count != null ? (
+                        <span className="text-[#252525] font-semibold tabular-nums">
+                          {c.test_history.lifetime_test_count}
+                        </span>
+                      ) : (
+                        <span className="text-[#A1A1A1]">0</span>
                       )}
                     </td>
                     <td className="hidden lg:table-cell py-2.5 px-3 xl:px-4 text-right text-[#535359]">
