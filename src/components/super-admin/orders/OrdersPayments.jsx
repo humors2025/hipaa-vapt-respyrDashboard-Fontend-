@@ -477,10 +477,11 @@ function UpcomingRenewalsTable({ rows, ...shell }) {
         const when = renewsIn(r.renews_at);
         const last = r.last_payment;
         const next = r.next_charge;
-        // A renewal costing more than the member's last payment usually means
-        // their referral coupon fell off — worth a warning colour.
-        const nextUp =
-          next && last && Number(next.amount) > Number(last.amount_paid);
+        const expected = r.expected_charge;
+        // Stripe set to charge something other than the member's entitled
+        // price (usually a dropped referral coupon) — flag it.
+        const mismatch =
+          next && expected && Number(next.amount) !== Number(expected.amount);
         return (
           <tr key={r.id} className="border-t border-[#F5F7FA] align-top">
             <td className={`${td} whitespace-nowrap`}>
@@ -514,18 +515,24 @@ function UpcomingRenewalsTable({ rows, ...shell }) {
               )}
             </td>
             <td className={`${td} text-right tabular-nums whitespace-nowrap`}>
-              {next ? (
+              {expected ? (
                 <>
-                  <div className={`font-semibold ${nextUp ? "text-[#A66B00]" : "text-[#252525]"}`}>
-                    {formatMoney(next.amount, next.currency)}
+                  <div className="text-[#252525] font-semibold">
+                    {formatMoney(expected.amount, expected.currency)}
                   </div>
                   <div className="text-[#A1A1A1] text-[11px]">
-                    {Number(next.discount) > 0
-                      ? `after ${formatMoney(next.discount, next.currency)} off`
-                      : nextUp
-                        ? "no discount applied"
-                        : "from Stripe"}
+                    {expected.discounted ? "referral price" : "list price"}
                   </div>
+                  {mismatch && (
+                    <div className="text-[#A66B00] text-[11px]">
+                      Stripe set to charge {formatMoney(next.amount, next.currency)}
+                    </div>
+                  )}
+                </>
+              ) : next ? (
+                <>
+                  <div className="text-[#252525] font-semibold">{formatMoney(next.amount, next.currency)}</div>
+                  <div className="text-[#A1A1A1] text-[11px]">from Stripe</div>
                 </>
               ) : r.plan_price?.amount != null ? (
                 <>
@@ -899,7 +906,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
               : tab === "renewals"
                 ? "Members whose plan renewed: one row per paid renewal, newest first. Failed renewal attempts are left out (see Payments). Plan now shows where the subscription stands today."
                 : tab === "upcoming"
-                  ? `Members whose plan renews in the next ${UPCOMING_DAYS} days, soonest first. Cancelled plans are left out. Renewal amount is what Stripe will charge next, discounts included.`
+                  ? `Members whose plan renews in the next ${UPCOMING_DAYS} days, soonest first. Cancelled plans are left out. Renewal amount is the member's price: the discounted referral price when they bought with a partner code, list price otherwise.`
                   : "Free single-use codes for testing app onboarding — redeemed like a purchase code, but with no payment, sales or commission behind them."
         }
         action={<UpdatingPill show={loading && Boolean(current)} />}
