@@ -23,6 +23,7 @@ import {
   fetchTestCodesService,
   fetchUpcomingRenewalsService,
   generateTestCodesService,
+  restoreSubscriptionDiscountService,
 } from "@/services/superAdminOrdersService";
 import { formatDate, formatMoney, humanizeStatus } from "@/components/super-admin/sales/salesFormat";
 import { SalesCard, UpdatingPill, Skeleton, EmptyState, SectionError, StatusBadge } from "@/components/super-admin/sales/SalesUi";
@@ -452,7 +453,29 @@ function renewsIn(iso) {
   return { text: `In ${days} days`, tone: "text-[#A1A1A1]" };
 }
 
-function UpcomingRenewalsTable({ rows, ...shell }) {
+function UpcomingRenewalsTable({ rows, canRepair = false, ...shell }) {
+  // Per-subscription repair state: "working" | "repaired" | "ok" (already had
+  // its discount) — keyed by stripe_subscription_id.
+  const [repairState, setRepairState] = useState({});
+
+  const restoreDiscount = async (r) => {
+    const id = r.stripe_subscription_id;
+    setRepairState((s) => ({ ...s, [id]: "working" }));
+    try {
+      const res = await restoreSubscriptionDiscountService(id);
+      if (res?.repaired) {
+        setRepairState((s) => ({ ...s, [id]: "repaired" }));
+        toast.success(`Discount restored — ${r.customer?.name || id} renews at the referral price.`);
+      } else {
+        setRepairState((s) => ({ ...s, [id]: "ok" }));
+        toast.info(res?.message || "Subscription already has its discount.");
+      }
+    } catch (err) {
+      setRepairState((s) => ({ ...s, [id]: undefined }));
+      toast.error(err?.data?.message || err?.message || "Could not restore the discount.");
+    }
+  };
+
   return (
     <TableShell
       {...shell}
@@ -527,6 +550,22 @@ function UpcomingRenewalsTable({ rows, ...shell }) {
                     <div className="text-[#A66B00] text-[11px]">
                       Stripe set to charge {formatMoney(next.amount, next.currency)}
                     </div>
+                  )}
+                  {canRepair && r.partner_code && (
+                    repairState[r.stripe_subscription_id] === "repaired" ? (
+                      <div className="text-[#1F7A4A] text-[11px] font-semibold">Discount restored ✓</div>
+                    ) : repairState[r.stripe_subscription_id] === "ok" ? (
+                      <div className="text-[#A1A1A1] text-[11px]">Discount already on file</div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => restoreDiscount(r)}
+                        disabled={repairState[r.stripe_subscription_id] === "working"}
+                        className="text-[#308BF9] text-[11px] underline underline-offset-2 hover:text-[#1D57A0] disabled:text-[#A1A1A1] disabled:no-underline cursor-pointer disabled:cursor-wait"
+                      >
+                        {repairState[r.stripe_subscription_id] === "working" ? "Restoring…" : "Restore discount"}
+                      </button>
+                    )
                   )}
                 </>
               ) : next ? (
@@ -1015,6 +1054,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
         ) : tab === "upcoming" ? (
           <UpcomingRenewalsTable
             rows={current?.upcoming}
+            canRepair={showTestCodes}
             {...shell}
             emptyMessage={
               filtersActive ? "No upcoming renewals match this search." : `No plans renew in the next ${UPCOMING_DAYS} days.`
