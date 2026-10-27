@@ -209,6 +209,8 @@ export const API_ENDPOINTS = {
   SALES: {
     SUPERADMINSALESANALYTICS: `/${API_VERSION}/dietitian/api/web/super-admin-sales-analytics`,
     SUPERADMINORDERS: `/${API_VERSION}/dietitian/api/web/super-admin-orders`,
+    // Re-attach a subscription's own referral promo code in Stripe (super_admin).
+    RESTORESUBSCRIPTIONDISCOUNT: `/${API_VERSION}/dietitian/api/web/restore-subscription-discount`,
     // Facility admin › Payments: the same payment rows, for their own facility only.
     FACILITYADMINPAYMENTS: `/${API_VERSION}/dietitian/api/web/facility-admin-payments`,
     SUPERADMINTESTCODES: `/${API_VERSION}/dietitian/api/web/super-admin-test-codes`,

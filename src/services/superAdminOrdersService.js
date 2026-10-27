@@ -65,6 +65,17 @@ export const fetchPaymentTransactionsService = async ({ status = "all", type = "
 export const fetchUpcomingRenewalsService = async ({ days = 10, search = "", page = 1, limit = 20 }) =>
   post({ view: "upcoming_renewals", days, ...(search ? { search } : {}), page, limit });
 
+// Re-attach the subscription's own referral promo code in Stripe so the next
+// renewal bills the referred price again (repairs the pre-5-Oct coupon loss).
+// Idempotent: { repaired: true } when the discount was put back, false with a
+// message ("already has its discount") when nothing needed doing. super_admin only.
+export const restoreSubscriptionDiscountService = async (stripeSubscriptionId) =>
+  apiFetcher(API_ENDPOINTS.SALES.RESTORESUBSCRIPTIONDISCOUNT, {
+    method: "POST",
+    body: JSON.stringify({ stripe_subscription_id: stripeSubscriptionId }),
+    timeoutMs: 29000,
+  });
+
 // Free app-onboarding test codes (super-admin-test-codes.js): rows shaped like a
 // paid purchase in trainer_client_plan_subscriptions, so the app redeems them
 // as usual, but with no Stripe payment behind them. One redemption per code.
