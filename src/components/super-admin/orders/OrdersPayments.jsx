@@ -316,11 +316,12 @@ function PaymentsTable({ rows, ...shell }) {
     <TableShell
       {...shell}
       empty={!rows?.length}
-      minWidth="min-w-[1080px]"
+      minWidth="min-w-[1160px]"
       head={
         <>
           <th scope="col" className={th}>Date</th>
           <th scope="col" className={th}>Customer</th>
+          <th scope="col" className={th}>Code</th>
           <th scope="col" className={th}>Type</th>
           <th scope="col" className={th}>Billing period</th>
           <th scope="col" className={`${th} text-right`}>Paid</th>
@@ -342,6 +343,9 @@ function PaymentsTable({ rows, ...shell }) {
             <td className={`${td} text-[#535359] whitespace-nowrap`}>{formatDate(r.date, true)}</td>
             <td className={`${td} max-w-[200px]`}>
               <Customer customer={r.customer} />
+            </td>
+            <td className={`${td} whitespace-nowrap`}>
+              {r.partner_code ? <span className="font-mono text-[11px] text-[#535359]">{r.partner_code}</span> : <Dash />}
             </td>
             <td className={`${td} text-[#535359] whitespace-nowrap`}>{PAYMENT_TYPE_LABEL[r.type] || humanizeStatus(r.type)}</td>
             <td className={`${td} text-[#535359] whitespace-nowrap`}>
