@@ -453,6 +453,13 @@ function renewsIn(iso) {
   return { text: `In ${days} days`, tone: "text-[#A1A1A1]" };
 }
 
+// "2026-10" -> "Oct"
+function shortMonth(ym) {
+  const [y, m] = String(ym || "").split("-").map(Number);
+  if (!y || !m) return ym || "";
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+}
+
 function UpcomingRenewalsTable({ rows, canRepair = false, ...shell }) {
   // Per-subscription repair state: "working" | "repaired" | "ok" (already had
   // its discount) — keyed by stripe_subscription_id.
@@ -480,7 +487,7 @@ function UpcomingRenewalsTable({ rows, canRepair = false, ...shell }) {
     <TableShell
       {...shell}
       empty={!rows?.length}
-      minWidth="min-w-[1360px]"
+      minWidth="min-w-[1460px]"
       head={
         <>
           <th scope="col" className={th}>Renews on</th>
@@ -490,6 +497,7 @@ function UpcomingRenewalsTable({ rows, canRepair = false, ...shell }) {
           <th scope="col" className={th}>Facility admin</th>
           <th scope="col" className={th}>Renewal</th>
           <th scope="col" className={th}>Member since</th>
+          <th scope="col" className={`${th} text-right`}>Tests by month</th>
           <th scope="col" className={`${th} text-right`}>Last paid</th>
           <th scope="col" className={`${th} text-right`}>Renewal amount</th>
           <th scope="col" className={th}>Plan now</th>
@@ -533,6 +541,25 @@ function UpcomingRenewalsTable({ rows, canRepair = false, ...shell }) {
             </td>
             <td className={`${td} text-[#252525] whitespace-nowrap`}>{ordinal((Number(r.renewals_so_far) || 0) + 1)}</td>
             <td className={`${td} text-[#535359] whitespace-nowrap`}>{formatDate(r.purchased_at)}</td>
+            <td className={`${td} text-right tabular-nums whitespace-nowrap`}>
+              {Array.isArray(r.tests_monthly) && r.tests_monthly.length ? (
+                <>
+                  {r.tests_monthly.map((t) => (
+                    <div key={t.month} className="text-[12px]">
+                      <span className="text-[#A1A1A1]">{shortMonth(t.month)}</span>{" "}
+                      <span className={Number(t.count) > 0 ? "text-[#252525] font-semibold" : "text-[#A1A1A1]"}>
+                        {Number(t.count) || 0}
+                      </span>
+                    </div>
+                  ))}
+                  {r.total_test_taken != null && (
+                    <div className="text-[#A1A1A1] text-[11px]">total {r.total_test_taken}</div>
+                  )}
+                </>
+              ) : (
+                <Dash />
+              )}
+            </td>
             <td className={`${td} text-right tabular-nums whitespace-nowrap`}>
               {last ? (
                 <>
