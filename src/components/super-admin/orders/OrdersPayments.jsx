@@ -505,6 +505,14 @@ function UpcomingRenewalsTable({ rows, canRepair = false, ...shell }) {
         // price (usually a dropped referral coupon) — flag it.
         const mismatch =
           next && expected && Number(next.amount) !== Number(expected.amount);
+        // A discount only exists when the member's price is below list price;
+        // a code purchase at list price (e.g. the $1 test plan, where list and
+        // referred were equal so no coupon was ever created) has nothing to
+        // restore.
+        const hasRealDiscount =
+          expected &&
+          r.plan_price?.amount != null &&
+          Number(expected.amount) < Number(r.plan_price.amount);
         return (
           <tr key={r.id} className="border-t border-[#F5F7FA] align-top">
             <td className={`${td} whitespace-nowrap`}>
@@ -544,14 +552,14 @@ function UpcomingRenewalsTable({ rows, canRepair = false, ...shell }) {
                     {formatMoney(expected.amount, expected.currency)}
                   </div>
                   <div className="text-[#A1A1A1] text-[11px]">
-                    {expected.discounted ? "referral price" : "list price"}
+                    {expected.discounted && hasRealDiscount ? "referral price" : "list price"}
                   </div>
                   {mismatch && (
                     <div className="text-[#A66B00] text-[11px]">
                       Stripe set to charge {formatMoney(next.amount, next.currency)}
                     </div>
                   )}
-                  {canRepair && r.partner_code && (
+                  {canRepair && r.partner_code && hasRealDiscount && (
                     repairState[r.stripe_subscription_id] === "repaired" ? (
                       <div className="text-[#1F7A4A] text-[11px] font-semibold">Discount restored ✓</div>
                     ) : repairState[r.stripe_subscription_id] === "ok" ? (
