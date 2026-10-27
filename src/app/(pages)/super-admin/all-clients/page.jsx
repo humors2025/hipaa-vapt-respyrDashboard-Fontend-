@@ -295,7 +295,10 @@ export default function SuperAdminAllClientsPage() {
               <th className="py-2.5 px-3 xl:px-4 font-semibold">Status</th>
               <th className="py-2.5 px-3 xl:px-4 font-semibold text-right">Score</th>
               <th className="py-2.5 px-3 xl:px-4 font-semibold">Zone</th>
-              <th className="py-2.5 px-3 xl:px-4 font-semibold text-right">Tests</th>
+              <th className="py-2.5 px-3 xl:px-4 font-semibold text-right whitespace-nowrap">
+                Tests
+                <span className="block text-[10px] font-normal text-[#A1A1A1]">incl. re-tests</span>
+              </th>
               <th className="hidden lg:table-cell py-2.5 px-3 xl:px-4 font-semibold text-right">Acetone</th>
               <th className="hidden lg:table-cell py-2.5 px-3 xl:px-4 font-semibold text-right">Ethanol</th>
               <th className="hidden lg:table-cell py-2.5 px-3 xl:px-4 font-semibold text-right">H₂</th>
