@@ -559,7 +559,10 @@ function UpcomingRenewalsTable({ rows, canRepair = false, ...shell }) {
                       Stripe set to charge {formatMoney(next.amount, next.currency)}
                     </div>
                   )}
-                  {canRepair && r.partner_code && hasRealDiscount && (
+                  {/* Repair control only where Stripe actually disagrees with
+                      the entitled price (the amber rows): a healthy row gets
+                      no button, so nothing invites a pointless click. */}
+                  {canRepair && r.partner_code && hasRealDiscount && mismatch && (
                     repairState[r.stripe_subscription_id] === "repaired" ? (
                       <div className="text-[#1F7A4A] text-[11px] font-semibold">Discount restored ✓</div>
                     ) : repairState[r.stripe_subscription_id] === "ok" ? (
