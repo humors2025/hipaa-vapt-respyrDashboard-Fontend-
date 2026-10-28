@@ -591,7 +591,7 @@ function UpcomingRenewalsTable({ rows, canRepair = false, ...shell }) {
                   </div>
                   {credit && Number(credit.amount) > 0 && (
                     <div className="text-[#1F7A4A] text-[11px]">
-                      − {formatMoney(credit.amount, credit.currency)} breath credit ({credit.tests} test{Number(credit.tests) === 1 ? "" : "s"} so far)
+                      − {formatMoney(credit.amount, credit.currency)} breath credit ({credit.days} reading day{Number(credit.days) === 1 ? "" : "s"} so far)
                     </div>
                   )}
                   {mismatch && (
