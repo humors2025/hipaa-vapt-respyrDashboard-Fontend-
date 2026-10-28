@@ -509,10 +509,18 @@ function UpcomingRenewalsTable({ rows, canRepair = false, ...shell }) {
         const last = r.last_payment;
         const next = r.next_charge;
         const expected = r.expected_charge;
+        const credit = r.breath_credit;
         // Stripe set to charge something other than the member's entitled
-        // price (usually a dropped referral coupon) — flag it.
+        // price (usually a dropped referral coupon) — flag it. Entitled price
+        // minus the breath credit is also healthy: in the last ~36h before
+        // renewal the credit job lowers Stripe's amount_due on purpose.
+        const cents = (x) => Math.round(Number(x) * 100);
+        const creditCents = credit ? cents(credit.amount) : 0;
         const mismatch =
-          next && expected && Number(next.amount) !== Number(expected.amount);
+          next &&
+          expected &&
+          cents(next.amount) !== cents(expected.amount) &&
+          cents(next.amount) !== Math.max(0, cents(expected.amount) - creditCents);
         // A discount only exists when the member's price is below list price;
         // a code purchase at list price (e.g. the $1 test plan, where list and
         // referred were equal so no coupon was ever created) has nothing to
@@ -581,6 +589,11 @@ function UpcomingRenewalsTable({ rows, canRepair = false, ...shell }) {
                   <div className="text-[#A1A1A1] text-[11px]">
                     {expected.discounted && hasRealDiscount ? "referral price" : "list price"}
                   </div>
+                  {credit && Number(credit.amount) > 0 && (
+                    <div className="text-[#1F7A4A] text-[11px]">
+                      − {formatMoney(credit.amount, credit.currency)} breath credit ({credit.tests} test{Number(credit.tests) === 1 ? "" : "s"} so far)
+                    </div>
+                  )}
                   {mismatch && (
                     <div className="text-[#A66B00] text-[11px]">
                       Stripe set to charge {formatMoney(next.amount, next.currency)}
