@@ -496,7 +496,7 @@ function UpcomingRenewalsTable({ rows, canRepair = false, ...shell }) {
           <th scope="col" className={th}>Facility</th>
           <th scope="col" className={th}>Facility admin</th>
           <th scope="col" className={th}>Renewal</th>
-          <th scope="col" className={th}>Member since</th>
+          <th scope="col" className={th}>Purchased on</th>
           <th scope="col" className={`${th} text-right`}>Tests by month</th>
           <th scope="col" className={`${th} text-right`}>Last paid</th>
           <th scope="col" className={`${th} text-right`}>Renewal amount</th>
@@ -548,7 +548,7 @@ function UpcomingRenewalsTable({ rows, canRepair = false, ...shell }) {
               <FacilityAdmin facility={r.facility} />
             </td>
             <td className={`${td} text-[#252525] whitespace-nowrap`}>{ordinal((Number(r.renewals_so_far) || 0) + 1)}</td>
-            <td className={`${td} text-[#535359] whitespace-nowrap`}>{formatDate(r.purchased_at)}</td>
+            <td className={`${td} text-[#535359] whitespace-nowrap`}>{formatDate(r.purchased_at, true)}</td>
             <td className={`${td} text-right tabular-nums whitespace-nowrap`}>
               {Array.isArray(r.tests_monthly) && r.tests_monthly.length ? (
                 <>
