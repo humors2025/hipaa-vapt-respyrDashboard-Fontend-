@@ -590,9 +590,14 @@ function UpcomingRenewalsTable({ rows, canRepair = false, ...shell }) {
                     {expected.discounted && hasRealDiscount ? "referral price" : "list price"}
                   </div>
                   {credit && Number(credit.amount) > 0 && (
-                    <div className="text-[#1F7A4A] text-[11px]">
-                      − {formatMoney(credit.amount, credit.currency)} breath credit ({credit.tests} test{Number(credit.tests) === 1 ? "" : "s"} so far)
-                    </div>
+                    <>
+                      <div className="text-[#1F7A4A] text-[11px]">
+                        − {formatMoney(credit.amount, credit.currency)} breath credit ({credit.days} reading day{Number(credit.days) === 1 ? "" : "s"} so far)
+                      </div>
+                      <div className="text-[#252525] text-[11px] font-semibold">
+                        = {formatMoney(Math.max(0, cents(expected.amount) - creditCents) / 100, expected.currency)} after credit
+                      </div>
+                    </>
                   )}
                   {mismatch && (
                     <div className="text-[#A66B00] text-[11px]">
