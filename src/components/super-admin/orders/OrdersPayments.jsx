@@ -140,7 +140,10 @@ export function describePlan(r) {
   if (running && endMs !== null && endMs <= Date.now()) status = "expired";
 
   let note = null;
-  if (status === "cancelled" || status === "canceled") {
+  if (running && status !== "expired" && r.renewal_pending) {
+    // Stripe opened the next period but its invoice is not paid yet.
+    note = { text: "Renewal payment pending", tone: "text-[#A66B00]" };
+  } else if (status === "cancelled" || status === "canceled") {
     note = r.canceled_at ? { text: `Cancelled ${formatDate(r.canceled_at)}`, tone: "text-[#B5363A]" } : null;
   } else if (status === "expired" && endMs !== null) {
     note = { text: `Ended ${formatDate(r.current_period_end)}`, tone: "text-[#535359]" };
@@ -292,7 +295,14 @@ function ShippingTable({ rows, ...shell }) {
               <FacilityAdmin facility={r.facility} />
             </td>
             <td className={`${td} text-[#535359] whitespace-nowrap`}>
-              {r.current_period_start || r.current_period_end ? (
+              {r.renewal_pending && r.paid_period ? (
+                // Show the period actually paid for, not the one Stripe opened.
+                <>
+                  <div>{formatDate(r.paid_period.start)}</div>
+                  <div className="text-[#A1A1A1] text-[11px]">to {formatDate(r.paid_period.end)}</div>
+                  <div className="text-[#A66B00] text-[11px]">Next period unpaid</div>
+                </>
+              ) : r.current_period_start || r.current_period_end ? (
                 <>
                   <div>{formatDate(r.current_period_start)}</div>
                   <div className="text-[#A1A1A1] text-[11px]">to {formatDate(r.current_period_end)}</div>
