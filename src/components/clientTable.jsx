@@ -209,6 +209,7 @@ const formatLastLoggedDate = (dateString) => {
       dieticianId: client.dietician_id,
       profileId: client.profile_id,
       phone: client.phone,
+      email: client.email || "",
       dob: client.dob,
       joined_dttm: client.joined_dttm,
     }));
@@ -425,6 +426,14 @@ const formatLastLoggedDate = (dateString) => {
                                 </span>
                               )}
                             </span>
+                            {client.email && (
+                              <span
+                                className="text-[#535359] text-[10px] font-normal leading-normal tracking-[-0.2px] break-all"
+                                title={client.email}
+                              >
+                                {client.email}
+                              </span>
+                            )}
                             <span className="font-normal text-[10px] leading-normal tracking-[-0.2px]">
                               {client.displayAge}
                             </span>
