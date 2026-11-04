@@ -176,8 +176,9 @@ export default function ReadingTrackerPage() {
             Reading Tracker
           </h1>
           <p className="text-[#535359] text-[13px] mt-1">
-            Which days each paid profile took or missed a breath reading. Days follow the date
-            stored with each test, and the latest two days aren&apos;t marked missed yet.
+            Clients with a successful payment in Orders › Payments, and the days they took or
+            missed a breath reading. Days follow the date stored with each test, and the latest
+            two days aren&apos;t marked missed yet.
           </p>
         </div>
         <button
