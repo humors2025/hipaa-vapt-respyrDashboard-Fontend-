@@ -42,6 +42,7 @@ const MENU = [
     submenu: [
       { name: "Client Directory", path: "/super-admin/client-directory" },
       { name: "All Clients", path: "/super-admin/all-clients" },
+      { name: "Reading Tracker", path: "/super-admin/reading-tracker" },
     ],
   },
   { name: "TA Analytics",    icon: "/icons/hugeicons_note-01.svg",        path: "/super-admin/analytics" },
