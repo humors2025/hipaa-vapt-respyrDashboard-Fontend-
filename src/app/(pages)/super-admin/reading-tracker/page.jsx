@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchReadingTrackerService } from "@/services/superAdminReadingTrackerService";
 
@@ -15,7 +15,7 @@ const SORT_OPTIONS = [
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
 const CELL_STYLES = {
-  taken: { cls: "bg-[#E5F6EE] text-[#1F7A4A]", mark: "✓", label: "Reading taken" },
+  taken: { cls: "bg-[#E5F6EE] text-[#1F7A4A]", mark: "1", label: "Readings taken that day" },
   missed: { cls: "bg-[#FCEAEB] text-[#B5363A]", mark: "✕", label: "Missed" },
   pending: { cls: "bg-[#FFF4E0] text-[#A66B00]", mark: "•", label: "No reading yet" },
   none: { cls: "bg-[#F1F3F5] text-transparent", mark: "", label: "Not counted" },
@@ -42,6 +42,23 @@ function formatDay(iso) {
   });
 }
 
+// Times are shown exactly as stored with the test, never converted.
+function formatTime(time) {
+  const [h, m, s] = time.split(":");
+  const hour = Number(h);
+  return `${hour % 12 || 12}:${m}:${s} ${hour < 12 ? "AM" : "PM"}`;
+}
+
+function formatDateTime(value) {
+  if (!value) return "–";
+  const [day, time] = value.split(" ");
+  return `${formatDay(day)}, ${formatTime(time)}`;
+}
+
+function readingsLabel(count) {
+  return `${count} reading${count === 1 ? "" : "s"}`;
+}
+
 function SummaryCard({ label, value, tone = "text-[#252525]" }) {
   return (
     <div className="rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2.5">
@@ -51,16 +68,19 @@ function SummaryCard({ label, value, tone = "text-[#252525]" }) {
   );
 }
 
-function DayCell({ state, day }) {
+function DayCell({ state, day, times }) {
   const style = CELL_STYLES[state];
+  const detail = times
+    ? `${readingsLabel(times.length)} at ${times.map(formatTime).join(", ")}`
+    : style.label;
   return (
     <td className="p-[2px]">
       <div
-        title={`${formatDay(day)}: ${style.label}`}
-        aria-label={`${formatDay(day)}: ${style.label}`}
+        title={`${formatDay(day)}: ${detail}`}
+        aria-label={`${formatDay(day)}: ${detail}`}
         className={`w-[22px] h-[22px] rounded-[4px] flex items-center justify-center text-[11px] font-bold ${style.cls}`}
       >
-        {style.mark}
+        {times ? times.length : style.mark}
       </div>
     </td>
   );
@@ -78,6 +98,12 @@ export default function ReadingTrackerPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [openProfileId, setOpenProfileId] = useState(null);
+
+  // Open reading lists belong to the rows on screen.
+  useEffect(() => {
+    setOpenProfileId(null);
+  }, [month, search, sort, page]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -171,9 +197,10 @@ export default function ReadingTrackerPage() {
       )}
 
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <SummaryCard label="Paid profiles" value={summary.paid_profiles} />
           <SummaryCard label="Days taken" value={summary.taken_days} tone="text-[#1F7A4A]" />
+          <SummaryCard label="Total readings" value={summary.readings} tone="text-[#1F7A4A]" />
           <SummaryCard label="Days missed" value={summary.missed_days} tone="text-[#B5363A]" />
           <SummaryCard label="No reading this month" value={summary.no_reading} tone="text-[#A86A00]" />
           <SummaryCard label="Not linked yet" value={summary.not_linked} tone="text-[#A1A1A1]" />
@@ -247,7 +274,8 @@ export default function ReadingTrackerPage() {
                   <div className="font-normal text-[#A1A1A1]">{d.weekday}</div>
                 </th>
               ))}
-              <th className="py-2.5 px-3 font-semibold text-right">Taken</th>
+              <th className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">Days taken</th>
+              <th className="py-2.5 px-3 font-semibold text-right">Readings</th>
               <th className="py-2.5 px-3 font-semibold text-right">Missed</th>
               <th className="py-2.5 px-3 font-semibold whitespace-nowrap">Last reading</th>
             </tr>
@@ -255,7 +283,7 @@ export default function ReadingTrackerPage() {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={days.length + 4} className="py-8 px-4 text-center text-[#A1A1A1]">
+                <td colSpan={days.length + 5} className="py-8 px-4 text-center text-[#A1A1A1]">
                   {loading ? "Loading..." : error ? "Could not load this month." : "No paid profiles for this month."}
                 </td>
               </tr>
@@ -264,11 +292,10 @@ export default function ReadingTrackerPage() {
                 const takenSet = new Set(row.taken_days);
                 const missedSet = new Set(row.missed_days);
                 const pendingSet = new Set(row.pending_days);
+                const isOpen = row.linked && openProfileId === row.profile_id;
                 return (
-                  <tr
-                    key={row.profile_id || row.email || row.purchased_on}
-                    className="group hover:bg-[#F5F7FA]"
-                  >
+                  <Fragment key={row.profile_id || row.email || row.purchased_on}>
+                  <tr className="group hover:bg-[#F5F7FA]">
                     <td className="sticky left-0 z-10 bg-white group-hover:bg-[#F5F7FA] py-2 px-3 border-t border-[#F5F7FA]">
                       {row.linked ? (
                         <button
@@ -282,6 +309,9 @@ export default function ReadingTrackerPage() {
                         <div className="text-[#252525] font-semibold">{row.name || "–"}</div>
                       )}
                       <div className="text-[#A1A1A1] text-[11px] break-all">{row.email || "–"}</div>
+                      <div className="text-[#535359] text-[11px] font-mono">
+                        {row.profile_id || "No profile ID yet"}
+                      </div>
                       <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                         <span
                           className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 capitalize ${
@@ -294,6 +324,16 @@ export default function ReadingTrackerPage() {
                           Bought {formatDay(row.purchased_on)}
                         </span>
                       </div>
+                      {row.reading_count > 0 && (
+                        <button
+                          type="button"
+                          aria-expanded={isOpen}
+                          onClick={() => setOpenProfileId(isOpen ? null : row.profile_id)}
+                          className="mt-1 text-[#308BF9] text-[11px] font-semibold cursor-pointer"
+                        >
+                          {isOpen ? "Hide date & time" : "View date & time"}
+                        </button>
+                      )}
                     </td>
                     {row.linked ? (
                       days.map((d) => (
@@ -301,6 +341,7 @@ export default function ReadingTrackerPage() {
                           key={d.iso}
                           day={d.iso}
                           state={cellState(takenSet, missedSet, pendingSet, d.iso)}
+                          times={row.reading_times?.[d.iso]}
                         />
                       ))
                     ) : (
@@ -314,13 +355,49 @@ export default function ReadingTrackerPage() {
                     <td className="py-2 px-3 text-right font-semibold text-[#1F7A4A] tabular-nums border-t border-[#F5F7FA]">
                       {row.linked ? row.taken_days.length : "–"}
                     </td>
+                    <td className="py-2 px-3 text-right font-semibold text-[#1F7A4A] tabular-nums border-t border-[#F5F7FA]">
+                      {row.linked ? row.reading_count : "–"}
+                    </td>
                     <td className="py-2 px-3 text-right font-semibold text-[#B5363A] tabular-nums border-t border-[#F5F7FA]">
                       {row.linked ? row.missed_days.length : "–"}
                     </td>
                     <td className="py-2 px-3 text-[#535359] whitespace-nowrap border-t border-[#F5F7FA]">
-                      {formatDay(row.last_reading)}
+                      {formatDateTime(row.last_reading)}
                     </td>
                   </tr>
+                  {isOpen && (
+                    <tr>
+                      <td colSpan={days.length + 5} className="bg-[#F5F7FA] px-3 py-3">
+                        <div className="text-[#535359] text-[11px] mb-2">
+                          {row.name || row.profile_id}: {readingsLabel(row.reading_count)} on{" "}
+                          {row.taken_days.length} day{row.taken_days.length === 1 ? "" : "s"}.
+                          Times are as stored with each test.
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {row.taken_days.map((day) => (
+                            <div
+                              key={day}
+                              className="rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[11px]"
+                            >
+                              <div className="text-[#252525] font-semibold whitespace-nowrap">
+                                {formatDay(day)}
+                                <span className="text-[#1F7A4A]">
+                                  {" · "}
+                                  {readingsLabel(row.reading_times[day].length)}
+                                </span>
+                              </div>
+                              {row.reading_times[day].map((time, i) => (
+                                <div key={`${time}-${i}`} className="text-[#535359] tabular-nums">
+                                  {formatTime(time)}
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })
             )}

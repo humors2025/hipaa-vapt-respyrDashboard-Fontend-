@@ -5,10 +5,12 @@
 // backend controller super-admin-reading-tracker.js.
 //
 // → { status, month, today, days_in_month,
-//     summary: { paid_profiles, not_linked, taken_days, missed_days, no_reading },
+//     summary: { paid_profiles, not_linked, taken_days, readings, missed_days, no_reading },
 //     rows: [ { profile_id, linked, name, email, partner_code, plan_code,
 //               subscription_status, purchased_on, taken_days: ["YYYY-MM-DD"],
-//               missed_days: [...], pending_days: [...], last_reading } ],
+//               reading_times: { "YYYY-MM-DD": ["HH:MM:SS"] } (every test on a taken day,
+//               as stored), reading_count, missed_days: [...], pending_days: [...],
+//               last_reading: "YYYY-MM-DD HH:MM:SS" } ],
 //     pagination: { page, limit, total, total_pages } }
 
 import { apiFetcher } from "@/config/fetcher";
