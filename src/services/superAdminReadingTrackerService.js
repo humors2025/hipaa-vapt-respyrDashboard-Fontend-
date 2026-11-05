@@ -5,12 +5,14 @@
 // backend controller super-admin-reading-tracker.js.
 //
 // → { status, month, today, days_in_month,
-//     summary: { paid_profiles, not_linked, taken_days, readings, missed_days, no_reading },
+//     summary: { paid_profiles, not_linked, taken_days, readings, missed_days, no_reading,
+//                took_today, readings_today, first_today, first_month, never },
 //     rows: [ { profile_id, linked, name, email, partner_code, plan_code,
 //               subscription_status, purchased_on, taken_days: ["YYYY-MM-DD"],
 //               reading_times: { "YYYY-MM-DD": ["HH:MM:SS"] } (every test on a taken day,
 //               as stored), reading_count, missed_days: [...], pending_days: [...],
-//               last_reading: "YYYY-MM-DD HH:MM:SS" } ],
+//               today_count, last_reading: "YYYY-MM-DD HH:MM:SS",
+//               first_reading: "YYYY-MM-DD HH:MM:SS" } ],
 //     pagination: { page, limit, total, total_pages } }
 
 import { apiFetcher } from "@/config/fetcher";
@@ -20,6 +22,7 @@ export const fetchReadingTrackerService = async ({
   month,
   search = "",
   sort = "most_missed",
+  show = "all",
   page = 1,
   limit = 20,
 }) =>
@@ -28,6 +31,7 @@ export const fetchReadingTrackerService = async ({
     body: JSON.stringify({
       month,
       sort,
+      ...(show !== "all" ? { show } : {}),
       ...(search ? { search } : {}),
       page,
       limit,
