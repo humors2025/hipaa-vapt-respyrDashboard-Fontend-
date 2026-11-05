@@ -12,6 +12,15 @@ const SORT_OPTIONS = [
   { value: "name", label: "Name A–Z" },
 ];
 
+const SHOW_OPTIONS = [
+  { value: "all", label: "Everyone" },
+  { value: "taken_today", label: "Took a reading today", todayOnly: true },
+  { value: "pending_today", label: "No reading yet today", todayOnly: true },
+  { value: "first_today", label: "First reading today", todayOnly: true },
+  { value: "first_month", label: "First reading this month" },
+  { value: "never", label: "Never taken a reading" },
+];
+
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
 const CELL_STYLES = {
@@ -27,9 +36,15 @@ const STATUS_STYLES = {
   past_due: "bg-[#FFF4E0] text-[#A66B00]",
 };
 
+// The tracker runs on US Pacific time, wherever this browser is.
 function currentMonth() {
-  const d = new Date();
-  return `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, "0")}`;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type) => parts.find((p) => p.type === type).value;
+  return `${part("year")}-${part("month")}`;
 }
 
 function formatDay(iso) {
@@ -93,6 +108,7 @@ export default function ReadingTrackerPage() {
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState(SORT_OPTIONS[0].value);
+  const [show, setShow] = useState(SHOW_OPTIONS[0].value);
   const [page, setPage] = useState(1);
   const [reloadKey, setReloadKey] = useState(0);
   const [data, setData] = useState(null);
@@ -103,7 +119,7 @@ export default function ReadingTrackerPage() {
   // Open reading lists belong to the rows on screen.
   useEffect(() => {
     setOpenProfileId(null);
-  }, [month, search, sort, page]);
+  }, [month, search, sort, show, page]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -117,7 +133,7 @@ export default function ReadingTrackerPage() {
     let stale = false;
     setLoading(true);
     setError("");
-    fetchReadingTrackerService({ month, search, sort, page, limit: PAGE_LIMIT })
+    fetchReadingTrackerService({ month, search, sort, show, page, limit: PAGE_LIMIT })
       .then((res) => {
         if (stale) return;
         if (res?.status === false) throw new Error(res.message);
@@ -134,7 +150,7 @@ export default function ReadingTrackerPage() {
     return () => {
       stale = true;
     };
-  }, [month, search, sort, page, reloadKey]);
+  }, [month, search, sort, show, page, reloadKey]);
 
   // Day columns follow the month the data is for, so they never mismatch it mid-load.
   const days = useMemo(() => {
@@ -153,6 +169,9 @@ export default function ReadingTrackerPage() {
   const rows = data?.rows ?? [];
   const summary = data?.summary;
   const pagination = data?.pagination;
+  // Today's numbers only exist while the current month is on screen.
+  const showToday = !!data?.today && data.month === data.today.slice(0, 7);
+  const columnCount = days.length + (showToday ? 6 : 5);
 
   const openProfile = (row) => {
     if (!row.profile_id) return;
@@ -177,8 +196,8 @@ export default function ReadingTrackerPage() {
           </h1>
           <p className="text-[#535359] text-[13px] mt-1">
             Clients with a successful payment in Orders › Payments, and the days they took or
-            missed a breath reading. Days follow the date stored with each test, and the latest
-            two days aren&apos;t marked missed yet.
+            missed a breath reading. A day is marked missed once it has ended in US Pacific time.
+            Reading dates and times are as stored with each test.
           </p>
         </div>
         <button
@@ -198,8 +217,17 @@ export default function ReadingTrackerPage() {
       )}
 
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
           <SummaryCard label="Paid profiles" value={summary.paid_profiles} />
+          {showToday && (
+            <>
+              <SummaryCard label="Took a reading today" value={summary.took_today} tone="text-[#308BF9]" />
+              <SummaryCard label="Readings today" value={summary.readings_today} tone="text-[#308BF9]" />
+              <SummaryCard label="First reading today" value={summary.first_today} tone="text-[#308BF9]" />
+            </>
+          )}
+          <SummaryCard label="First reading this month" value={summary.first_month} tone="text-[#308BF9]" />
+          <SummaryCard label="Never taken a reading" value={summary.never} tone="text-[#A86A00]" />
           <SummaryCard label="Days taken" value={summary.taken_days} tone="text-[#1F7A4A]" />
           <SummaryCard label="Total readings" value={summary.readings} tone="text-[#1F7A4A]" />
           <SummaryCard label="Days missed" value={summary.missed_days} tone="text-[#B5363A]" />
@@ -223,10 +251,26 @@ export default function ReadingTrackerPage() {
           onChange={(e) => {
             if (!e.target.value) return;
             setMonth(e.target.value);
+            setShow("all");
             setPage(1);
           }}
           className="rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] focus:outline-none focus:border-[#308BF9]"
         />
+        <select
+          aria-label="Show"
+          value={show}
+          onChange={(e) => {
+            setShow(e.target.value);
+            setPage(1);
+          }}
+          className="rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px]"
+        >
+          {SHOW_OPTIONS.filter((o) => !o.todayOnly || month === currentMonth()).map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
         <select
           aria-label="Sort"
           value={sort}
@@ -275,7 +319,10 @@ export default function ReadingTrackerPage() {
                   <div className="font-normal text-[#A1A1A1]">{d.weekday}</div>
                 </th>
               ))}
-              <th className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">Days taken</th>
+              {showToday && (
+                <th className="py-2.5 px-3 font-semibold text-right text-[#308BF9]">Today</th>
+              )}
+              <th className="py-2.5 px-2 font-semibold text-right">Days taken</th>
               <th className="py-2.5 px-3 font-semibold text-right">Readings</th>
               <th className="py-2.5 px-3 font-semibold text-right">Missed</th>
               <th className="py-2.5 px-3 font-semibold whitespace-nowrap">Last reading</th>
@@ -284,8 +331,14 @@ export default function ReadingTrackerPage() {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={days.length + 5} className="py-8 px-4 text-center text-[#A1A1A1]">
-                  {loading ? "Loading..." : error ? "Could not load this month." : "No paid profiles for this month."}
+                <td colSpan={Math.max(columnCount, 1)} className="py-8 px-4 text-center text-[#A1A1A1]">
+                  {loading
+                    ? "Loading..."
+                    : error
+                    ? "Could not load this month."
+                    : show !== "all" || search
+                    ? "No clients match your filters."
+                    : "No paid profiles for this month."}
                 </td>
               </tr>
             ) : (
@@ -325,6 +378,23 @@ export default function ReadingTrackerPage() {
                           Bought {formatDay(row.purchased_on)}
                         </span>
                       </div>
+                      {row.first_reading ? (
+                        <div
+                          className={`text-[10px] mt-1 ${
+                            row.first_reading.startsWith(data.today)
+                              ? "text-[#308BF9] font-semibold"
+                              : "text-[#A1A1A1]"
+                          }`}
+                        >
+                          First reading {formatDateTime(row.first_reading)}
+                        </div>
+                      ) : (
+                        row.linked && (
+                          <div className="text-[#A86A00] text-[10px] font-semibold mt-1">
+                            Never taken a reading
+                          </div>
+                        )
+                      )}
                       {row.reading_count > 0 && (
                         <button
                           type="button"
@@ -353,6 +423,15 @@ export default function ReadingTrackerPage() {
                         Not linked yet: this buyer hasn&apos;t connected an app profile
                       </td>
                     )}
+                    {showToday && (
+                      <td
+                        className={`py-2 px-3 text-right font-semibold tabular-nums border-t border-[#F5F7FA] ${
+                          row.today_count > 0 ? "text-[#308BF9]" : "text-[#A1A1A1]"
+                        }`}
+                      >
+                        {row.today_count > 0 ? row.today_count : row.pending_days.length > 0 ? 0 : "–"}
+                      </td>
+                    )}
                     <td className="py-2 px-3 text-right font-semibold text-[#1F7A4A] tabular-nums border-t border-[#F5F7FA]">
                       {row.linked ? row.taken_days.length : "–"}
                     </td>
@@ -362,13 +441,13 @@ export default function ReadingTrackerPage() {
                     <td className="py-2 px-3 text-right font-semibold text-[#B5363A] tabular-nums border-t border-[#F5F7FA]">
                       {row.linked ? row.missed_days.length : "–"}
                     </td>
-                    <td className="py-2 px-3 text-[#535359] whitespace-nowrap border-t border-[#F5F7FA]">
+                    <td className="py-2 px-3 text-[#535359] min-w-[92px] border-t border-[#F5F7FA]">
                       {formatDateTime(row.last_reading)}
                     </td>
                   </tr>
                   {isOpen && (
                     <tr>
-                      <td colSpan={days.length + 5} className="bg-[#F5F7FA] px-3 py-3">
+                      <td colSpan={columnCount} className="bg-[#F5F7FA] px-3 py-3">
                         <div className="text-[#535359] text-[11px] mb-2">
                           {row.name || row.profile_id}: {readingsLabel(row.reading_count)} on{" "}
                           {row.taken_days.length} day{row.taken_days.length === 1 ? "" : "s"}.
