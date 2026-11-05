@@ -1,10 +1,11 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchReadingTrackerService } from "@/services/superAdminReadingTrackerService";
 
 const PAGE_LIMIT = 20;
+const POPUP_LIMIT = 20;
 
 const SORT_OPTIONS = [
   { value: "most_missed", label: "Most missed first" },
@@ -74,11 +75,291 @@ function readingsLabel(count) {
   return `${count} reading${count === 1 ? "" : "s"}`;
 }
 
-function SummaryCard({ label, value, tone = "text-[#252525]" }) {
+function SummaryCard({ label, value, hint, tone = "text-[#252525]", onClick }) {
   return (
-    <div className="rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2.5">
-      <div className="text-[#A1A1A1] text-[11px]">{label}</div>
-      <div className={`text-[16px] font-bold mt-0.5 ${tone}`}>{value ?? 0}</div>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-haspopup="dialog"
+      className="rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2.5 text-left cursor-pointer hover:border-[#308BF9] focus:outline-none focus:border-[#308BF9]"
+    >
+      <span className="block text-[#A1A1A1] text-[11px]">{label}</span>
+      <span className={`block text-[16px] font-bold mt-0.5 ${tone}`}>{value ?? 0}</span>
+      <span className="block text-[#535359] text-[10px] leading-snug mt-0.5">{hint}</span>
+    </button>
+  );
+}
+
+const statusLabel = (row) => (row.subscription_status || "unknown").replace(/_/g, " ");
+const shortDay = (iso) => formatDay(iso).replace(/, \d{4}$/, "");
+const boughtLine = (row) => `Bought ${formatDay(row.purchased_on)} · Plan ${statusLabel(row)}`;
+const dayTimesLine = (row, day) =>
+  `${formatDay(day)}: ${row.reading_times[day].map(formatTime).join(", ")}`;
+
+// One card per number at the top. `show` and `sort` pick the popup's clients from the API,
+// `details` is what the popup says about each one.
+const CARDS = [
+  {
+    key: "paid",
+    label: "Paid profiles",
+    field: "paid_profiles",
+    hint: "Clients with a successful payment",
+    show: "all",
+    details: (row) => [boughtLine(row), `Last reading: ${formatDateTime(row.last_reading)}`],
+  },
+  {
+    key: "took_today",
+    label: "Took a reading today",
+    field: "took_today",
+    hint: "Clients who tested at least once today",
+    tone: "text-[#308BF9]",
+    todayOnly: true,
+    show: "taken_today",
+    sort: "name",
+    details: (row, today) => [readingsLabel(row.today_count), dayTimesLine(row, today)],
+  },
+  {
+    key: "readings_today",
+    label: "Readings today",
+    field: "readings_today",
+    hint: "All tests today, including repeat tests",
+    tone: "text-[#308BF9]",
+    todayOnly: true,
+    show: "taken_today",
+    sort: "name",
+    details: (row, today) => [readingsLabel(row.today_count), dayTimesLine(row, today)],
+  },
+  {
+    key: "first_today",
+    label: "First reading today",
+    field: "first_today",
+    hint: "Clients whose first test ever was today",
+    tone: "text-[#308BF9]",
+    todayOnly: true,
+    show: "first_today",
+    sort: "name",
+    details: (row) => [`First reading: ${formatDateTime(row.first_reading)}`],
+  },
+  {
+    key: "first_month",
+    label: "First reading this month",
+    field: "first_month",
+    hint: "Clients whose first test ever was this month",
+    tone: "text-[#308BF9]",
+    show: "first_month",
+    sort: "name",
+    details: (row) => [`First reading: ${formatDateTime(row.first_reading)}`],
+  },
+  {
+    key: "never",
+    label: "Never taken a reading",
+    field: "never",
+    hint: "Linked clients with no test ever",
+    tone: "text-[#A86A00]",
+    show: "never",
+    sort: "name",
+    details: (row) => [boughtLine(row)],
+  },
+  {
+    key: "days_taken",
+    label: "Days taken",
+    field: "taken_days",
+    hint: "Days with a reading this month, added across all clients",
+    tone: "text-[#1F7A4A]",
+    show: "taken_month",
+    sort: "most_taken",
+    details: (row) => [
+      `${row.taken_days.length} day${row.taken_days.length === 1 ? "" : "s"}: ${row.taken_days.map(shortDay).join(", ")}`,
+    ],
+  },
+  {
+    key: "total_readings",
+    label: "Total readings",
+    field: "readings",
+    hint: "All tests this month, including repeat tests",
+    tone: "text-[#1F7A4A]",
+    show: "taken_month",
+    sort: "most_taken",
+    details: (row) => [readingsLabel(row.reading_count), ...row.taken_days.map((day) => dayTimesLine(row, day))],
+  },
+  {
+    key: "days_missed",
+    label: "Days missed",
+    field: "missed_days",
+    hint: "Days with no reading this month, added across all clients",
+    tone: "text-[#B5363A]",
+    show: "missed_month",
+    sort: "most_missed",
+    details: (row) => [
+      `${row.missed_days.length} day${row.missed_days.length === 1 ? "" : "s"}: ${row.missed_days.map(shortDay).join(", ")}`,
+    ],
+  },
+  {
+    key: "no_reading",
+    label: "No reading this month",
+    field: "no_reading",
+    hint: "Linked clients with no test this month",
+    tone: "text-[#A86A00]",
+    show: "no_reading",
+    sort: "name",
+    details: (row) => [boughtLine(row), `Last reading: ${formatDateTime(row.last_reading)}`],
+  },
+  {
+    key: "not_linked",
+    label: "Not linked yet",
+    field: "not_linked",
+    hint: "Paid, but no app profile connected yet",
+    tone: "text-[#A1A1A1]",
+    show: "not_linked",
+    sort: "name",
+    details: (row) => [boughtLine(row)],
+  },
+];
+
+function CardPopup({ card, month, onClose, onOpenProfile }) {
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const closeRef = useRef(null);
+
+  useEffect(() => {
+    closeRef.current?.focus();
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  useEffect(() => {
+    let stale = false;
+    setLoading(true);
+    setError("");
+    fetchReadingTrackerService({
+      month,
+      show: card.show,
+      sort: card.sort || "name",
+      page,
+      limit: POPUP_LIMIT,
+    })
+      .then((res) => {
+        if (stale) return;
+        if (res?.status === false) throw new Error(res.message);
+        setData(res);
+      })
+      .catch((err) => {
+        if (stale) return;
+        setData(null);
+        setError(err?.message || "Could not load these clients");
+      })
+      .finally(() => {
+        if (!stale) setLoading(false);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [card, month, page]);
+
+  const rows = data?.rows ?? [];
+  const pagination = data?.pagination;
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={card.label}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-[15px] shadow-lg w-full max-w-[640px] max-h-[85vh] flex flex-col"
+      >
+        <div className="flex items-start justify-between gap-4 p-4 border-b border-[#E1E6ED]">
+          <div>
+            <h2 className="text-[#252525] text-[15px] font-bold">
+              {card.label}
+              {data?.summary ? `: ${data.summary[card.field] ?? 0}` : ""}
+            </h2>
+            <p className="text-[#535359] text-[11px] mt-0.5">{card.hint}</p>
+          </div>
+          <button
+            ref={closeRef}
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-[#E1E6ED] text-[#535359] text-[11px] font-semibold px-3 py-1 cursor-pointer shrink-0"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-4 flex flex-col gap-2 text-[12px]">
+          {error ? (
+            <div className="bg-[#FEF2F2] border border-[#FCA5A5] text-[#B91C1C] rounded-[10px] p-3">
+              {error}
+            </div>
+          ) : loading && rows.length === 0 ? (
+            <div className="py-6 text-center text-[#A1A1A1]">Loading...</div>
+          ) : rows.length === 0 ? (
+            <div className="py-6 text-center text-[#A1A1A1]">No clients here.</div>
+          ) : (
+            rows.map((row) => (
+              <div
+                key={row.profile_id || row.email || row.purchased_on}
+                className="rounded-[10px] border border-[#E1E6ED] px-3 py-2"
+              >
+                {row.linked ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenProfile(row)}
+                    className="text-[#252525] font-semibold hover:text-[#308BF9] text-left cursor-pointer"
+                  >
+                    {row.name || row.profile_id}
+                  </button>
+                ) : (
+                  <div className="text-[#252525] font-semibold">{row.name || "–"}</div>
+                )}
+                <div className="text-[#A1A1A1] text-[11px] break-all">
+                  {row.email || "–"} · {row.profile_id || "No profile ID yet"}
+                </div>
+                {card.details(row, data.today).map((line) => (
+                  <div key={line} className="text-[#535359] text-[11px] mt-0.5">
+                    {line}
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+
+        {pagination?.total_pages > 1 && (
+          <div className="flex items-center justify-between gap-3 p-3 border-t border-[#E1E6ED]">
+            <span className="text-[#A1A1A1] text-[11px]">{pagination.total} clients</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="rounded-full border border-[#E1E6ED] text-[#535359] text-[11px] font-semibold px-3 py-1 disabled:opacity-40 cursor-pointer"
+              >
+                Prev
+              </button>
+              <span className="text-[#535359] text-[11px]">
+                Page {pagination.page} of {pagination.total_pages}
+              </span>
+              <button
+                type="button"
+                disabled={page >= pagination.total_pages || loading}
+                onClick={() => setPage((p) => p + 1)}
+                className="rounded-full border border-[#E1E6ED] text-[#535359] text-[11px] font-semibold px-3 py-1 disabled:opacity-40 cursor-pointer"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -115,6 +396,8 @@ export default function ReadingTrackerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [openProfileId, setOpenProfileId] = useState(null);
+  const [popupCard, setPopupCard] = useState(null);
+  const closePopup = useCallback(() => setPopupCard(null), []);
 
   // Open reading lists belong to the rows on screen.
   useEffect(() => {
@@ -218,21 +501,16 @@ export default function ReadingTrackerPage() {
 
       {summary && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          <SummaryCard label="Paid profiles" value={summary.paid_profiles} />
-          {showToday && (
-            <>
-              <SummaryCard label="Took a reading today" value={summary.took_today} tone="text-[#308BF9]" />
-              <SummaryCard label="Readings today" value={summary.readings_today} tone="text-[#308BF9]" />
-              <SummaryCard label="First reading today" value={summary.first_today} tone="text-[#308BF9]" />
-            </>
-          )}
-          <SummaryCard label="First reading this month" value={summary.first_month} tone="text-[#308BF9]" />
-          <SummaryCard label="Never taken a reading" value={summary.never} tone="text-[#A86A00]" />
-          <SummaryCard label="Days taken" value={summary.taken_days} tone="text-[#1F7A4A]" />
-          <SummaryCard label="Total readings" value={summary.readings} tone="text-[#1F7A4A]" />
-          <SummaryCard label="Days missed" value={summary.missed_days} tone="text-[#B5363A]" />
-          <SummaryCard label="No reading this month" value={summary.no_reading} tone="text-[#A86A00]" />
-          <SummaryCard label="Not linked yet" value={summary.not_linked} tone="text-[#A1A1A1]" />
+          {CARDS.filter((card) => !card.todayOnly || showToday).map((card) => (
+            <SummaryCard
+              key={card.key}
+              label={card.label}
+              value={summary[card.field]}
+              hint={card.hint}
+              tone={card.tone}
+              onClick={() => setPopupCard(card)}
+            />
+          ))}
         </div>
       )}
 
@@ -484,6 +762,10 @@ export default function ReadingTrackerPage() {
           </tbody>
         </table>
       </div>
+
+      {popupCard && (
+        <CardPopup card={popupCard} month={month} onClose={closePopup} onOpenProfile={openProfile} />
+      )}
 
       {pagination?.total > 0 && (
         <div className="flex items-center justify-between flex-wrap gap-3">
