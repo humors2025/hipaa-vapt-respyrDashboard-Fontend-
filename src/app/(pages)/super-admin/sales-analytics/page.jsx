@@ -22,6 +22,8 @@ import SalesKpiCards from "@/components/super-admin/sales/SalesKpiCards";
 import SalesTrendChart from "@/components/super-admin/sales/SalesTrendChart";
 import SalesSourceDoughnut from "@/components/super-admin/sales/SalesSourceDoughnut";
 import SalesChannelComparison from "@/components/super-admin/sales/SalesChannelComparison";
+import SalesRetention from "@/components/super-admin/sales/SalesRetention";
+import SalesClientEngagement from "@/components/super-admin/sales/SalesClientEngagement";
 import TopTrainerSales from "@/components/super-admin/sales/TopTrainerSales";
 import PurchaseFilters from "@/components/super-admin/sales/PurchaseFilters";
 import PurchaseTable, { SalesPagination } from "@/components/super-admin/sales/PurchaseTable";
@@ -102,6 +104,38 @@ export default function SuperAdminSalesAnalyticsPage() {
   useEffect(() => {
     loadOverview();
   }, [loadOverview]);
+
+  // ── Previous period, for the "% vs last …" lines on the KPI cards ─────────
+  // While the current period is still running, compare like for like: the same
+  // number of days from the start of the previous period (Nov 1–10 vs Oct 1–10).
+  const prevRange = useMemo(() => {
+    const full = getPeriodRange(period, shiftAnchor(period, anchor, -1));
+    if (!nextDisabled) return { ...full, partial: false };
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const elapsed = Math.round((today - range.from) / 86400000);
+    const to = new Date(full.from.getFullYear(), full.from.getMonth(), full.from.getDate() + elapsed);
+    return { from: full.from, to: to < full.to ? to : full.to, partial: true };
+  }, [period, anchor, nextDisabled, range]);
+  const prevFrom = toISODate(prevRange.from);
+  const prevTo = toISODate(prevRange.to);
+  const [previousOverview, setPreviousOverview] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPreviousOverview(null);
+    fetchSuperAdminSalesOverviewService({ period, dateFrom: prevFrom, dateTo: prevTo, trainerAdmin })
+      .then((res) => {
+        if (!cancelled && res?.status !== false) setPreviousOverview(res);
+      })
+      // The comparison is extra: on failure the cards just show no change line.
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [period, prevFrom, prevTo, trainerAdmin]);
+
+  const compareLabel = prevRange.partial ? `vs same days last ${period}` : `vs last ${period}`;
 
   // ── Purchases table ───────────────────────────────────────────────────────
   const [source, setSource] = useState("all");
@@ -234,7 +268,13 @@ export default function SuperAdminSalesAnalyticsPage() {
       </div>
 
       <>
-          <SalesKpiCards summary={ovError ? null : summary} breakdown={ovError ? null : breakdown} loading={ovInitial} />
+          <SalesKpiCards
+            summary={ovError ? null : summary}
+            breakdown={ovError ? null : breakdown}
+            previous={ovError ? null : previousOverview}
+            compareLabel={compareLabel}
+            loading={ovInitial}
+          />
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
             <div className="xl:col-span-2 min-w-0">
@@ -269,6 +309,25 @@ export default function SuperAdminSalesAnalyticsPage() {
             updating={ovUpdating}
             error={ovError}
             onRetry={loadOverview}
+          />
+
+          <SalesRetention
+            retention={overview?.retention}
+            currency={currency}
+            rangeLabel={rangeLabel}
+            loading={ovInitial}
+            updating={ovUpdating}
+            error={ovError}
+            onRetry={loadOverview}
+          />
+
+          <SalesClientEngagement
+            key={trainerAdmin || "all"}
+            period={period}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            trainerAdmin={trainerAdmin}
+            rangeLabel={rangeLabel}
           />
 
           <TopTrainerSales
