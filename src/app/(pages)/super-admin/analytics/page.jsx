@@ -11,6 +11,7 @@ import { getGroupDetails, selectGroupDetails, selectGroupDetailsLoading, selectG
 import { fetchGroupPeriodOverviewService, fetchGroupDetailsService } from "@/services/authService";
 import TrainerClientsModal from "@/components/super-admin/TrainerClientsModal";
 
+import { getLocalTimeZone, getTimeZoneLabel } from "@/lib/localTime";
 const TIMEZONES = { "America/Chicago": "Houston, TX", "Asia/Kolkata": "India (IST)" };
 const DEFAULT_TZ = "America/Chicago";
 const ACTIVE_THRESHOLD = 60;
@@ -553,6 +554,16 @@ export default function AnalyticsDashboard() {
   const [selectedDate, setSelectedDate] = useState(null);
   const compare = true;
   const [timezone, setTimezone] = useState(DEFAULT_TZ);
+  // Default to the viewer's own time zone; Houston and India stay selectable.
+  const [localTz, setLocalTz] = useState(null);
+  useEffect(() => {
+    const tz = getLocalTimeZone();
+    setLocalTz(tz);
+    setTimezone(tz);
+  }, []);
+  const zoneOptions = localTz && !TIMEZONES[localTz]
+    ? { [localTz]: `Your time (${getTimeZoneLabel()})`, ...TIMEZONES }
+    : TIMEZONES;
   const [clock, setClock] = useState("");
   const [calOpen, setCalOpen] = useState(false);
   const [nowTick, setNowTick] = useState(() => 0);
@@ -1262,7 +1273,7 @@ export default function AnalyticsDashboard() {
           {/* Timezone + Clock cluster */}
           <div className="flex items-center gap-2" style={{ backgroundColor: "#ffffff", borderRadius: "10px", border: "1px solid #EEF2F6", padding: "6px 12px" }}>
             <div className="flex items-center" style={{ backgroundColor: R.surface, borderRadius: "8px", padding: "2px", gap: "2px" }}>
-              {Object.entries(TIMEZONES).map(([tz, label]) => (
+              {Object.entries(zoneOptions).map(([tz, label]) => (
                 <button key={tz} onClick={() => setTimezone(tz)}
                   className="cursor-pointer transition-all duration-200"
                   style={{ padding: "4px 10px", fontSize: "11px", fontWeight: timezone === tz ? 600 : 500, letterSpacing: "-0.22px", backgroundColor: timezone === tz ? R.dark : "transparent", color: timezone === tz ? R.white : R.ts, border: "none", borderRadius: "6px" }}
@@ -1287,7 +1298,7 @@ export default function AnalyticsDashboard() {
                   <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                     <div className="flex items-center gap-1.5">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={R.blue} strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
-                      <span style={{ fontSize: "12px", fontWeight: 700, color: R.tp, letterSpacing: "-0.24px" }}>{TIMEZONES[timezone]}</span>
+                      <span style={{ fontSize: "12px", fontWeight: 700, color: R.tp, letterSpacing: "-0.24px" }}>{zoneOptions[timezone] || timezone}</span>
                     </div>
                     <div>
                       <div className="font-mono" style={{ fontSize: "22px", fontWeight: 700, color: R.tp, letterSpacing: "-0.5px", lineHeight: 1.1 }}>{tzTime(timezone)}</div>
