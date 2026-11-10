@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchReadingTrackerService } from "@/services/superAdminReadingTrackerService";
+import ReadingTrackerCharts from "@/components/super-admin/ReadingTrackerCharts";
 
 const PAGE_LIMIT = 20;
 const POPUP_LIMIT = 20;
@@ -513,6 +514,8 @@ export default function ReadingTrackerPage() {
           ))}
         </div>
       )}
+
+      {data?.charts && <ReadingTrackerCharts charts={data.charts} today={data.today} />}
 
       <div className="flex flex-wrap gap-3 items-center">
         <input
