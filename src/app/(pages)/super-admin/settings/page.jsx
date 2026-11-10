@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { fetchCommissionRateService, setCommissionRateService, fetchPricingService, setPricingService, formatMinor } from "@/services/commissionService";
 import SettingsLockGate, { isSettingsLocked } from "@/components/super-admin/SettingsLockGate";
+import { formatLocalDateTime } from "@/lib/localTime";
 
 /**
  * Super admin › Settings. Today: the platform commission rate (Rysflo -> facility).
@@ -12,9 +13,7 @@ import SettingsLockGate, { isSettingsLocked } from "@/components/super-admin/Set
  */
 
 function fmt(v) {
-  if (!v) return "—";
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }) + " UTC";
+  return formatLocalDateTime(v);
 }
 
 function PricingSection({ onLocked }) {

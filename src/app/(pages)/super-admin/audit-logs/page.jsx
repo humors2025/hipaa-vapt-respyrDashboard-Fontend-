@@ -26,6 +26,7 @@ import { formatCount } from "@/components/super-admin/sales/salesFormat";
 import { SalesCard, UpdatingPill, Skeleton, EmptyState, SectionError } from "@/components/super-admin/sales/SalesUi";
 import { SalesKpiCard } from "@/components/super-admin/sales/SalesKpiCards";
 import { SalesPagination } from "@/components/super-admin/sales/PurchaseTable";
+import { formatLocalDateTime, parseServerTime } from "@/lib/localTime";
 
 const EMPTY_FILTERS = { eventType: "", role: "", outcome: "all", ip: "", dateFrom: "", dateTo: "" };
 
@@ -56,22 +57,11 @@ function roleLabel(role) {
 
 // created_at is "YYYY-MM-DD HH:mm:ss" with no zone: the UTC wall clock (the
 // Lambda runs with TZ=UTC and the column defaults to CURRENT_TIMESTAMP).
-function parseUtc(raw) {
-  if (!raw) return null;
-  const s = String(raw);
-  const d = new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s) ? `${s.replace(" ", "T")}Z` : s);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
+// lib/localTime treats such values as UTC and shows the viewer's local time.
+const parseUtc = parseServerTime;
 
 function formatLocalTime(d) {
-  return d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  return formatLocalDateTime(d, { seconds: true });
 }
 
 function errorMessage(err, fallback) {

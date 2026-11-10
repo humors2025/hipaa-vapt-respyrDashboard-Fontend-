@@ -1,5 +1,7 @@
 // Formatting + period helpers shared by the Sales Analytics components.
 
+import { formatLocalDate, formatLocalDateTime } from "@/lib/localTime";
+
 export const PERIODS = [
   { value: "week", label: "Week" },
   { value: "month", label: "Month" },
@@ -63,11 +65,6 @@ const pad = (n) => String(n).padStart(2, "0");
 
 export function toISODate(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function parseISODate(s) {
-  const [y, m, d] = String(s).split("-").map(Number);
-  return new Date(y, (m || 1) - 1, d || 1);
 }
 
 function startOfDay(d) {
@@ -144,17 +141,10 @@ export function buildBuckets(period, from, to) {
 }
 
 // One date format for the whole page: "Sep 24, 2026" (+ ", 3:05 PM" with time).
+// Times are shown in the viewer's own time zone (see lib/localTime.js).
 export function formatDate(raw, withTime = false) {
   if (!raw) return "—";
-  const s = String(raw);
-  const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? parseISODate(s) : new Date(s.replace(" ", "T"));
-  if (Number.isNaN(d.getTime())) return s;
-  return d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    ...(withTime ? { hour: "numeric", minute: "2-digit" } : {}),
-  });
+  return withTime ? formatLocalDateTime(raw) : formatLocalDate(raw);
 }
 
 export function humanizeStatus(s) {
