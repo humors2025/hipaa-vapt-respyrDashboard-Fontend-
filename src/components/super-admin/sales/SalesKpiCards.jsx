@@ -1,12 +1,33 @@
 "use client";
 
-import { formatCount, formatMoney, formatPercent } from "./salesFormat";
+import { formatCount, formatMoney, formatPercent, percentChange } from "./salesFormat";
 import { Skeleton } from "./SalesUi";
+
+const DELTA_STYLE = {
+  up: { plain: "text-[#2E8B47]", accent: "text-white", arrow: "▲" },
+  down: { plain: "text-[#B5363A]", accent: "text-white", arrow: "▼" },
+  flat: { plain: "text-[#A1A1A1]", accent: "text-white", arrow: "■" },
+};
+
+// "▲ +12.5% vs last month" under a KPI value.
+function DeltaLine({ delta, label, accent }) {
+  if (!delta) return null;
+  const s = DELTA_STYLE[delta.direction] || DELTA_STYLE.flat;
+  return (
+    <div className={`text-[11px] font-semibold tabular-nums truncate ${accent ? s.accent : s.plain}`} title={`${delta.text} ${label}`}>
+      <span aria-hidden="true" className="text-[9px] mr-1">
+        {s.arrow}
+      </span>
+      {delta.text} <span className={accent ? "opacity-85 font-normal" : "text-[#A1A1A1] font-normal"}>{label}</span>
+    </div>
+  );
+}
 
 // Same visual language as the Overview KpiCard: white bordered cards, one
 // primary-blue accent card.
 // amount: optional money line under the main value (e.g. revenue for a count).
-export function SalesKpiCard({ label, value, amount, hint, accent, loading }) {
+// delta: percentChange() result vs the previous period; deltaLabel: "vs last month".
+export function SalesKpiCard({ label, value, amount, hint, accent, loading, delta, deltaLabel }) {
   return (
     <div
       className={
@@ -34,16 +55,25 @@ export function SalesKpiCard({ label, value, amount, hint, accent, loading }) {
             {amount}
           </div>
         ))}
+      {!loading && <DeltaLine delta={delta} label={deltaLabel} accent={accent} />}
       <div className={accent ? "text-[11px] opacity-85 truncate" : "text-[#A1A1A1] text-[11px] truncate"}>{loading ? " " : hint}</div>
     </div>
   );
 }
 
-export default function SalesKpiCards({ summary, breakdown, loading }) {
+// previous: the overview summary of the period before (null while loading or
+// when it failed — the cards then simply show no change line).
+// compareLabel: "vs last month" etc.
+export default function SalesKpiCards({ summary, breakdown, previous, compareLabel, loading }) {
   const s = summary || {};
   const b = breakdown || {};
+  const prev = previous?.summary;
   const cur = s.currency;
   const total = s.total_purchases;
+  const totalNet = Number(s.net_sales) || 0;
+  // A change is only meaningful in the same currency.
+  const comparable = prev && (!prev.currency || !cur || prev.currency === cur);
+  const change = (now, before) => (comparable ? percentChange(now, before) : null);
 
   const cards = [
     {
@@ -51,28 +81,45 @@ export default function SalesKpiCards({ summary, breakdown, loading }) {
       value: formatMoney(s.net_sales, cur),
       hint: "Net of first payments this period",
       accent: true,
+      delta: change(s.net_sales, prev?.net_sales),
     },
-    { label: "Total Purchases", value: formatCount(total), hint: "New paid memberships" },
+    {
+      label: "Total Purchases",
+      value: formatCount(total),
+      hint: "New paid memberships",
+      delta: change(total, prev?.total_purchases),
+    },
     {
       label: "Direct Website Purchases",
       value: formatCount(s.website_purchases),
-      amount: formatMoney(b.website?.net_sales, cur),
+      amount: `${formatMoney(b.website?.net_sales, cur)} · ${formatPercent(b.website?.net_sales, totalNet)} of sales`,
       hint: `${formatPercent(s.website_purchases, total)} of purchases`,
+      delta: change(s.website_purchases, prev?.website_purchases),
     },
     {
       label: "Trainer Code Purchases",
       value: formatCount(s.trainer_code_purchases),
-      amount: formatMoney(b.trainer_code?.net_sales, cur),
+      amount: `${formatMoney(b.trainer_code?.net_sales, cur)} · ${formatPercent(b.trainer_code?.net_sales, totalNet)} of sales`,
       hint: `${formatPercent(s.trainer_code_purchases, total)} of purchases`,
+      delta: change(s.trainer_code_purchases, prev?.trainer_code_purchases),
     },
-    { label: "Average Order Value", value: formatMoney(s.average_order_value, cur), hint: "First payment ÷ purchases" },
-    { label: "Active Paid Subscribers", value: formatCount(s.active_paid_subscribers), hint: "Currently active" },
+    {
+      label: "Average Order Value",
+      value: formatMoney(s.average_order_value, cur),
+      hint: "First payment ÷ purchases",
+      delta: change(s.average_order_value, prev?.average_order_value),
+    },
+    {
+      label: "Active Paid Subscribers",
+      value: formatCount(s.active_paid_subscribers),
+      hint: "Currently active",
+    },
   ];
 
   return (
     <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
       {cards.map((c) => (
-        <SalesKpiCard key={c.label} {...c} loading={loading} />
+        <SalesKpiCard key={c.label} {...c} deltaLabel={compareLabel} loading={loading} />
       ))}
     </div>
   );

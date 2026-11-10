@@ -289,6 +289,59 @@ export async function mockSalesOverview({ period, date_from, date_to, trainer_ad
     trend: [...trendMap.values()],
     top_trainers: topTrainers,
     top_trainers_total: topTrainers.length,
+    retention: mockRetention(paid, all, net),
+  };
+}
+
+// Same shape as the backend's renewalsAndRetention().
+function mockRetention(paid, all, firstNet) {
+  const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : null);
+  const state = (r) =>
+    r.subscription_status === "cancellation_scheduled"
+      ? "cancellation_scheduled"
+      : ["cancelled", "expired"].includes(r.subscription_status)
+        ? "ended"
+        : r.subscription_status === "past_due"
+          ? "at_risk"
+          : "active";
+  const tally = (rows) => {
+    const o = { active: 0, cancellation_scheduled: 0, at_risk: 0, ended: 0 };
+    for (const r of rows) o[state(r)] += 1;
+    const n = rows.length;
+    return {
+      ...o,
+      active_rate: pct(o.active, n),
+      cancellation_scheduled_rate: pct(o.cancellation_scheduled, n),
+      at_risk_rate: pct(o.at_risk, n),
+      ended_rate: pct(o.ended, n),
+    };
+  };
+  const due = Math.max(4, Math.round(paid.length * 0.8));
+  const renewed = Math.round(due * 0.68);
+  const lapsed = Math.round(due * 0.2);
+  const pending = due - renewed - lapsed;
+  const renewalNet = renewed * 29;
+  const members = tally(all);
+  return {
+    renewals: {
+      payments: renewed,
+      net_sales: renewalNet,
+      share_of_sales: pct(renewalNet, renewalNet + firstNet),
+      due,
+      renewed,
+      pending,
+      lapsed,
+      renewal_rate: pct(renewed, due),
+      pending_rate: pct(pending, due),
+      lapse_rate: pct(lapsed, due),
+    },
+    cohort: { purchases: paid.length, ...tally(paid) },
+    members: {
+      total: all.length,
+      ...members,
+      retention_rate: pct(all.length - members.ended, all.length),
+      churn_rate: pct(members.ended, all.length),
+    },
   };
 }
 
@@ -331,5 +384,98 @@ export async function mockSalesPurchases({
       subscription_status: [...new Set(all.map((r) => r.subscription_status))].sort(),
       payment_status: [...new Set(all.map((r) => r.payment_status))].sort(),
     },
+  };
+}
+
+// Same shape as the backend's view=engagement.
+export async function mockSalesEngagement({ date_from, date_to, trainer_admin, group = "all" }) {
+  await delay(250);
+  const all = dataset(networkFor(trainer_admin)).filter((r) => r.payment_status === "paid" && r.customer.profile_id);
+  const bought = all.filter((r) => inRange(r, date_from, date_to));
+  // Renewers: older active members whose renewal day-of-month falls in the range.
+  const renewed = all.filter((r) => {
+    if (inRange(r, date_from, date_to) || r.subscription_status !== "active") return false;
+    const day = Number(r.purchased_at.slice(8, 10));
+    const from = new Date(date_from);
+    const probe = new Date(from.getFullYear(), from.getMonth(), Math.min(day, 28));
+    const iso = `${probe.getFullYear()}-${String(probe.getMonth() + 1).padStart(2, "0")}-${String(probe.getDate()).padStart(2, "0")}`;
+    return iso >= date_from && iso <= date_to && r.purchased_at.slice(0, 10) < date_from;
+  });
+  const people = new Map();
+  if (group !== "renewed") for (const r of bought) people.set(r.customer.profile_id, { r, purchased: true, renewed: false });
+  if (group !== "purchased")
+    for (const r of renewed) {
+      const cur = people.get(r.customer.profile_id) || { r, purchased: false, renewed: false };
+      cur.renewed = true;
+      people.set(r.customer.profile_id, cur);
+    }
+
+  const today = new Date();
+  const goalsList = ["Fat Loss", "Muscle Gain", "Weight Loss", null];
+  const tiers = ["90%+", "70%+", "50%+", "25%+", "10%+", "<10%"];
+  const cohortOf = (rate) => tiers.find((t, i) => i === 5 || rate >= Number(t.replace("%+", ""))) || "<10%";
+  const clients = [...people.entries()].map(([pid, v], idx) => {
+    const seed = mulberry32(idx * 977 + 13);
+    const since = new Date(v.r.purchased_at);
+    const days = Math.max(1, Math.round((today - since) / 86400000) + 1);
+    const readingDays = seed() < 0.15 ? 0 : Math.min(days, Math.round(days * seed()));
+    const rate = Math.min(100, Math.round((readingDays / days) * 100));
+    return {
+      profile_id: pid,
+      name: v.r.customer.name,
+      email: v.r.customer.email,
+      purchased: v.purchased,
+      renewed: v.renewed,
+      trainer_code: v.r.attributed_partner_code,
+      trainer_name: v.r.trainer?.name || null,
+      subscription_status: v.r.subscription_status === "cancelled" ? "ended" : "active",
+      fitness_goal: goalsList[Math.floor(seed() * goalsList.length)],
+      member_since: v.r.purchased_at,
+      days,
+      reading_days: readingDays,
+      readings: readingDays + Math.round(readingDays * seed() * 0.4),
+      last_reading: readingDays ? isoTime(new Date(today - Math.floor(seed() * 5) * 86400000)) : null,
+      metabolism_score: readingDays ? Math.round(40 + seed() * 50) : null,
+      rate,
+      cohort: cohortOf(rate),
+    };
+  });
+  clients.sort((a, b) => b.rate - a.rate || b.reading_days - a.reading_days);
+  const n = clients.length;
+  const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : null);
+  const goals = { fat_loss: 0, muscle_gain: 0, weight_loss: 0, other: 0 };
+  for (const c of clients) {
+    const g = String(c.fitness_goal || "").toLowerCase();
+    if (g.includes("fat")) goals.fat_loss += 1;
+    else if (g.includes("weight")) goals.weight_loss += 1;
+    else if (g.includes("muscle")) goals.muscle_gain += 1;
+    else goals.other += 1;
+  }
+  const never = clients.filter((c) => !c.reading_days).length;
+  const thisWeek = Math.round(n * 3.2);
+  const lastWeek = Math.round(n * 2.9);
+  return {
+    status: true,
+    renewals_available: true,
+    summary: {
+      clients: n,
+      purchased: clients.filter((c) => c.purchased).length,
+      renewed: clients.filter((c) => c.renewed).length,
+      both: clients.filter((c) => c.purchased && c.renewed).length,
+      avg_rate: n ? Math.round(clients.reduce((s, c) => s + c.rate, 0) / n) : 0,
+      high_rate: n ? Math.max(...clients.map((c) => c.rate)) : 0,
+      low_rate: n ? Math.min(...clients.map((c) => c.rate)) : 0,
+      never_tested: never,
+      never_tested_rate: pct(never, n),
+      readings_this_week: thisWeek,
+      readings_last_week: lastWeek,
+      readings_week_change: lastWeek ? pct(thisWeek - lastWeek, lastWeek) : null,
+      goals,
+      cohorts: tiers.map((tier) => {
+        const count = clients.filter((c) => c.cohort === tier).length;
+        return { tier, count, rate: pct(count, n) };
+      }),
+    },
+    clients,
   };
 }

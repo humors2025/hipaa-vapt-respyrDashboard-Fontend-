@@ -59,6 +59,27 @@ export function formatPercent(part, whole) {
   return `${((p / w) * 100).toFixed(1)}%`;
 }
 
+// Change from the previous period, as { text, direction } or null when there is
+// nothing to compare (no previous value, or it was zero).
+export function percentChange(current, previous) {
+  const c = toNumber(current);
+  const p = toNumber(previous);
+  if (c === null || p === null) return null;
+  if (p === 0) return c === 0 ? { text: "0.0%", direction: "flat" } : { text: "New", direction: "up" };
+  const change = ((c - p) / Math.abs(p)) * 100;
+  const rounded = Math.round(change * 10) / 10;
+  return {
+    text: `${rounded > 0 ? "+" : ""}${rounded.toFixed(1)}%`,
+    direction: rounded > 0 ? "up" : rounded < 0 ? "down" : "flat",
+  };
+}
+
+// A rate the API already returns as a percentage (e.g. 62.5), or "—".
+export function formatRate(v) {
+  const n = toNumber(v);
+  return n === null ? "—" : `${n.toFixed(1)}%`;
+}
+
 // ─── Dates ──────────────────────────────────────────────────────────────────
 
 const pad = (n) => String(n).padStart(2, "0");
