@@ -12,7 +12,7 @@ import {
   Legend,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
-import { SOURCE_COLORS, formatCount, formatMoney } from "./salesFormat";
+import { SOURCE_COLORS, formatCount, formatMoney, formatPercent } from "./salesFormat";
 import { EmptyState, SalesCard, SectionError, Skeleton, UpdatingPill } from "./SalesUi";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
@@ -99,7 +99,8 @@ export default function SalesTrendChart({ buckets, trend, currency, loading, upd
               if (!r || r.future) return "";
               const s = SERIES[ctx.datasetIndex];
               const count = s.countKeys.reduce((sum, k) => sum + (r?.[k] || 0), 0);
-              return ` ${s.label}: ${formatMoney(ctx.parsed.y, currency)} · ${formatCount(count)} purchase${count === 1 ? "" : "s"}`;
+              const share = s.key === "total_sales" || !r.total_sales ? "" : ` (${formatPercent(ctx.parsed.y, r.total_sales)})`;
+              return ` ${s.label}: ${formatMoney(ctx.parsed.y, currency)}${share} · ${formatCount(count)} purchase${count === 1 ? "" : "s"}`;
             },
           },
         },

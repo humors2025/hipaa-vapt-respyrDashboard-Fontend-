@@ -49,6 +49,7 @@ async function post(payload) {
   if (isSalesMockData()) {
     const mock = await import("@/components/super-admin/sales/salesMock");
     if (payload.view === "trainer_admins") return { status: true, trainer_admins: mock.MOCK_TRAINER_ADMINS };
+    if (payload.view === "engagement") return mock.mockSalesEngagement(payload);
     return payload.view === "overview" ? mock.mockSalesOverview(payload) : mock.mockSalesPurchases(payload);
   }
   return apiFetcher(API_ENDPOINTS.SALES.SUPERADMINSALESANALYTICS, {
@@ -104,3 +105,22 @@ export const fetchSuperAdminSalesPurchasesService = async ({
   if (trainerAdmin) payload.trainer_admin = trainerAdmin;
   return post(payload);
 };
+
+// Client Engagement (TA Analytics style) for paying customers: profiles that
+// bought (group "purchased"), renewed ("renewed") or either ("all") in the period.
+// → { status, renewals_available, summary: { clients, purchased, renewed, both, avg_rate,
+//     high_rate, low_rate, never_tested, never_tested_rate, readings_this_week,
+//     readings_last_week, readings_week_change, goals, cohorts: [ { tier, count, rate } ] },
+//     clients: [ { profile_id, name, email, purchased, renewed, trainer_code, trainer_name,
+//     subscription_status, fitness_goal, member_since, days, reading_days, readings,
+//     last_reading, metabolism_score, rate, cohort } ] }
+export const fetchSuperAdminSalesEngagementService = async ({ period, dateFrom, dateTo, trainerAdmin = "", group = "all" }) =>
+  post({
+    view: "engagement",
+    period,
+    date_from: dateFrom,
+    date_to: dateTo,
+    tz_offset_minutes: tzOffsetMinutes(),
+    group,
+    ...(trainerAdmin ? { trainer_admin: trainerAdmin } : {}),
+  });
