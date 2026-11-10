@@ -1,6 +1,9 @@
 // progressSlice.js
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { fetchClientProfileDetails } from "@/services/authService";
+import {
+  fetchClientProfileDetails,
+  getDietitianIdFromAccessToken,
+} from "@/services/authService";
 import { cookieManager } from "../lib/cookies";
 
 export const fetchProgressData = createAsyncThunk(
@@ -8,7 +11,10 @@ export const fetchProgressData = createAsyncThunk(
   async ({ profileId, range }, { rejectWithValue }) => {
     try {
       const dietitian = cookieManager.getJSON("dietician");
-      const dietitianId = dietitian?.dietician_id;
+      // The `dietician` cookie can expire before access_token does; the token
+      // carries the same id, so fall back to it instead of failing the chart.
+      const dietitianId =
+        dietitian?.dietician_id || getDietitianIdFromAccessToken();
 
       if (!dietitianId) {
         return rejectWithValue("Dietitian ID not found in cookies");
