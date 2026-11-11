@@ -226,6 +226,7 @@ export default function SalesRetention({ retention, currency, rangeLabel, loadin
     ? [
         { key: "renewed", label: "Paid again", count: r.renewed, color: GREEN },
         { key: "pending", label: "Payment not in yet", count: r.pending, color: AMBER },
+        { key: "cancelled", label: "Cancelled, won't renew", count: r.cancelled || 0, color: ORANGE },
         { key: "lapsed", label: "Did not pay, left", count: r.lapsed, color: RED },
       ]
     : [];
@@ -272,13 +273,20 @@ export default function SalesRetention({ retention, currency, rangeLabel, loadin
               !r
                 ? "Renewal payments are not recorded on this environment yet."
                 : !r.due
-                  ? "Nobody's paid month ended in these dates."
+                  ? "Nobody's paid month ended in these dates, and nobody due later has cancelled."
                   : null
             }
             sentence={
               r?.due ? (
                 <>
-                  <b>{formatCount(r.renewed)} of {people(r.due)}</b> whose paid month ended in these dates paid for the next one.
+                  <b>{formatCount(r.renewed)} of {people(r.due)}</b> whose paid month was up in these dates paid for the next one.
+                  {r.cancelled > 0 && (
+                    <>
+                      {" "}
+                      <b>{formatCount(r.cancelled)}</b> already cancelled, so they won&apos;t pay again even though their month
+                      is not over yet.
+                    </>
+                  )}
                 </>
               ) : null
             }
