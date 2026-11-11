@@ -6,6 +6,7 @@ import {
   SALES_SEARCH_MIN_LENGTH,
   fetchSuperAdminSalesOverviewService,
   fetchSuperAdminSalesPurchasesService,
+  fetchSuperAdminSalesMonthlyService,
   fetchSalesTrainerAdminsService,
   isSalesMockData,
 } from "@/services/superAdminSalesService";
@@ -105,6 +106,34 @@ export default function SuperAdminSalesAnalyticsPage() {
   useEffect(() => {
     loadOverview();
   }, [loadOverview]);
+
+  // ── Overall sales, every month (all time; ignores the period) ────────────
+  const [monthly, setMonthly] = useState(null);
+  const [monthlyLoading, setMonthlyLoading] = useState(true);
+  const [monthlyError, setMonthlyError] = useState(null);
+  const monthlyReq = useRef(0);
+
+  const loadMonthly = useCallback(async () => {
+    const id = ++monthlyReq.current;
+    setMonthlyLoading(true);
+    setMonthlyError(null);
+    try {
+      const res = await fetchSuperAdminSalesMonthlyService({ trainerAdmin });
+      if (id !== monthlyReq.current) return;
+      if (res?.status === false) throw new Error(res?.message || "Failed to load overall sales");
+      setMonthly(res);
+    } catch (err) {
+      if (id !== monthlyReq.current) return;
+      setMonthly(null);
+      setMonthlyError(errorMessage(err, "Failed to load overall sales"));
+    } finally {
+      if (id === monthlyReq.current) setMonthlyLoading(false);
+    }
+  }, [trainerAdmin]);
+
+  useEffect(() => {
+    loadMonthly();
+  }, [loadMonthly]);
 
   // ── Previous period, for the "% vs last …" lines on the KPI cards ─────────
   // While the current period is still running, compare like for like: the same
@@ -273,11 +302,14 @@ export default function SuperAdminSalesAnalyticsPage() {
             summary={ovError ? null : summary}
             breakdown={ovError ? null : breakdown}
             renewals={ovError ? null : overview?.retention?.renewals}
+            overall={monthlyError ? null : monthly}
             previous={ovError ? null : previousOverview}
             compareLabel={compareLabel}
             period={period}
             loading={ovInitial}
           />
+
+          <SalesAllMonths data={monthly} loading={monthlyLoading} error={monthlyError} onRetry={loadMonthly} />
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
             <div className="xl:col-span-2 min-w-0">
@@ -303,8 +335,6 @@ export default function SuperAdminSalesAnalyticsPage() {
               />
             </div>
           </div>
-
-          <SalesAllMonths key={`months-${trainerAdmin || "all"}`} trainerAdmin={trainerAdmin} />
 
           <SalesChannelComparison
             websiteHint={selectedTa ? "Bought on the website, later linked a trainer in this network" : undefined}
