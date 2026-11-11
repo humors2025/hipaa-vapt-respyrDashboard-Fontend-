@@ -1010,6 +1010,16 @@ export default function OrdersPayments({ showTestCodes = false }) {
   const [error, setError] = useState(null);
   const reqId = useRef(0);
 
+  // Open a tab straight from a link, e.g. /super-admin/orders?tab=cancellations.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("tab");
+    if (wanted && wanted !== "shipping" && tabs.some((t) => t.value === wanted)) {
+      setTab(wanted);
+      setData(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Debounced search (same 400 ms / 3-char rule as Sales Analytics).
   useEffect(() => {
     const trimmed = searchInput.trim();

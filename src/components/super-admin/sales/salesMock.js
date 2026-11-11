@@ -289,12 +289,12 @@ export async function mockSalesOverview({ period, date_from, date_to, trainer_ad
     trend: [...trendMap.values()],
     top_trainers: topTrainers,
     top_trainers_total: topTrainers.length,
-    retention: mockRetention(paid, all, net),
+    retention: mockRetention(paid, all, net, date_from, date_to),
   };
 }
 
 // Same shape as the backend's renewalsAndRetention().
-function mockRetention(paid, all, firstNet) {
+function mockRetention(paid, all, firstNet, dateFrom, dateTo) {
   const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : null);
   const state = (r) =>
     r.subscription_status === "cancellation_scheduled"
@@ -336,6 +336,7 @@ function mockRetention(paid, all, firstNet) {
       lapse_rate: pct(lapsed, due),
     },
     cohort: { purchases: paid.length, ...tally(paid) },
+    cancellations: mockCancellations(all, dateFrom, dateTo),
     members: {
       total: all.length,
       ...members,
@@ -343,6 +344,36 @@ function mockRetention(paid, all, firstNet) {
       churn_rate: pct(members.ended, all.length),
     },
   };
+}
+
+// Members who cancelled in the window: a handful of cancelled / cancelling rows,
+// each given a cancel date inside the window.
+function mockCancellations(all, dateFrom, dateTo) {
+  const from = new Date(`${dateFrom}T12:00:00Z`).getTime();
+  const days = Math.max(1, Math.round((new Date(`${dateTo}T12:00:00Z`).getTime() - from) / 86400000) + 1);
+  // Only days that have already happened can hold a cancellation.
+  const elapsed = Math.max(1, Math.min(days, Math.floor((Date.now() - from) / 86400000) + 1));
+  const picked = all
+    .filter((r) => ["cancellation_scheduled", "cancelled"].includes(r.subscription_status))
+    .slice(0, Math.min(14, Math.max(3, Math.round(days / 2))))
+    .map((r, i) => {
+      const canceled = from + ((i * 5) % elapsed) * 86400000;
+      const scheduled = r.subscription_status === "cancellation_scheduled" || i % 3 === 0;
+      return {
+        id: i + 1,
+        name: r.customer.name,
+        email: r.customer.email,
+        profile_id: r.customer.profile_id,
+        partner_code: r.attributed_partner_code,
+        purchased_at: r.purchased_at,
+        canceled_at: new Date(canceled).toISOString(),
+        access_ends: new Date(scheduled ? Math.max(Date.now(), canceled) + 12 * 86400000 : canceled).toISOString(),
+        state: scheduled ? "scheduled" : "ended",
+      };
+    })
+    .sort((a, b) => b.canceled_at.localeCompare(a.canceled_at));
+  const scheduled = picked.filter((r) => r.state === "scheduled").length;
+  return { total: picked.length, scheduled, ended: picked.length - scheduled, list_limit: 50, list: picked };
 }
 
 export async function mockSalesPurchases({
