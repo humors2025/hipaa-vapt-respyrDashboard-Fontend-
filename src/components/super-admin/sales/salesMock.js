@@ -513,3 +513,39 @@ export async function mockSalesEngagement({ date_from, date_to, trainer_admin, g
     clients,
   };
 }
+
+export async function mockSalesMonthly({ trainer_admin }) {
+  await delay(300);
+  const paid = dataset(networkFor(trainer_admin)).filter((r) => r.payment_status === "paid");
+  const map = new Map();
+  for (const r of paid) {
+    const k = r.purchased_at.slice(0, 7);
+    const m = map.get(k) || { month: k, new_purchases: 0, new_sales: 0, renewals: 0, renewal_sales: 0 };
+    m.new_purchases += 1;
+    m.new_sales = round2(m.new_sales + r.net_amount);
+    map.set(k, m);
+  }
+  const months = [...map.values()]
+    .sort((a, b) => (a.month < b.month ? -1 : 1))
+    .map((m, i) => {
+      // Mock renewals: about half of the previous month's buyers.
+      const renewals = i ? Math.round(m.new_purchases * 0.4) : 0;
+      const renewal_sales = round2(renewals * 28);
+      return { ...m, renewals, renewal_sales, total_payments: m.new_purchases + renewals, total_sales: round2(m.new_sales + renewal_sales) };
+    });
+  const sum = (k) => round2(months.reduce((a, m) => a + m[k], 0));
+  return {
+    status: true,
+    currency: "USD",
+    renewals_available: true,
+    totals: {
+      new_purchases: sum("new_purchases"),
+      new_sales: sum("new_sales"),
+      renewals: sum("renewals"),
+      renewal_sales: sum("renewal_sales"),
+      total_payments: sum("total_payments"),
+      total_sales: sum("total_sales"),
+    },
+    months,
+  };
+}

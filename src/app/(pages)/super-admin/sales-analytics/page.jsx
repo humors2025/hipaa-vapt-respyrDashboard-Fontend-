@@ -22,6 +22,7 @@ import SalesKpiCards from "@/components/super-admin/sales/SalesKpiCards";
 import SalesTrendChart from "@/components/super-admin/sales/SalesTrendChart";
 import SalesSourceDoughnut from "@/components/super-admin/sales/SalesSourceDoughnut";
 import SalesChannelComparison from "@/components/super-admin/sales/SalesChannelComparison";
+import SalesAllMonths from "@/components/super-admin/sales/SalesAllMonths";
 import SalesRetention from "@/components/super-admin/sales/SalesRetention";
 import SalesClientEngagement from "@/components/super-admin/sales/SalesClientEngagement";
 import TopTrainerSales from "@/components/super-admin/sales/TopTrainerSales";
@@ -302,6 +303,8 @@ export default function SuperAdminSalesAnalyticsPage() {
               />
             </div>
           </div>
+
+          <SalesAllMonths key={`months-${trainerAdmin || "all"}`} trainerAdmin={trainerAdmin} />
 
           <SalesChannelComparison
             websiteHint={selectedTa ? "Bought on the website, later linked a trainer in this network" : undefined}
