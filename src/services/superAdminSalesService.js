@@ -50,6 +50,7 @@ async function post(payload) {
     const mock = await import("@/components/super-admin/sales/salesMock");
     if (payload.view === "trainer_admins") return { status: true, trainer_admins: mock.MOCK_TRAINER_ADMINS };
     if (payload.view === "engagement") return mock.mockSalesEngagement(payload);
+    if (payload.view === "monthly") return mock.mockSalesMonthly(payload);
     return payload.view === "overview" ? mock.mockSalesOverview(payload) : mock.mockSalesPurchases(payload);
   }
   return apiFetcher(API_ENDPOINTS.SALES.SUPERADMINSALESANALYTICS, {
@@ -122,5 +123,17 @@ export const fetchSuperAdminSalesEngagementService = async ({ period, dateFrom, 
     date_to: dateTo,
     tz_offset_minutes: tzOffsetMinutes(),
     group,
+    ...(trainerAdmin ? { trainer_admin: trainerAdmin } : {}),
+  });
+
+// Overall sales, every month since the first sale (ignores the date filter).
+// → { status, currency, renewals_available,
+//     totals: { new_purchases, new_sales, renewals, renewal_sales, total_payments, total_sales },
+//     months: [ { month: "YYYY-MM", new_purchases, new_sales, renewals, renewal_sales,
+//                 total_payments, total_sales } ] }   (oldest first, empty months included)
+export const fetchSuperAdminSalesMonthlyService = async ({ trainerAdmin = "" } = {}) =>
+  post({
+    view: "monthly",
+    tz_offset_minutes: tzOffsetMinutes(),
     ...(trainerAdmin ? { trainer_admin: trainerAdmin } : {}),
   });
