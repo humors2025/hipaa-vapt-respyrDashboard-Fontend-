@@ -65,6 +65,20 @@ export const fetchPaymentTransactionsService = async ({ status = "all", type = "
 export const fetchUpcomingRenewalsService = async ({ days = 10, search = "", page = 1, limit = 20 }) =>
   post({ view: "upcoming_renewals", days, ...(search ? { search } : {}), page, limit });
 
+// cancellations → { status, cancellations: [ { id, canceled_at, customer: { name, email, phone,
+//              profile_id }, partner_code, facility, purchased_at,
+//              cancel_state: "scheduled" (still has access until access_ends) | "ended",
+//              access_ends, payments: { count, renewals, total_paid, total_refunded, currency,
+//              last_payment: { amount_paid, date } } | null,
+//              cancellation: { reason, feedback, comment } | null (from Stripe),
+//              subscription_status, stripe_status, current_period_start, current_period_end,
+//              stripe_subscription_id } ],
+//              summary: { total, scheduled, ended, last_30_days }, state_options, pagination }
+//            Members who cancelled, newest cancellation first. state narrows to
+//            scheduled or ended.
+export const fetchCancellationsService = async ({ state = "all", search = "", page = 1, limit = 20 }) =>
+  post({ view: "cancellations", ...(state !== "all" ? { state } : {}), ...(search ? { search } : {}), page, limit });
+
 // Re-attach the subscription's own referral promo code in Stripe so the next
 // renewal bills the referred price again (repairs the pre-5-Oct coupon loss).
 // Idempotent: { repaired: true } when the discount was put back, false with a
