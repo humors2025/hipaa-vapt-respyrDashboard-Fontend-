@@ -319,7 +319,8 @@ function mockRetention(paid, all, firstNet, dateFrom, dateTo) {
   const due = Math.max(4, Math.round(paid.length * 0.8));
   const renewed = Math.round(due * 0.68);
   const lapsed = Math.round(due * 0.2);
-  const pending = due - renewed - lapsed;
+  const cancelled = Math.max(1, Math.round(due * 0.1));
+  const pending = Math.max(0, due - renewed - lapsed - cancelled);
   const renewalNet = renewed * 29;
   const members = tally(all);
   return {
@@ -331,6 +332,8 @@ function mockRetention(paid, all, firstNet, dateFrom, dateTo) {
       renewed,
       pending,
       lapsed,
+      cancelled,
+      cancelled_rate: pct(cancelled, due),
       renewal_rate: pct(renewed, due),
       pending_rate: pct(pending, due),
       lapse_rate: pct(lapsed, due),
