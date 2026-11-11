@@ -109,15 +109,10 @@ export default function SalesKpiCards({ summary, breakdown, previous, compareLab
       hint: "First payment ÷ purchases",
       delta: change(s.average_order_value, prev?.average_order_value),
     },
-    {
-      label: "Active Paid Subscribers",
-      value: formatCount(s.active_paid_subscribers),
-      hint: "Currently active",
-    },
   ];
 
   return (
-    <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+    <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
       {cards.map((c) => (
         <SalesKpiCard key={c.label} {...c} deltaLabel={compareLabel} loading={loading} />
       ))}

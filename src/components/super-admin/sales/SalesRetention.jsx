@@ -3,10 +3,10 @@
 import { formatCount, formatDate, formatMoney, formatRate } from "./salesFormat";
 import { EmptyState, SalesCard, SectionError, Skeleton, UpdatingPill } from "./SalesUi";
 
-// Renewals & Retention, written as three plain questions, each with a ring chart:
+// Renewals & Retention, written as plain questions, each with a ring chart:
 //   1. Did people pay again?          (plans whose paid month ended in the period)
-//   2. Are this period's buyers still with us?   (people who bought in the period)
-//   3. How many members have we kept? (everyone ever, ignores the date filter)
+//   2. How many members have we kept? (everyone ever, ignores the date filter)
+//   plus who cancelled in the period (names).
 // Data: overview.retention from super-admin-sales-analytics (see the backend's
 // renewalsAndRetention for the exact definitions).
 
@@ -218,7 +218,6 @@ function Cancellations({ data, rangeLabel }) {
 
 export default function SalesRetention({ retention, currency, rangeLabel, loading, updating, error, onRetry }) {
   const r = retention?.renewals;
-  const c = retention?.cohort;
   const m = retention?.members;
 
   // Box 1 — renewals due in the period.
@@ -226,19 +225,18 @@ export default function SalesRetention({ retention, currency, rangeLabel, loadin
     ? [
         { key: "renewed", label: "Paid again", count: r.renewed, color: GREEN },
         { key: "pending", label: "Payment not in yet", count: r.pending, color: AMBER },
+        { key: "cancelled", label: "Cancelled, won't renew", count: r.cancelled || 0, color: ORANGE },
         { key: "lapsed", label: "Did not pay, left", count: r.lapsed, color: RED },
       ]
     : [];
 
-  // Boxes 2 and 3 — "still with us" = everyone who has not ended (same rule as the backend's retention_rate).
+  // All-time box — "still with us" = everyone who has not ended (same rule as the backend's retention_rate).
   const stateParts = (o) => [
     { key: "active", label: "Still subscribed", count: o?.active || 0, color: GREEN },
     { key: "cancelling", label: "Leaving at month end", count: o?.cancellation_scheduled || 0, color: AMBER },
     { key: "at_risk", label: "Card failed, retrying", count: o?.at_risk || 0, color: ORANGE },
     { key: "ended", label: "Left", count: o?.ended || 0, color: RED },
   ];
-  const cTotal = c?.purchases || 0;
-  const cKept = cTotal - (c?.ended || 0);
   const mTotal = m?.total || 0;
   const mKept = mTotal - (m?.ended || 0);
 
@@ -251,8 +249,7 @@ export default function SalesRetention({ retention, currency, rangeLabel, loadin
       {error ? (
         <SectionError message={error} onRetry={onRetry} />
       ) : loading ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-          <Skeleton className="h-[260px]" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Skeleton className="h-[260px]" />
           <Skeleton className="h-[260px]" />
         </div>
@@ -260,7 +257,7 @@ export default function SalesRetention({ retention, currency, rangeLabel, loadin
         <EmptyState message="Renewal and retention data is not available yet. It appears once the backend update is deployed." />
       ) : (
         <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Block
             tag={rangeLabel}
             question="Did people pay again when their month ended?"
@@ -272,13 +269,20 @@ export default function SalesRetention({ retention, currency, rangeLabel, loadin
               !r
                 ? "Renewal payments are not recorded on this environment yet."
                 : !r.due
-                  ? "Nobody's paid month ended in these dates."
+                  ? "Nobody's paid month ended in these dates, and nobody due later has cancelled."
                   : null
             }
             sentence={
               r?.due ? (
                 <>
-                  <b>{formatCount(r.renewed)} of {people(r.due)}</b> whose paid month ended in these dates paid for the next one.
+                  <b>{formatCount(r.renewed)} of {people(r.due)}</b> whose paid month was up in these dates paid for the next one.
+                  {r.cancelled > 0 && (
+                    <>
+                      {" "}
+                      <b>{formatCount(r.cancelled)}</b> already cancelled, so they won&apos;t pay again even though their month
+                      is not over yet.
+                    </>
+                  )}
                 </>
               ) : null
             }
@@ -292,20 +296,6 @@ export default function SalesRetention({ retention, currency, rangeLabel, loadin
             }
           />
 
-          <Block
-            tag={rangeLabel}
-            question="Are the people who bought in these dates still with us?"
-            parts={stateParts(c)}
-            total={cTotal}
-            center={formatRate(pct(cKept, cTotal))}
-            centerLabel="still with us"
-            empty={cTotal ? null : "Nobody bought in these dates."}
-            sentence={
-              <>
-                <b>{formatCount(cKept)} of {people(cTotal)}</b> who bought in these dates are still with us today.
-              </>
-            }
-          />
 
           <Block
             tag="All time"
