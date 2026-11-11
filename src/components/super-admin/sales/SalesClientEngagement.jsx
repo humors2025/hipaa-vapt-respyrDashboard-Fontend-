@@ -71,14 +71,24 @@ function RateCell({ pct }) {
   );
 }
 
-function Stat({ label, value, sub, tone }) {
+// label: plain question; value: the answer; sub: detail line; hint: what it means.
+function Stat({ label, value, sub, hint, tone }) {
   return (
     <div className={`rounded-[10px] p-3 flex flex-col gap-0.5 min-w-0 ${tone === "blue" ? "bg-[#EEF4FE]" : "bg-[#F8FAFC]"}`}>
-      <span className={`text-[11px] ${tone === "blue" ? "text-[#308BF9]" : "text-[#535359]"}`}>{label}</span>
+      <span className={`text-[12px] font-semibold ${tone === "blue" ? "text-[#308BF9]" : "text-[#535359]"}`}>{label}</span>
       <span className={`text-[22px] font-bold leading-tight tabular-nums ${tone === "blue" ? "text-[#308BF9]" : "text-[#252525]"}`}>{value}</span>
-      {sub && <span className="text-[11px] text-[#A1A1A1] truncate">{sub}</span>}
+      {sub && <span className="text-[12px] text-[#252525] leading-snug">{sub}</span>}
+      {hint && <span className="text-[11px] text-[#A1A1A1] leading-snug">{hint}</span>}
     </div>
   );
+}
+
+// 21 → "about 2 of every 10 days"
+function daysInTen(rate) {
+  const n = Math.round((Number(rate) || 0) / 10);
+  if (n <= 0) return "less than 1 of every 10 days";
+  if (n >= 10) return "almost every day";
+  return `about ${n} of every 10 days`;
 }
 
 function Badge({ children, tone }) {
@@ -143,7 +153,7 @@ export default function SalesClientEngagement({ period, dateFrom, dateTo, traine
   return (
     <SalesCard
       title="Client Engagement"
-      subtitle={`Are paying customers engaged and consistent? Customers who bought or renewed during ${rangeLabel}. Rate = days with a breath test ÷ days since they first paid.`}
+      subtitle={`Are paying customers using the device? Customers who bought or renewed during ${rangeLabel}. Usage % = days with a breath reading ÷ days since they first paid.`}
       action={
         <div className="flex items-center gap-2 flex-wrap">
           <UpdatingPill show={loading && Boolean(data)} />
@@ -190,38 +200,42 @@ export default function SalesClientEngagement({ period, dateFrom, dateTo, traine
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Stat
               tone="blue"
-              label="Avg reading rate"
+              label="How often customers use the device"
               value={`${s.avg_rate}%`}
-              sub={
+              sub={<>On average, {daysInTen(s.avg_rate)}</>}
+              hint={
                 <>
-                  <span className="text-[#2E8B47] font-semibold">{s.high_rate}%</span> high ·{" "}
-                  <span className="text-[#B5363A] font-semibold">{s.low_rate}%</span> low
+                  Best customer <span className="text-[#2E8B47] font-semibold">{s.high_rate}%</span> · Lowest{" "}
+                  <span className="text-[#B5363A] font-semibold">{s.low_rate}%</span>
                 </>
               }
             />
             <Stat
               label="Paying customers"
               value={formatCount(s.clients)}
-              sub={`${formatCount(s.purchased)} purchased · ${formatCount(s.renewed)} renewed`}
+              sub={`${formatCount(s.purchased)} new · ${formatCount(s.renewed)} renewed`}
+              hint="Paid in these dates and joined the app"
             />
             <Stat
-              label="Never tested"
+              label="Never used the device"
               value={formatRate(s.never_tested_rate)}
-              sub={`${formatCount(s.never_tested)} of ${formatCount(s.clients)} have no reading since paying`}
+              sub={`${formatCount(s.never_tested)} of ${formatCount(s.clients)} customers`}
+              hint="No breath reading at all since paying"
             />
             <Stat
-              label="Readings this week"
+              label="Device uses in the last 7 days"
               value={formatCount(s.readings_this_week)}
               sub={
                 weekChange == null ? (
-                  `${formatCount(s.readings_last_week)} last week`
+                  `${formatCount(s.readings_last_week)} in the 7 days before`
                 ) : (
                   <span className={weekChange > 0 ? "text-[#2E8B47]" : weekChange < 0 ? "text-[#B5363A]" : ""}>
                     {weekChange > 0 ? "▲ +" : weekChange < 0 ? "▼ " : ""}
-                    {weekChange.toFixed(1)}% vs last 7 days
+                    {weekChange.toFixed(1)}% vs the 7 days before ({formatCount(s.readings_last_week)})
                   </span>
                 )
               }
+              hint="Every breath reading counts"
             />
           </div>
 
@@ -245,7 +259,7 @@ export default function SalesClientEngagement({ period, dateFrom, dateTo, traine
             {/* Reading-rate cohorts */}
             <div className="flex flex-col gap-2">
               <span className="text-[#A1A1A1] text-[11px] font-semibold uppercase tracking-wide">
-                Reading rate cohorts <span className="normal-case font-normal">· click one to filter the list</span>
+                How often each customer uses it <span className="normal-case font-normal">· % of days with a reading · click one to filter the list</span>
               </span>
               <div className="flex flex-col gap-1">
                 {(s.cohorts || []).map((c) => {
@@ -334,7 +348,7 @@ export default function SalesClientEngagement({ period, dateFrom, dateTo, traine
                       <th scope="col" className="py-2.5 px-4 font-semibold text-center">Days</th>
                       <th scope="col" className="py-2.5 px-4 font-semibold text-center">Tests</th>
                       <th scope="col" className="py-2.5 px-4 font-semibold text-center">Score</th>
-                      <th scope="col" className="py-2.5 px-4 font-semibold text-right">Rate</th>
+                      <th scope="col" className="py-2.5 px-4 font-semibold text-right">Usage</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -238,7 +238,12 @@ export default function SalesRetention({ retention, currency, rangeLabel, loadin
     { key: "ended", label: "Left", count: o?.ended || 0, color: RED },
   ];
   const mTotal = m?.total || 0;
-  const mKept = mTotal - (m?.ended || 0);
+  // "Kept" = still subscribed only. People leaving at month end (cancelled) or
+  // whose card failed are shown separately and do not count as kept.
+  const mKept = m?.active || 0;
+  const mLeaving = m?.cancellation_scheduled || 0;
+  const mAtRisk = m?.at_risk || 0;
+  const mLeft = m?.ended || 0;
 
   return (
     <SalesCard
@@ -308,7 +313,10 @@ export default function SalesRetention({ retention, currency, rangeLabel, loadin
             empty={mTotal ? null : "No members yet."}
             sentence={
               <>
-                <b>{formatCount(mKept)} of {people(mTotal)}</b> who ever bought still have access. {formatCount(m?.ended)} have left.
+                <b>{formatCount(mKept)} of {people(mTotal)}</b> who ever bought are still subscribed.
+                {mLeaving > 0 && <> {formatCount(mLeaving)} {mLeaving === 1 ? "is" : "are"} leaving at month end.</>}
+                {mAtRisk > 0 && <> {formatCount(mAtRisk)} {mAtRisk === 1 ? "has" : "have"} a failed card payment.</>}
+                {mLeft > 0 && <> {formatCount(mLeft)} {mLeft === 1 ? "has" : "have"} left.</>}
               </>
             }
             note="This box always counts everyone, so it does not change with the dates above."
