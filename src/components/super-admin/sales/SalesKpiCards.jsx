@@ -68,7 +68,8 @@ export function SalesKpiCard({ label, value, amount, hint, accent, loading, delt
 // period: "week" | "month" | "year", for the "this month" wording.
 const PERIOD_WORD = { week: "this week", month: "this month", year: "this year" };
 
-export default function SalesKpiCards({ summary, breakdown, renewals, previous, compareLabel, period, loading }) {
+// overall: view=monthly response (all-time totals), undefined while loading.
+export default function SalesKpiCards({ summary, breakdown, renewals, overall, previous, compareLabel, period, loading }) {
   const s = summary || {};
   const b = breakdown || {};
   const prev = previous?.summary;
@@ -116,10 +117,18 @@ export default function SalesKpiCards({ summary, breakdown, renewals, previous, 
       hint: renewals ? "Members who paid again for the next month" : "Renewals are not recorded here yet",
       delta: renewals ? change(renewals.payments, prevRenewals?.payments) : null,
     },
+    {
+      label: "Overall Sales (all time)",
+      value: overall ? formatMoney(overall.totals?.total_sales, overall.currency) : "—",
+      amount: overall
+        ? `${formatCount(overall.totals?.new_purchases)} new · ${formatCount(overall.totals?.renewals)} renewals`
+        : undefined,
+      hint: overall ? `All months together · ${formatCount(overall.months?.length)} months` : "All months together",
+    },
   ];
 
   return (
-    <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+    <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
       {cards.map((c) => (
         <SalesKpiCard key={c.label} {...c} deltaLabel={compareLabel} loading={loading} />
       ))}
