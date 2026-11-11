@@ -6,6 +6,9 @@
 //   Renewals    renewals that went through (paid; refunds still shown), with
 //               which renewal each is and where the plan stands now
 //   Upcoming    plans still set to renew within the next 10 days, soonest first
+//   Cancellations  members who cancelled, newest first: still inside their paid
+//               period (won't renew) or already ended, with what they paid and
+//               Stripe's cancellation reason
 //   Test codes  super admin only (showTestCodes), behind its own Google
 //               Authenticator unlock (same authenticator as Settings)
 //
@@ -22,6 +25,7 @@ import {
   fetchShippingAddressesService,
   fetchTestCodesService,
   fetchUpcomingRenewalsService,
+  fetchCancellationsService,
   generateTestCodesService,
   restoreSubscriptionDiscountService,
 } from "@/services/superAdminOrdersService";
@@ -34,12 +38,14 @@ const PAGE_LIMIT = 20;
 const DEFAULT_PAYMENT_STATUSES = ["paid", "failed", "refunded", "partially_refunded", "open"];
 const RENEWED_STATUSES = ["paid", "partially_refunded", "refunded"];
 const UPCOMING_DAYS = 10;
+const CANCEL_STATE_LABEL = { scheduled: "Still active, won't renew", ended: "Ended" };
 
 const TABS = [
   { value: "shipping", label: "Shipping" },
   { value: "payments", label: "Payments" },
   { value: "renewals", label: "Renewals" },
   { value: "upcoming", label: "Upcoming renewals" },
+  { value: "cancellations", label: "Cancellations" },
   { value: "codes", label: "Test codes" },
 ];
 
@@ -443,6 +449,111 @@ function RenewalsTable({ rows, ...shell }) {
             <td className={td}>
               {plan.status ? <StatusBadge status={plan.status} /> : <Dash />}
               {plan.note && <div className={`text-[11px] mt-1 whitespace-nowrap ${plan.note.tone}`}>{plan.note.text}</div>}
+            </td>
+          </tr>
+        );
+      })}
+    </TableShell>
+  );
+}
+
+// Stripe cancellation_details → plain words.
+const CANCEL_REASON_LABEL = {
+  cancellation_requested: "Member cancelled",
+  payment_failed: "Payment failed",
+  payment_disputed: "Payment disputed",
+};
+const CANCEL_FEEDBACK_LABEL = {
+  too_expensive: "Too expensive",
+  missing_features: "Missing features",
+  switched_service: "Switched service",
+  unused: "Not using it",
+  customer_service: "Customer service",
+  too_complex: "Too complex",
+  low_quality: "Low quality",
+  other: "Other",
+};
+
+function CancellationsTable({ rows, ...shell }) {
+  return (
+    <TableShell
+      {...shell}
+      empty={!rows?.length}
+      minWidth="min-w-[1380px]"
+      head={
+        <>
+          <th scope="col" className={th}>Cancelled</th>
+          <th scope="col" className={th}>Customer</th>
+          <th scope="col" className={th}>Code</th>
+          <th scope="col" className={th}>Facility</th>
+          <th scope="col" className={th}>Facility admin</th>
+          <th scope="col" className={th}>Purchased</th>
+          <th scope="col" className={`${th} text-right`}>Paid in total</th>
+          <th scope="col" className={th}>Reason</th>
+          <th scope="col" className={th}>Access</th>
+        </>
+      }
+    >
+      {rows?.map((r) => {
+        const p = r.payments;
+        const c = r.cancellation;
+        const reason = c ? CANCEL_REASON_LABEL[c.reason] || (c.reason ? humanizeStatus(c.reason) : null) : null;
+        const feedback = c?.feedback ? CANCEL_FEEDBACK_LABEL[c.feedback] || humanizeStatus(c.feedback) : null;
+        const scheduled = r.cancel_state === "scheduled";
+        const left = scheduled ? renewsIn(r.access_ends) : null;
+        return (
+          <tr key={r.id} className="border-t border-[#F5F7FA] align-top">
+            <td className={`${td} text-[#535359] whitespace-nowrap`}>{r.canceled_at ? formatDate(r.canceled_at, true) : <Dash />}</td>
+            <td className={`${td} max-w-[220px]`}>
+              <Customer customer={r.customer} />
+              {r.customer?.phone && <div className="text-[#535359] text-[11px] truncate">{r.customer.phone}</div>}
+            </td>
+            <td className={`${td} whitespace-nowrap`}>
+              {r.partner_code ? <span className="font-mono text-[11px] text-[#535359]">{r.partner_code}</span> : <Dash />}
+            </td>
+            <td className={`${td} max-w-[200px]`}>
+              <FacilityName facility={r.facility} />
+            </td>
+            <td className={`${td} max-w-[200px]`}>
+              <FacilityAdmin facility={r.facility} />
+            </td>
+            <td className={`${td} text-[#535359] whitespace-nowrap`}>{r.purchased_at ? formatDate(r.purchased_at) : <Dash />}</td>
+            <td className={`${td} text-right tabular-nums whitespace-nowrap`}>
+              {p ? (
+                <>
+                  <div className="text-[#252525] font-semibold">{formatMoney(p.total_paid, p.currency)}</div>
+                  <div className="text-[#A1A1A1] text-[11px]">
+                    {p.count} payment{p.count === 1 ? "" : "s"}
+                    {p.renewals ? ` · ${p.renewals} renewal${p.renewals === 1 ? "" : "s"}` : ""}
+                  </div>
+                  {Number(p.total_refunded) > 0 && (
+                    <div className="text-[#A66B00] text-[11px]">−{formatMoney(p.total_refunded, p.currency)} refunded</div>
+                  )}
+                </>
+              ) : (
+                <span className="text-[#A1A1A1] text-[11px]">No payment recorded</span>
+              )}
+            </td>
+            <td className={`${td} max-w-[220px]`}>
+              {reason || feedback || c?.comment ? (
+                <>
+                  {reason && <div className="text-[#252525]">{reason}</div>}
+                  {feedback && <div className="text-[#535359] text-[11px]">{feedback}</div>}
+                  {c?.comment && <div className="text-[#535359] text-[11px] italic break-words">“{c.comment}”</div>}
+                </>
+              ) : (
+                <Dash />
+              )}
+            </td>
+            <td className={td}>
+              <StatusBadge status={scheduled ? "active" : "cancelled"} />
+              <div className={`text-[11px] mt-1 whitespace-nowrap ${scheduled ? "text-[#A66B00]" : "text-[#535359]"}`}>
+                {scheduled
+                  ? `Until ${formatDate(r.access_ends)}${left ? ` (${left.text.toLowerCase()})` : ""}, won't renew`
+                  : r.access_ends
+                    ? `Ended ${formatDate(r.access_ends)}`
+                    : "Ended"}
+              </div>
             </td>
           </tr>
         );
@@ -933,7 +1044,9 @@ export default function OrdersPayments({ showTestCodes = false }) {
                 page,
                 limit: PAGE_LIMIT,
               })
-            : await fetchUpcomingRenewalsService({ days: UPCOMING_DAYS, search, page, limit: PAGE_LIMIT });
+            : tab === "cancellations"
+              ? await fetchCancellationsService({ state: status, search, page, limit: PAGE_LIMIT })
+              : await fetchUpcomingRenewalsService({ days: UPCOMING_DAYS, search, page, limit: PAGE_LIMIT });
       if (id !== reqId.current) return;
       if (res?.status === false) throw new Error(res?.message || "Failed to load data");
       // Renewals come back as view "payments" and upcoming as
@@ -1001,7 +1114,9 @@ export default function OrdersPayments({ showTestCodes = false }) {
                 ? "Renewals"
                 : tab === "upcoming"
                   ? "Upcoming renewals"
-                  : "Test onboarding codes"
+                  : tab === "cancellations"
+                    ? "Cancellations"
+                    : "Test onboarding codes"
         }
         subtitle={
           tab === "shipping"
@@ -1012,7 +1127,9 @@ export default function OrdersPayments({ showTestCodes = false }) {
                 ? "Members whose plan renewed: one row per paid renewal, newest first. Failed renewal attempts are left out (see Payments). Plan now shows where the subscription stands today."
                 : tab === "upcoming"
                   ? `Members whose plan renews in the next ${UPCOMING_DAYS} days, soonest first. Cancelled plans are left out. Renewal amount is the member's price: the discounted referral price when they bought with a partner code, list price otherwise.`
-                  : "Free single-use codes for testing app onboarding — redeemed like a purchase code, but with no payment, sales or commission behind them."
+                  : tab === "cancellations"
+                    ? "Members who cancelled their plan, newest first. A member who cancels keeps access until the end of the period they paid for, then the plan ends and is not renewed. Reason comes from Stripe (and the member's own feedback when they gave it)."
+                    : "Free single-use codes for testing app onboarding — redeemed like a purchase code, but with no payment, sales or commission behind them."
         }
         action={<UpdatingPill show={loading && Boolean(current)} />}
       >
@@ -1049,6 +1166,22 @@ export default function OrdersPayments({ showTestCodes = false }) {
           </div>
         )}
 
+        {tab === "cancellations" && current?.summary && (
+          <div className="flex flex-wrap gap-2">
+            {[
+              [current.summary.total, "cancelled in total"],
+              [current.summary.scheduled, "still active, won't renew"],
+              [current.summary.ended, "ended"],
+              [current.summary.last_30_days, "cancelled in the last 30 days"],
+            ].map(([n, label]) => (
+              <div key={label} className="rounded-[10px] bg-[#F5F7FA] px-3 py-2 text-[12px] flex items-center gap-2">
+                <span className="text-[#252525] font-semibold tabular-nums">{n || 0}</span>
+                <span className="text-[#535359]">{label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {tab === "codes" && (
           <SettingsLockGate kind="testCodes">{(relock) => <TestCodesPanel onLocked={relock} />}</SettingsLockGate>
         )}
@@ -1066,13 +1199,15 @@ export default function OrdersPayments({ showTestCodes = false }) {
                   ? "Search name, email, phone, city, postal code or code"
                   : tab === "upcoming"
                     ? "Search name, email or code"
+                    : tab === "cancellations"
+                      ? "Search name, email, profile ID or code"
                     : "Search name, email, invoice or code"
               }
               aria-label="Search"
               className="w-full rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] text-[#252525] placeholder:text-[#A1A1A1] focus:outline-none focus:border-[#308BF9] transition-colors"
             />
           </label>
-          {paymentsLike && (
+          {(paymentsLike || tab === "cancellations") && (
             <label className="flex flex-col gap-1 min-w-[170px]">
               <span className="text-[#535359] text-[11px] font-semibold">Status</span>
               <select
@@ -1081,13 +1216,13 @@ export default function OrdersPayments({ showTestCodes = false }) {
                   setStatus(e.target.value);
                   setPage(1);
                 }}
-                aria-label="Payment status"
+                aria-label={tab === "cancellations" ? "Cancellation status" : "Payment status"}
                 className="w-full rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] text-[#252525] focus:outline-none focus:border-[#308BF9] transition-colors cursor-pointer"
               >
                 <option value="all">All</option>
-                {statusOptions.map((o) => (
+                {(tab === "cancellations" ? current?.state_options || ["scheduled", "ended"] : statusOptions).map((o) => (
                   <option key={o} value={o}>
-                    {humanizeStatus(o)}
+                    {tab === "cancellations" ? CANCEL_STATE_LABEL[o] || humanizeStatus(o) : humanizeStatus(o)}
                   </option>
                 ))}
               </select>
@@ -1126,6 +1261,12 @@ export default function OrdersPayments({ showTestCodes = false }) {
               filtersActive ? "No upcoming renewals match this search." : `No plans renew in the next ${UPCOMING_DAYS} days.`
             }
           />
+        ) : tab === "cancellations" ? (
+          <CancellationsTable
+            rows={current?.cancellations}
+            {...shell}
+            emptyMessage={filtersActive ? "No cancellations match these filters." : "No one has cancelled yet."}
+          />
         ) : null}
 
         {tab !== "codes" && current && !error && (
@@ -1136,7 +1277,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
             totalPages={totalPages}
             disabled={loading}
             noun={
-              tab === "shipping" ? "addresses" : tab === "payments" ? "payments" : "renewals"
+              tab === "shipping" ? "addresses" : tab === "payments" ? "payments" : tab === "cancellations" ? "cancellations" : "renewals"
             }
             onPageChange={(p) => p >= 1 && p <= totalPages && p !== page && setPage(p)}
           />
