@@ -64,10 +64,16 @@ export function SalesKpiCard({ label, value, amount, hint, accent, loading, delt
 // previous: the overview summary of the period before (null while loading or
 // when it failed — the cards then simply show no change line).
 // compareLabel: "vs last month" etc.
-export default function SalesKpiCards({ summary, breakdown, previous, compareLabel, loading }) {
+// renewals: overview.retention.renewals (null when the environment has no payment rows).
+// period: "week" | "month" | "year", for the "this month" wording.
+const PERIOD_WORD = { week: "this week", month: "this month", year: "this year" };
+
+export default function SalesKpiCards({ summary, breakdown, renewals, previous, compareLabel, period, loading }) {
   const s = summary || {};
   const b = breakdown || {};
   const prev = previous?.summary;
+  const prevRenewals = previous?.retention?.renewals;
+  const when = PERIOD_WORD[period] || "this period";
   const cur = s.currency;
   const total = s.total_purchases;
   const totalNet = Number(s.net_sales) || 0;
@@ -84,9 +90,9 @@ export default function SalesKpiCards({ summary, breakdown, previous, compareLab
       delta: change(s.net_sales, prev?.net_sales),
     },
     {
-      label: "Total Purchases",
+      label: `Total New Purchases ${when}`,
       value: formatCount(total),
-      hint: "New paid memberships",
+      hint: "New paid memberships (renewals not included)",
       delta: change(total, prev?.total_purchases),
     },
     {
@@ -104,10 +110,11 @@ export default function SalesKpiCards({ summary, breakdown, previous, compareLab
       delta: change(s.trainer_code_purchases, prev?.trainer_code_purchases),
     },
     {
-      label: "Average Order Value",
-      value: formatMoney(s.average_order_value, cur),
-      hint: "First payment ÷ purchases",
-      delta: change(s.average_order_value, prev?.average_order_value),
+      label: `Total Renewals ${when}`,
+      value: renewals ? formatCount(renewals.payments) : "—",
+      amount: renewals ? `${formatMoney(renewals.net_sales, cur)} collected` : undefined,
+      hint: renewals ? "Members who paid again for the next month" : "Renewals are not recorded here yet",
+      delta: renewals ? change(renewals.payments, prevRenewals?.payments) : null,
     },
   ];
 
