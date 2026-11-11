@@ -271,8 +271,10 @@ export default function SuperAdminSalesAnalyticsPage() {
           <SalesKpiCards
             summary={ovError ? null : summary}
             breakdown={ovError ? null : breakdown}
+            renewals={ovError ? null : overview?.retention?.renewals}
             previous={ovError ? null : previousOverview}
             compareLabel={compareLabel}
+            period={period}
             loading={ovInitial}
           />
 
