@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchSuperAdminSalesMonthlyService } from "@/services/superAdminSalesService";
 import { formatCount, formatMoney } from "./salesFormat";
 import { EmptyState, SalesCard, SectionError, Skeleton, UpdatingPill } from "./SalesUi";
 
 // Overall sales: every month since the first sale, newest first, with all-time
 // totals. Ignores the page's date filter; follows the Trainer Admin view.
-// Data: view=monthly of super-admin-sales-analytics.
+// Data: view=monthly of super-admin-sales-analytics, loaded by the page (the
+// "Overall Sales" KPI card uses the same response).
 
 const NEW_COLOR = "#308BF9";
 const RENEW_COLOR = "#3FAF58";
@@ -33,33 +32,7 @@ function Tile({ label, value, sub, accent }) {
   );
 }
 
-export default function SalesAllMonths({ trainerAdmin }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const req = useRef(0);
-
-  const load = useCallback(async () => {
-    const id = ++req.current;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetchSuperAdminSalesMonthlyService({ trainerAdmin });
-      if (id !== req.current) return;
-      if (res?.status === false) throw new Error(res?.message || "Failed to load overall sales");
-      setData(res);
-    } catch (err) {
-      if (id !== req.current) return;
-      setError(err?.data?.message || err?.message || "Failed to load overall sales");
-    } finally {
-      if (id === req.current) setLoading(false);
-    }
-  }, [trainerAdmin]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
+export default function SalesAllMonths({ data, loading, error, onRetry }) {
   const cur = data?.currency;
   const t = data?.totals || {};
   const months = [...(data?.months || [])].reverse();
@@ -80,7 +53,7 @@ export default function SalesAllMonths({ trainerAdmin }) {
       action={<UpdatingPill show={loading && Boolean(data)} />}
     >
       {error ? (
-        <SectionError message={error} onRetry={load} />
+        <SectionError message={error} onRetry={onRetry} />
       ) : loading && !data ? (
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
