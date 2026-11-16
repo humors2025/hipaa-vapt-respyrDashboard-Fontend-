@@ -23,14 +23,11 @@ export const ENGAGEMENT_DETAILS = {
   week: "Device uses in the last 7 days",
 };
 
-// app_onboarded_at is "YYYY-MM-DD HH:MM:SS" as stored in table_clients; show only
-// its date, unshifted, as "Oct 10, 2026".
+// app_onboarded_at is "YYYY-MM-DD HH:MM:SS" from table_clients.dttm, which is UTC
+// (prod profile479: paid 22:24:33 UTC, profile created 22:30:58 the same day).
+// Shown as a local date like member_since, so the two never look out of order.
 export function storedDay(raw) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(raw || ""));
-  if (!m) return "—";
-  return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString("en-US", {
-    month: "short", day: "numeric", year: "numeric", timeZone: "UTC",
-  });
+  return formatDate(raw);
 }
 
 const dayLabel = (iso) =>
@@ -146,8 +143,8 @@ const COLUMNS = {
         <th className={th}>Client</th>
         <th className={th}>This period</th>
         <th className={th}>Trainer</th>
-        <th className={th}>App onboarded</th>
         <th className={th}>Member since</th>
+        <th className={th}>App onboarded</th>
         <th className={th}>Plan</th>
         <th className={`${th} text-right`}>Usage</th>
       </>
@@ -162,8 +159,8 @@ const COLUMNS = {
           </div>
         </td>
         <TrainerCell c={c} />
-        <td className={td}>{storedDay(c.app_onboarded_at)}</td>
         <td className={td}>{formatDate(c.member_since)}</td>
+        <td className={td}>{storedDay(c.app_onboarded_at)}</td>
         <PlanCell c={c} />
         <UsageCell pct={c.rate} />
       </>
@@ -174,8 +171,8 @@ const COLUMNS = {
       <>
         <th className={th}>Client</th>
         <th className={th}>Trainer</th>
-        <th className={th}>App onboarded</th>
         <th className={th}>Member since</th>
+        <th className={th}>App onboarded</th>
         <th className={`${th} text-center`}>Days without a reading</th>
         <th className={th}>Plan</th>
       </>
@@ -184,8 +181,8 @@ const COLUMNS = {
       <>
         <ClientCell c={c} />
         <TrainerCell c={c} />
-        <td className={td}>{storedDay(c.app_onboarded_at)}</td>
         <td className={td}>{formatDate(c.member_since)}</td>
+        <td className={td}>{storedDay(c.app_onboarded_at)}</td>
         <td className={`${num} font-semibold text-[#B5363A]`}>{formatCount(c.days)}</td>
         <PlanCell c={c} />
       </>

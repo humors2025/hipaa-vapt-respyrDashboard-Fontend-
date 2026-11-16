@@ -14,6 +14,8 @@
 //               today_count, last_reading: "YYYY-MM-DD HH:MM:SS",
 //               first_reading: "YYYY-MM-DD HH:MM:SS" } ],
 //     leaders: { most_readings, most_missed, lowest, most_regular } (up to 10 rows each,
+//               never_tested, not_onboarded, renewed: up to 50 each; renewed rows carry
+//               renewals, last_renewed, renewed_this_month; summary.renewed = count)
 //               plus counted_days, regularity %, streak),
 //     pagination: { page, limit, total, total_pages } }
 
