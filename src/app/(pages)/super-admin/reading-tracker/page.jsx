@@ -94,6 +94,9 @@ function SummaryCard({ label, value, hint, tone = "text-[#252525]", onClick }) {
 const statusLabel = (row) => (row.subscription_status || "unknown").replace(/_/g, " ");
 const shortDay = (iso) => formatDay(iso).replace(/, \d{4}$/, "");
 const boughtLine = (row) => `Bought ${formatDay(row.purchased_on)} · Plan ${statusLabel(row)}`;
+// profile_created_at is "YYYY-MM-DD HH:MM:SS" as stored; only the date is shown.
+const createdLabel = (row) =>
+  row.profile_created_at ? `Profile created ${formatDay(row.profile_created_at.slice(0, 10))}` : null;
 const dayTimesLine = (row, day) =>
   `${formatDay(day)}: ${row.reading_times[day].map(formatTime).join(", ")}`;
 
@@ -324,6 +327,9 @@ function CardPopup({ card, month, onClose, onOpenProfile }) {
                 <div className="text-[#A1A1A1] text-[11px] break-all">
                   {row.email || "–"} · {row.profile_id || "No profile ID yet"}
                 </div>
+                {createdLabel(row) && (
+                  <div className="text-[#535359] text-[11px] mt-0.5">{createdLabel(row)}</div>
+                )}
                 {card.details(row, data.today).map((line) => (
                   <div key={line} className="text-[#535359] text-[11px] mt-0.5">
                     {line}
@@ -647,6 +653,9 @@ export default function ReadingTrackerPage() {
                       <div className="text-[#535359] text-[11px] font-mono">
                         {row.profile_id || "No profile ID yet"}
                       </div>
+                      {createdLabel(row) && (
+                        <div className="text-[#A1A1A1] text-[10px] whitespace-nowrap">{createdLabel(row)}</div>
+                      )}
                       <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                         <span
                           className={`inline-flex rounded-full text-[10px] font-semibold px-2 py-0.5 capitalize ${
