@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useRouter } from "next/navigation";
 import { fetchReadingTrackerService } from "@/services/superAdminReadingTrackerService";
 import ReadingTrackerCharts from "@/components/super-admin/ReadingTrackerCharts";
+import ReadingTrackerLeaders from "@/components/super-admin/ReadingTrackerLeaders";
 
 const PAGE_LIMIT = 20;
 const POPUP_LIMIT = 20;
@@ -522,6 +523,18 @@ export default function ReadingTrackerPage() {
       )}
 
       {data?.charts && <ReadingTrackerCharts charts={data.charts} today={data.today} />}
+
+      {data?.leaders && (
+        <ReadingTrackerLeaders
+          key={data.month}
+          leaders={data.leaders}
+          summary={data.summary}
+          month={data.month}
+          daysInMonth={data.days_in_month}
+          today={data.today}
+          onOpenProfile={openProfile}
+        />
+      )}
 
       <div className="flex flex-wrap gap-3 items-center">
         <input

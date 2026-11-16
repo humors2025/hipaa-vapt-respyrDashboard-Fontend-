@@ -13,6 +13,8 @@
 //               as stored), reading_count, missed_days: [...], pending_days: [...],
 //               today_count, last_reading: "YYYY-MM-DD HH:MM:SS",
 //               first_reading: "YYYY-MM-DD HH:MM:SS" } ],
+//     leaders: { most_readings, most_missed, lowest, most_regular } (up to 10 rows each,
+//               plus counted_days, regularity %, streak),
 //     pagination: { page, limit, total, total_pages } }
 
 import { apiFetcher } from "@/config/fetcher";
