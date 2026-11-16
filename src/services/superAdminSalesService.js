@@ -113,7 +113,7 @@ export const fetchSuperAdminSalesPurchasesService = async ({
 //     high_rate, low_rate, never_tested, never_tested_rate, readings_this_week,
 //     readings_last_week, readings_week_change, goals, cohorts: [ { tier, count, rate } ] },
 //     clients: [ { profile_id, name, email, purchased, renewed, trainer_code, trainer_name,
-//     subscription_status, fitness_goal, member_since, days, reading_days, readings,
+//     subscription_status, fitness_goal, member_since, app_onboarded_at, days, reading_days, readings,
 //     last_reading, metabolism_score, rate, cohort } ] }
 export const fetchSuperAdminSalesEngagementService = async ({ period, dateFrom, dateTo, trainerAdmin = "", group = "all" }) =>
   post({

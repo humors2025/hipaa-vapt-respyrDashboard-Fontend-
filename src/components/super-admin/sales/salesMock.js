@@ -465,9 +465,12 @@ export async function mockSalesEngagement({ date_from, date_to, trainer_admin, g
       subscription_status: v.r.subscription_status === "cancelled" ? "ended" : "active",
       fitness_goal: goalsList[Math.floor(seed() * goalsList.length)],
       member_since: v.r.purchased_at,
+      app_onboarded_at: new Date(since - Math.floor(seed() * 20) * 86400000).toISOString().slice(0, 19).replace("T", " "),
       days,
       reading_days: readingDays,
       readings: readingDays + Math.round(readingDays * seed() * 0.4),
+      readings_7d: readingDays ? Math.round(Math.min(days, 7) * (rate / 100) * (0.6 + seed() * 0.8)) : 0,
+      readings_prev_7d: readingDays && days > 7 ? Math.round(Math.min(days - 7, 7) * (rate / 100) * (0.6 + seed() * 0.8)) : 0,
       last_reading: readingDays ? isoTime(new Date(today - Math.floor(seed() * 5) * 86400000)) : null,
       metabolism_score: readingDays ? Math.round(40 + seed() * 50) : null,
       rate,
@@ -486,8 +489,14 @@ export async function mockSalesEngagement({ date_from, date_to, trainer_admin, g
     else goals.other += 1;
   }
   const never = clients.filter((c) => !c.reading_days).length;
-  const thisWeek = Math.round(n * 3.2);
-  const lastWeek = Math.round(n * 2.9);
+  const thisWeek = clients.reduce((s, c) => s + c.readings_7d, 0);
+  const lastWeek = clients.reduce((s, c) => s + c.readings_prev_7d, 0);
+  const daySeed = mulberry32(4242);
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today - (6 - i) * 86400000);
+    const readings = Math.round((thisWeek / 7) * (0.7 + daySeed() * 0.6));
+    return { date: d.toISOString().slice(0, 10), readings, clients: Math.round(readings * 0.8) };
+  });
   return {
     status: true,
     renewals_available: true,
@@ -504,6 +513,7 @@ export async function mockSalesEngagement({ date_from, date_to, trainer_admin, g
       readings_this_week: thisWeek,
       readings_last_week: lastWeek,
       readings_week_change: lastWeek ? pct(thisWeek - lastWeek, lastWeek) : null,
+      week_days: weekDays,
       goals,
       cohorts: tiers.map((tier) => {
         const count = clients.filter((c) => c.cohort === tier).length;
