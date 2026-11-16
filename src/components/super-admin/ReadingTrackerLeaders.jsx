@@ -76,6 +76,20 @@ const TABS = [
     unit: (v) => `${v} day${v === 1 ? "" : "s"} since buying`,
     sub: (r) => `Bought ${shortDate(r.purchased_on)} · ${r.email || "no email"}`,
   },
+  // Clients whose plan has renewed (paid again), latest renewal first. The graph
+  // shows how regularly each one reads this month.
+  {
+    key: "renewed",
+    label: "Renewed plan",
+    color: "#7B5CD6",
+    hint: "Paid again when their plan renewed; bars show % of days with a reading this month",
+    renewal: true,
+    countField: "renewed",
+    value: (r) => r.regularity,
+    unit: (v) => `${v}% of days`,
+    sub: (r) => `Renewed ${r.renewals}× · last ${shortDate(r.last_renewed)}`,
+    percent: true,
+  },
 ];
 
 const tooltipBase = {
@@ -301,7 +315,7 @@ function ListPopup({ tab, rows, total, onClose, onOpenProfile }) {
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[1000px] max-h-[calc(100vh-48px)] overflow-y-auto bg-white rounded-[15px] shadow-xl p-5 flex flex-col gap-4 focus:outline-none"
+          className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[1180px] max-h-[calc(100vh-48px)] overflow-y-auto overflow-x-hidden bg-white rounded-[15px] shadow-xl p-5 flex flex-col gap-4 focus:outline-none"
         >
           {tab && (
             <>
@@ -314,7 +328,9 @@ function ListPopup({ tab, rows, total, onClose, onOpenProfile }) {
                     {tab.hint}.{" "}
                     {tab.waiting
                       ? `${total} client${total === 1 ? "" : "s"}${rows.length < total ? ` (showing the ${rows.length} waiting longest)` : ""}, longest since buying first.`
-                      : `Top ${rows.length} this month.`}
+                      : tab.renewal
+                        ? `${total} client${total === 1 ? "" : "s"}${rows.length < total ? ` (showing the latest ${rows.length})` : ""}, latest renewal first.`
+                        : `Top ${rows.length} this month.`}
                   </div>
                 </div>
                 <Dialog.Close
@@ -362,6 +378,12 @@ function ListPopup({ tab, rows, total, onClose, onOpenProfile }) {
                           </>
                         ) : (
                           <>
+                            {tab.renewal && (
+                              <>
+                                <th className={`${th} text-center`}>Renewals</th>
+                                <th className={th}>Last renewed</th>
+                              </>
+                            )}
                             <th className={`${th} text-center`}>Readings</th>
                             <th className={`${th} text-center`}>Days taken</th>
                             <th className={`${th} text-center`}>Days missed</th>
@@ -396,6 +418,21 @@ function ListPopup({ tab, rows, total, onClose, onOpenProfile }) {
                             </>
                           ) : (
                             <>
+                              {tab.renewal && (
+                                <>
+                                  <td className={`${td} text-center font-semibold`} style={{ color: tab.color }}>
+                                    {r.renewals}×
+                                  </td>
+                                  <td className={td}>
+                                    {shortDate(r.last_renewed)}
+                                    {r.renewed_this_month && (
+                                      <span className="ml-1.5 rounded-full bg-[#F1ECFC] px-1.5 py-0.5 text-[10px] font-semibold text-[#7B5CD6]">
+                                        this month
+                                      </span>
+                                    )}
+                                  </td>
+                                </>
+                              )}
                               <td className={`${td} text-center font-semibold text-[#252525]`}>{r.reading_count}</td>
                               <td className={`${td} text-center text-[#2E8B47]`}>{r.taken_days.length}</td>
                               <td className={`${td} text-center text-[#B5363A]`}>{r.missed_days.length}</td>
@@ -455,7 +492,7 @@ export default function ReadingTrackerLeaders({ leaders, summary, month, daysInM
       </div>
 
       {/* One card per list, showing who is #1 */}
-      <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-3" role="group" aria-label="Top client lists">
+      <div className="grid grid-cols-2 md:grid-cols-4 2xl:grid-cols-7 gap-3" role="group" aria-label="Top client lists">
         {TABS.map((t) => {
           const first = leaders[t.key]?.[0];
           const active = t.key === tabKey;
@@ -476,13 +513,17 @@ export default function ReadingTrackerLeaders({ leaders, summary, month, daysInM
               <div className="text-[12px] font-semibold" style={{ color: t.color }}>
                 {t.label}
               </div>
-              {t.waiting ? (
+              {t.waiting || t.renewal ? (
                 <>
                   <div className="text-[#252525] text-[18px] font-bold tabular-nums leading-tight mt-0.5">
                     {countOf(t)} client{countOf(t) === 1 ? "" : "s"}
                   </div>
                   <div className="text-[#A1A1A1] text-[11px] truncate">
-                    {first ? `Longest: ${displayName(first)} · ${first.days_since_purchase} days` : "Nobody right now"}
+                    {first
+                      ? t.renewal
+                        ? `Latest: ${displayName(first)} · ${shortDate(first.last_renewed)}`
+                        : `Longest: ${displayName(first)} · ${first.days_since_purchase} days`
+                      : "Nobody right now"}
                   </div>
                 </>
               ) : first ? (
@@ -514,7 +555,12 @@ export default function ReadingTrackerLeaders({ leaders, summary, month, daysInM
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-5">
           <div className="flex flex-col gap-2 min-w-0">
             <div className="text-[#A1A1A1] text-[11px] font-semibold uppercase tracking-wide">
-              {tab.label} · {tab.waiting ? `${rows.length} client${rows.length === 1 ? "" : "s"}, longest since buying first` : `top ${rows.length}`}{" "}
+              {tab.label} ·{" "}
+              {tab.waiting
+                ? `${rows.length} client${rows.length === 1 ? "" : "s"}, longest since buying first`
+                : tab.renewal
+                  ? `${rows.length} client${rows.length === 1 ? "" : "s"}, latest renewal first`
+                  : `top ${rows.length}`}{" "}
               <span className="normal-case font-normal">· {tab.hint}</span>
             </div>
             {/* keyed by tab: Chart.js keeps the old canvas height when the row count changes */}
@@ -558,6 +604,13 @@ export default function ReadingTrackerLeaders({ leaders, summary, month, daysInM
                 <WaitingDetail row={selected} tab={tab} />
               ) : (
                 <>
+              {tab.renewal && (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  <Fact label="Renewals" value={`${selected.renewals}×`} tone={tab.color} />
+                  <Fact label="Last renewed" value={shortDate(selected.last_renewed)} />
+                  <Fact label="First bought" value={shortDate(selected.purchased_on)} />
+                </div>
+              )}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                 <Fact label="Readings" value={selected.reading_count} />
                 <Fact label="Days taken" value={selected.taken_days.length} tone="#2E8B47" />
@@ -576,7 +629,7 @@ export default function ReadingTrackerLeaders({ leaders, summary, month, daysInM
         key={viewKey || "closed"}
         tab={viewTab}
         rows={viewTab ? leaders[viewTab.key] || [] : []}
-        total={viewTab ? (viewTab.waiting ? countOf(viewTab) : (leaders[viewTab.key] || []).length) : 0}
+        total={viewTab ? (viewTab.waiting || viewTab.renewal ? countOf(viewTab) : (leaders[viewTab.key] || []).length) : 0}
         onClose={() => setViewKey(null)}
         onOpenProfile={onOpenProfile}
       />
