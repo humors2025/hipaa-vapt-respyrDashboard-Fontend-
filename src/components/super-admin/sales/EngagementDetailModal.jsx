@@ -143,8 +143,8 @@ const COLUMNS = {
         <th className={th}>Client</th>
         <th className={th}>This period</th>
         <th className={th}>Trainer</th>
-        <th className={th}>App onboarded</th>
         <th className={th}>Member since</th>
+        <th className={th}>App onboarded</th>
         <th className={th}>Plan</th>
         <th className={`${th} text-right`}>Usage</th>
       </>
@@ -159,8 +159,8 @@ const COLUMNS = {
           </div>
         </td>
         <TrainerCell c={c} />
-        <td className={td}>{storedDay(c.app_onboarded_at)}</td>
         <td className={td}>{formatDate(c.member_since)}</td>
+        <td className={td}>{storedDay(c.app_onboarded_at)}</td>
         <PlanCell c={c} />
         <UsageCell pct={c.rate} />
       </>
@@ -171,8 +171,8 @@ const COLUMNS = {
       <>
         <th className={th}>Client</th>
         <th className={th}>Trainer</th>
-        <th className={th}>App onboarded</th>
         <th className={th}>Member since</th>
+        <th className={th}>App onboarded</th>
         <th className={`${th} text-center`}>Days without a reading</th>
         <th className={th}>Plan</th>
       </>
@@ -181,8 +181,8 @@ const COLUMNS = {
       <>
         <ClientCell c={c} />
         <TrainerCell c={c} />
-        <td className={td}>{storedDay(c.app_onboarded_at)}</td>
         <td className={td}>{formatDate(c.member_since)}</td>
+        <td className={td}>{storedDay(c.app_onboarded_at)}</td>
         <td className={`${num} font-semibold text-[#B5363A]`}>{formatCount(c.days)}</td>
         <PlanCell c={c} />
       </>

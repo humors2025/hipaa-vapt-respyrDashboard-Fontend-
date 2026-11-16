@@ -362,8 +362,8 @@ export default function SalesClientEngagement({ period, dateFrom, dateTo, traine
                       <th scope="col" className="py-2.5 px-4 font-semibold">This period</th>
                       <th scope="col" className="py-2.5 px-4 font-semibold">Trainer</th>
                       <th scope="col" className="py-2.5 px-4 font-semibold">Goal</th>
-                      <th scope="col" className="py-2.5 px-4 font-semibold whitespace-nowrap">App onboarded</th>
                       <th scope="col" className="py-2.5 px-4 font-semibold whitespace-nowrap">Member since</th>
+                      <th scope="col" className="py-2.5 px-4 font-semibold whitespace-nowrap">App onboarded</th>
                       <th scope="col" className="py-2.5 px-4 font-semibold text-center">Days</th>
                       <th scope="col" className="py-2.5 px-4 font-semibold text-center">Tests</th>
                       <th scope="col" className="py-2.5 px-4 font-semibold text-center">Score</th>
@@ -406,8 +406,8 @@ export default function SalesClientEngagement({ period, dateFrom, dateTo, traine
                             <span className="text-[#A1A1A1]">—</span>
                           )}
                         </td>
-                        <td className="py-2.5 px-4 text-[#535359] whitespace-nowrap">{storedDay(c.app_onboarded_at)}</td>
                         <td className="py-2.5 px-4 text-[#535359] whitespace-nowrap">{formatDate(c.member_since)}</td>
+                        <td className="py-2.5 px-4 text-[#535359] whitespace-nowrap">{storedDay(c.app_onboarded_at)}</td>
                         <td className="py-2.5 px-4 text-center tabular-nums text-[#535359]">{formatCount(c.days)}</td>
                         <td className="py-2.5 px-4 text-center tabular-nums text-[#535359]" title={`${c.readings} readings on ${c.reading_days} days`}>
                           {formatCount(c.reading_days)}
