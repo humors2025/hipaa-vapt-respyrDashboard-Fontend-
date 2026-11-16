@@ -5,6 +5,7 @@ import { fetchSuperAdminSalesEngagementService } from "@/services/superAdminSale
 import { formatCount, formatDate, formatRate } from "./salesFormat";
 import { EmptyState, SalesCard, SectionError, Skeleton, UpdatingPill } from "./SalesUi";
 import { SalesPagination } from "./PurchaseTable";
+import EngagementDetailModal, { storedDay } from "./EngagementDetailModal";
 
 // Client Engagement, as in TA Analytics, but only for paying customers: people who
 // bought or renewed in the selected period. Rate = days with a breath test ÷ days
@@ -72,14 +73,26 @@ function RateCell({ pct }) {
 }
 
 // label: plain question; value: the answer; sub: detail line; hint: what it means.
-function Stat({ label, value, sub, hint, tone }) {
+// onClick makes the card a button that opens its detail popup.
+function Stat({ label, value, sub, hint, tone, onClick }) {
+  const blue = tone === "blue";
   return (
-    <div className={`rounded-[10px] p-3 flex flex-col gap-0.5 min-w-0 ${tone === "blue" ? "bg-[#EEF4FE]" : "bg-[#F8FAFC]"}`}>
-      <span className={`text-[12px] font-semibold ${tone === "blue" ? "text-[#308BF9]" : "text-[#535359]"}`}>{label}</span>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-haspopup="dialog"
+      className={`group text-left rounded-[10px] p-3 flex flex-col gap-0.5 min-w-0 border border-transparent transition-colors cursor-pointer ${
+        blue ? "bg-[#EEF4FE] hover:border-[#308BF9]" : "bg-[#F8FAFC] hover:border-[#C9D6E8] hover:bg-[#F2F6FB]"
+      }`}
+    >
+      <span className={`flex items-center justify-between gap-2 text-[12px] font-semibold ${blue ? "text-[#308BF9]" : "text-[#535359]"}`}>
+        {label}
+        <span className="shrink-0 text-[11px] font-semibold text-[#308BF9] opacity-60 group-hover:opacity-100 transition-opacity">View ›</span>
+      </span>
       <span className={`text-[22px] font-bold leading-tight tabular-nums ${tone === "blue" ? "text-[#308BF9]" : "text-[#252525]"}`}>{value}</span>
       {sub && <span className="text-[12px] text-[#252525] leading-snug">{sub}</span>}
       {hint && <span className="text-[11px] text-[#A1A1A1] leading-snug">{hint}</span>}
-    </div>
+    </button>
   );
 }
 
@@ -104,6 +117,7 @@ export default function SalesClientEngagement({ period, dateFrom, dateTo, traine
   const [search, setSearch] = useState("");
   const [tier, setTier] = useState(null);
   const [page, setPage] = useState(1);
+  const [detail, setDetail] = useState(null);
   const req = useRef(0);
 
   const load = useCallback(async () => {
@@ -200,6 +214,7 @@ export default function SalesClientEngagement({ period, dateFrom, dateTo, traine
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Stat
               tone="blue"
+              onClick={() => setDetail("usage")}
               label="How often customers use the device"
               value={`${s.avg_rate}%`}
               sub={<>On average, {daysInTen(s.avg_rate)}</>}
@@ -211,18 +226,21 @@ export default function SalesClientEngagement({ period, dateFrom, dateTo, traine
               }
             />
             <Stat
+              onClick={() => setDetail("paying")}
               label="Paying customers"
               value={formatCount(s.clients)}
               sub={`${formatCount(s.purchased)} new · ${formatCount(s.renewed)} renewed`}
               hint="Paid in these dates and joined the app"
             />
             <Stat
+              onClick={() => setDetail("never")}
               label="Never used the device"
               value={formatRate(s.never_tested_rate)}
               sub={`${formatCount(s.never_tested)} of ${formatCount(s.clients)} customers`}
               hint="No breath reading at all since paying"
             />
             <Stat
+              onClick={() => setDetail("week")}
               label="Device uses in the last 7 days"
               value={formatCount(s.readings_this_week)}
               sub={
@@ -336,7 +354,7 @@ export default function SalesClientEngagement({ period, dateFrom, dateTo, traine
           ) : (
             <>
               <div className="overflow-x-auto rounded-[10px] border border-[#E1E6ED]">
-                <table className="w-full text-[12px] min-w-[980px]">
+                <table className="w-full text-[12px] min-w-[1080px]">
                   <thead>
                     <tr className="bg-[#F5F7FA] text-[#535359] text-left">
                       <th scope="col" className="py-2.5 px-4 font-semibold">Client</th>
@@ -344,7 +362,8 @@ export default function SalesClientEngagement({ period, dateFrom, dateTo, traine
                       <th scope="col" className="py-2.5 px-4 font-semibold">This period</th>
                       <th scope="col" className="py-2.5 px-4 font-semibold">Trainer</th>
                       <th scope="col" className="py-2.5 px-4 font-semibold">Goal</th>
-                      <th scope="col" className="py-2.5 px-4 font-semibold">Paying since</th>
+                      <th scope="col" className="py-2.5 px-4 font-semibold whitespace-nowrap">App onboarded</th>
+                      <th scope="col" className="py-2.5 px-4 font-semibold whitespace-nowrap">Member since</th>
                       <th scope="col" className="py-2.5 px-4 font-semibold text-center">Days</th>
                       <th scope="col" className="py-2.5 px-4 font-semibold text-center">Tests</th>
                       <th scope="col" className="py-2.5 px-4 font-semibold text-center">Score</th>
@@ -387,6 +406,7 @@ export default function SalesClientEngagement({ period, dateFrom, dateTo, traine
                             <span className="text-[#A1A1A1]">—</span>
                           )}
                         </td>
+                        <td className="py-2.5 px-4 text-[#535359] whitespace-nowrap">{storedDay(c.app_onboarded_at)}</td>
                         <td className="py-2.5 px-4 text-[#535359] whitespace-nowrap">{formatDate(c.member_since)}</td>
                         <td className="py-2.5 px-4 text-center tabular-nums text-[#535359]">{formatCount(c.days)}</td>
                         <td className="py-2.5 px-4 text-center tabular-nums text-[#535359]" title={`${c.readings} readings on ${c.reading_days} days`}>
@@ -421,6 +441,7 @@ export default function SalesClientEngagement({ period, dateFrom, dateTo, traine
           )}
         </>
       )}
+      <EngagementDetailModal key={detail || "closed"} kind={detail} data={data} rangeLabel={rangeLabel} onClose={() => setDetail(null)} />
     </SalesCard>
   );
 }
