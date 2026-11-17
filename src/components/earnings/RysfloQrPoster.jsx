@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import s from "./RysfloQrPoster.module.css";
+import { trackEvent } from "@/lib/analytics";
 
 /**
  * The "See What Your Body Is Running On" poster with this partner's QR and code,
@@ -195,6 +196,7 @@ export default function RysfloQrPoster({ value, code, codeLabel = "GYM CODE", fi
       pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, PAGE_W, PAGE_H, undefined, "FAST");
       pdf.setProperties({ title: "Rysflo QR Poster 5x7" });
       pdf.save(filename);
+      trackEvent("Report Exported", { report: "qr_poster", format: "pdf" });
     } catch (e) {
       console.error(e);
       toast.error("Sorry, the PDF could not be created.");

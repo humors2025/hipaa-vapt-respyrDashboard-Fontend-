@@ -87,6 +87,7 @@ import {
   searchFitChefIngredientsService,
   updateDietPlanFoodNewTestService,
 } from "@/services/authService";
+import { trackEvent } from "@/lib/analytics";
 import { selectDietAnalysisRequestedWeek, setNewTestPlan } from "@/store/dietAnalysisSlice";
 import { selectMacroSummaryData } from "@/store/macroSummarySlice";
 
@@ -3504,6 +3505,7 @@ const ingredients = rows.flatMap((r) =>
       setUndoStack([]);
       setSavedEditsKey(`${profileId}|${weekStart}|${weekEnd}`);
       flash(`Saved ${done} change${done === 1 ? "" : "s"}`);
+      trackEvent("Diet Plan Saved", { editor: "diet_plan_new", changes: done });
       onSave?.(plan, lastResponse);
       // Reload from the server so indices/totals reflect what was persisted.
       setReloadKey((k) => k + 1);
@@ -3584,6 +3586,7 @@ const ingredients = rows.flatMap((r) =>
       setDirty(false);
       setSavedEditsKey(null);
       flash(res?.message || "Week reset to the original plan");
+      trackEvent("Diet Plan Week Reset", { editor: "diet_plan_new" });
       onUndo?.();
       // Reload from the server so the grid shows the reset row.
       setReloadKey((k) => k + 1);
@@ -3644,6 +3647,7 @@ const ingredients = rows.flatMap((r) =>
       if (!accepted) {
         throw new Error(res?.message || "Approve week failed");
       }
+      trackEvent("Diet Plan Approved", { editor: "diet_plan_new" });
       setPlan((prev) => {
         if (!prev) return prev;
         const next = structuredClone(prev);

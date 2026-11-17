@@ -38,6 +38,7 @@ import {
 
 import { cookieManager } from "../lib/cookies";
 import { getSuperAdminPartnerCode } from "../lib/superAdminContext";
+import { trackEvent } from "@/lib/analytics";
 
 function decodeJwt(token) {
   try {
@@ -457,6 +458,7 @@ const transformDatesToDisplay = () => {
     if (tab === "diet" && dietTabDisabled) {
       return;
     }
+    if (tab !== activeTab) trackEvent("Client Profile Tab Viewed", { tab });
     setActiveTab(tab);
     setActiveIndex(0);
     setStartIndex(0);
