@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { listFacilitiesService, inviteFacilityAdminService, listQrService, setupQrService, revokeInviteService, formatMinor } from "@/services/commissionService";
 import { inviteTrainerClientService, superAdminInviteTrainerService, resendUserInviteService } from "@/services/authService";
 import ConfirmDialog from "./ConfirmDialog";
+import { trackEvent } from "@/lib/analytics";
 import FacilityDetailsDialog from "./FacilityDetailsDialog";
 import FacilityEditDialog from "./FacilityEditDialog";
 import FacilityPeopleDialog, { FacilityPeopleList } from "./FacilityPeopleDialog";
@@ -214,6 +215,7 @@ export default function FacilitiesPanel({ isSuperAdmin = false }) {
         const res = await (isSuperAdmin ? superAdminInviteTrainerService : inviteTrainerClientService)(payload);
         out = { invited_email: res.data.invited_email, label: res.data.invited_name, partner_code: res.data.partner_code, debug_invite_link: res.debug_invite_link || res.data.debug_invite_link };
       }
+      trackEvent("Invite Sent", { invited_role: isFacility ? "facility_admin" : "trainer", source: "facilities_panel", with_sticker: Boolean(form.qrId) });
       toast.success(`Invite sent to ${out.invited_email} for ${out.label} (code ${out.partner_code})${out.sticker_id ? ` · sticker ${out.sticker_id} is live` : ""}`);
       setLastInvite(out);
       setForm(EMPTY);

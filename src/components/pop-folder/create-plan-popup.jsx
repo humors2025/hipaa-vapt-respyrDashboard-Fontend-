@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { saveWeeklyFoodJson, fetchSavedWeeklyFoodJson } from "@/services/authService"; // Add the new import
+import { trackEvent } from "@/lib/analytics";
 
 export default function CreatePlanPopUp({ open,
    onClose,
@@ -317,6 +318,7 @@ const fetchExistingFoodData = async () => {
     } else {
       toast.success(response?.message || "Draft saved successfully!");
     }
+    trackEvent(daysArray.length && response?.action === "inserted" ? "Diet Plan Created" : "Diet Plan Saved", { editor: "create_plan_popup", step: "draft", days: daysArray.length });
 
     // ✅ Keep your existing behavior (MealLogged will receive daysArray)
     if (onUploaded) {
@@ -436,6 +438,7 @@ const handleSubmit = async () => {
     } else {
       toast.success(saveResp?.message || "Food submitted successfully!");
     }
+    trackEvent(daysArray.length && saveResp?.action === "inserted" ? "Diet Plan Created" : "Diet Plan Saved", { editor: "create_plan_popup", step: "submit", days: daysArray.length });
 
     // FORMAT 2: For weekly_analysis_complete1.php - needs days in different format
     // Convert to {day1: [...], day2: [...]} format

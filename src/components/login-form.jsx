@@ -7,6 +7,7 @@ import React, { useState } from "react";
 import { loginService, updateDietPlanStatusService, fetchAdminGroupsService } from "@/services/authService";
 import { cookieManager } from "@/lib/cookies";
 import { persistLoginResponse, landingPathForUser, getCurrentUser, ROLES } from "@/lib/user";
+import { syncAnalyticsUser, trackEvent } from "@/lib/analytics";
 import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
@@ -202,6 +203,8 @@ const handleSubmit = async (e) => {
     // Role-aware routing. landingPathForUser returns the right path for
     // the user's role; for trainers (the only role that exists today) it
     // preserves the historic Qua-vs-partners split so behavior is unchanged.
+    syncAnalyticsUser(currentUser);
+    trackEvent("Logged In", { role: currentUser?.role || "unknown" });
     router.push(landingPathForUser(currentUser));
 
   } catch (error) {

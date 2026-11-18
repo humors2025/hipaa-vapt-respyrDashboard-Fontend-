@@ -27,6 +27,7 @@ import {
   buildUpdatePayload,
 } from "../lib/food-update";
 import { cookieManager } from "../lib/cookies";
+import { trackEvent } from "@/lib/analytics";
 
 function decodeJwt(token) {
   try {
@@ -347,6 +348,7 @@ export default function DietPlanLargeSize() {
       }
 
       toast.success(`Saved ${succeeded.length} change${succeeded.length === 1 ? "" : "s"}`);
+      trackEvent("Diet Plan Saved", { editor: "diet_plan_large", changes: succeeded.length });
 
       // Server is source of truth for weekly totals — overwrite optimistic math
       if (lastWeeklyData) {
@@ -415,6 +417,7 @@ export default function DietPlanLargeSize() {
         // This re-renders DietPlanLargeSize only
         setIsApproved(true);
 
+        trackEvent("Diet Plan Approved", { editor: "diet_plan_large" });
         toast.success("Diet plan approved successfully");
       } else {
         throw new Error(response?.message || "Failed to approve diet plan");

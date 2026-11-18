@@ -33,6 +33,7 @@ import { formatDate, formatMoney, humanizeStatus } from "@/components/super-admi
 import { SalesCard, UpdatingPill, Skeleton, EmptyState, SectionError, StatusBadge } from "@/components/super-admin/sales/SalesUi";
 import { SalesPagination } from "@/components/super-admin/sales/PurchaseTable";
 import SettingsLockGate, { isTestCodesLocked } from "@/components/super-admin/SettingsLockGate";
+import { trackEvent } from "@/lib/analytics";
 
 const PAGE_LIMIT = 20;
 const DEFAULT_PAYMENT_STATUSES = ["paid", "failed", "refunded", "partially_refunded", "open"];
@@ -1078,6 +1079,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
 
   const changeTab = (value) => {
     if (value === tab) return;
+    trackEvent("Orders Tab Viewed", { tab: value });
     setTab(value);
     setData(null);
     setStatus("all");
