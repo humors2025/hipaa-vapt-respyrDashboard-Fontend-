@@ -1727,13 +1727,14 @@ export const fetchDownstreamUsersService = async (actorUserId) => {
 export const fetchTrainerAdminOverviewService = async (
   actorUserId,
   email,
-  { page = 1, limit = 20 } = {}
+  { page = 1, limit = 20, search = "" } = {}
 ) => {
   if (!actorUserId) {
     throw new Error("Actor user ID missing.");
   }
 
   const accessToken = Cookies.get("access_token");
+  const searchTerm = String(search || "").trim();
 
   return apiFetcher(API_ENDPOINTS.ADMINPANEL.TRAINERLISTINVITES, {
     method: "POST",
@@ -1746,6 +1747,8 @@ export const fetchTrainerAdminOverviewService = async (
       ...(email ? { email } : {}),
       page,
       limit,
+      // Backend filters trainers by name/email/phone/partner code before paging.
+      ...(searchTerm ? { search: searchTerm } : {}),
     }),
   });
 };

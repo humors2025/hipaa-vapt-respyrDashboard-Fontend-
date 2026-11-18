@@ -36,6 +36,18 @@ export default function TrainersList({ trainerAdmin, onBack }) {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+
+  // Debounce typing so each keystroke doesn't hit the API; a new term starts at page 1.
+  useEffect(() => {
+    const term = searchInput.trim();
+    const timer = setTimeout(() => {
+      setSearch(term);
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const selectedEmail = trainerAdmin?.email || trainerAdmin?.user_id;
 
@@ -55,7 +67,7 @@ export default function TrainersList({ trainerAdmin, onBack }) {
       const actorUserId = getLoggedInActorUserId();
       if (!actorUserId || !selectedEmail) return;
 
-      const cacheKey = `${selectedEmail}|${page}`;
+      const cacheKey = `${selectedEmail}|${page}|${search.toLowerCase()}`;
       if (!force && cacheRef.current.has(cacheKey)) {
         applyResult(cacheRef.current.get(cacheKey));
         return;
@@ -66,6 +78,7 @@ export default function TrainersList({ trainerAdmin, onBack }) {
         const res = await fetchTrainerAdminOverviewService(actorUserId, selectedEmail, {
           page,
           limit: PAGE_LIMIT,
+          search,
         });
         const entry = {
           trainers: res?.network?.trainers || [],
@@ -85,7 +98,7 @@ export default function TrainersList({ trainerAdmin, onBack }) {
         setIsLoading(false);
       }
     },
-    [selectedEmail, page, applyResult]
+    [selectedEmail, page, search, applyResult]
   );
 
   useEffect(() => {
@@ -179,9 +192,47 @@ export default function TrainersList({ trainerAdmin, onBack }) {
       </div>
 
       <div>
-        <h3 className="text-[#252525] text-[14px] font-bold mb-3">
-          Trainers in this network
-        </h3>
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <h3 className="text-[#252525] text-[14px] font-bold">
+            Trainers in this network
+          </h3>
+          <div className="relative w-full sm:w-[320px]">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1A1]"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search name, email or partner code"
+              aria-label="Search trainers in this network"
+              maxLength={100}
+              className="w-full rounded-[10px] border border-[#E1E6ED] bg-white pl-9 pr-8 py-2 text-[12px] text-[#252525] placeholder:text-[#A1A1A1] focus:outline-none focus:border-[#308BF9]"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => setSearchInput("")}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#A1A1A1] hover:text-[#535359] text-[14px] leading-none px-1 cursor-pointer"
+              >
+                &times;
+              </button>
+            )}
+          </div>
+        </div>
 
         {isLoading ? (
           <div className="rounded-[10px] border border-[#E1E6ED] p-6 text-[#A1A1A1] text-[12px] text-center">
@@ -189,7 +240,9 @@ export default function TrainersList({ trainerAdmin, onBack }) {
           </div>
         ) : trainers.length === 0 ? (
           <div className="rounded-[10px] border border-dashed border-[#E1E6ED] p-6 text-[#A1A1A1] text-[12px] text-center">
-            No trainers onboarded yet.
+            {search
+              ? `No trainers match "${search}".`
+              : "No trainers onboarded yet."}
           </div>
         ) : (
           <div className="overflow-x-auto rounded-[10px] border border-[#E1E6ED]">
