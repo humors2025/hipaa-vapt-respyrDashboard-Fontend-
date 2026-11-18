@@ -18,7 +18,7 @@ const SEARCH_MIN = 3;
 
 export const ENGAGEMENT_DETAILS = {
   usage: "How often customers use the device",
-  paying: "Paying customers",
+  paying: "Customers on the app",
   never: "Never used the device",
   week: "Device uses in the last 7 days",
 };
@@ -333,19 +333,20 @@ export default function EngagementDetailModal({ kind, data, rangeLabel, onClose 
   } else if (kind === "paying") {
     stats = (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <MiniStat label="Paying customers" value={formatCount(s.clients)} />
+        <MiniStat label="Customers on the app" value={formatCount(s.clients)} />
         <MiniStat label="New" value={formatCount(s.purchased)} />
         <MiniStat label="Renewed" value={formatCount(s.renewed)} tone="green" />
         <MiniStat label="Both" value={formatCount(s.both)} />
       </div>
     );
-    note = "Customers who paid in these dates and have an app profile.";
+    note =
+      "People who paid (new or renewal) in these dates and have signed up in the app, each counted once. Buyers who haven't signed up in the app yet are not in this list, so it can be shorter than the New Purchases + Renewals count at the top of the page.";
   } else if (kind === "never") {
     stats = (
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
         <MiniStat label="Never used" value={formatCount(s.never_tested)} tone="red" />
         <MiniStat label="Of all customers" value={formatRate(s.never_tested_rate)} />
-        <MiniStat label="Paying customers" value={formatCount(s.clients)} />
+        <MiniStat label="Customers on the app" value={formatCount(s.clients)} />
       </div>
     );
     note = "No breath reading at all since they first paid. Longest-waiting first.";
