@@ -167,9 +167,9 @@ const CARDS = [
   },
   {
     key: "days_taken",
-    label: "Days taken",
+    label: "Days with a reading",
     field: "taken_days",
-    hint: "Days with a reading this month, added across all clients",
+    hint: "Every client's days with a test this month, added together. E.g. 2 clients who each tested on 3 days = 6.",
     tone: "text-[#1F7A4A]",
     show: "taken_month",
     sort: "most_taken",
@@ -189,9 +189,9 @@ const CARDS = [
   },
   {
     key: "days_missed",
-    label: "Days missed",
+    label: "Days without a reading",
     field: "missed_days",
-    hint: "Days with no reading this month, added across all clients",
+    hint: "Every client's days with no test this month, added together. Counted from the day they paid; today is not counted.",
     tone: "text-[#B5363A]",
     show: "missed_month",
     sort: "most_missed",
