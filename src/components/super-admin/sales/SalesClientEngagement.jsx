@@ -167,7 +167,7 @@ export default function SalesClientEngagement({ period, dateFrom, dateTo, traine
   return (
     <SalesCard
       title="Client Engagement"
-      subtitle={`Are paying customers using the device? Customers who bought or renewed during ${rangeLabel}. Usage % = days with a breath reading ÷ days since they first paid.`}
+      subtitle={`Are paying customers using the device? Covers people who bought or renewed during ${rangeLabel} and have signed up in the app. Usage % = days with a breath reading ÷ days since they first paid.`}
       action={
         <div className="flex items-center gap-2 flex-wrap">
           <UpdatingPill show={loading && Boolean(data)} />
@@ -227,10 +227,10 @@ export default function SalesClientEngagement({ period, dateFrom, dateTo, traine
             />
             <Stat
               onClick={() => setDetail("paying")}
-              label="Paying customers"
+              label="Customers on the app"
               value={formatCount(s.clients)}
               sub={`${formatCount(s.purchased)} new · ${formatCount(s.renewed)} renewed`}
-              hint="Paid in these dates and joined the app"
+              hint="People who paid in these dates and have signed up in the app, each counted once. Buyers not signed up yet are left out, so this can be lower than New Purchases + Renewals."
             />
             <Stat
               onClick={() => setDetail("never")}
