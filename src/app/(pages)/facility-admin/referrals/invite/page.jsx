@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { inviteTrainerClientService } from "@/services/authService";
+import { trackEvent } from "@/lib/analytics";
 
 /**
  * Facility admin › Invite a trainer.
@@ -35,6 +36,7 @@ export default function FacilityAdminInvitePage() {
         email: form.email.trim(),
         phone: form.phone.trim() || undefined,
       });
+      trackEvent("Invite Sent", { invited_role: "trainer", source: "facility_admin_referrals" });
       toast.success(`Invite sent to ${res.data.invited_email}`);
       setLast(res.data);
       setForm(EMPTY);

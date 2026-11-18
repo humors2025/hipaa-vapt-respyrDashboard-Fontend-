@@ -38,7 +38,8 @@ const contentSecurityPolicy = [
   // "connect-src 'self' https://api.respyr.ai https://respyr.in blob: data:",
 
 
-  `connect-src 'self' ${API_BASE_URL} https://respyr.in ${AGREEMENTS_S3_ORIGIN} blob: data:`,
+  // Amplitude product analytics (only active where NEXT_PUBLIC_AMPLITUDE_API_KEY is set).
+  `connect-src 'self' ${API_BASE_URL} https://respyr.in ${AGREEMENTS_S3_ORIGIN} https://*.amplitude.com blob: data:`,
 
 
   "object-src 'none'",

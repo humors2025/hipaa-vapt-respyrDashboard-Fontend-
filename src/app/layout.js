@@ -5,6 +5,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import Providers  from "./providers";
 import DevToolsBlocker from "./devtoolsBlocker";
+import AnalyticsTracker from "@/components/AnalyticsTracker";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -27,7 +28,8 @@ export default function RootLayout({ children }) {
       >
 
     <Providers>
-          <div 
+          <AnalyticsTracker />
+          <div
           className="">
  {/* <DevToolsBlocker /> */}
             {children}

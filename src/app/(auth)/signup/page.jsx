@@ -20,6 +20,7 @@ import {
 import Agreement from "@/components/agreement";
 import FacilityAdminAgreement from "@/components/facilityAdminAgreement";
 import { logClientEvent } from "@/lib/clientLogger";
+import { trackEvent } from "@/lib/analytics";
  
  
 /* ---------------- Icons ---------------- */
@@ -194,6 +195,7 @@ function SignupForm() {
         }
 
         setInvite(data);
+        trackEvent("Invite Opened", { invited_role: data?.role || "unknown" });
         
 
       } catch (err) {
@@ -324,6 +326,7 @@ payload.agreement_pdf_name =
   
  
       await acceptInviteService(payload);
+      trackEvent("Signup Completed", { invited_role: role || "unknown" });
  
       cookieManager.clearAuth();
       toast.success(`Welcome ${firstName || ""}! You're all set.`);

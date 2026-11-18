@@ -13,6 +13,7 @@ import {
   revokeTrainerAdminInviteService,
 } from "@/services/authService";
 import TrainersList from "@/components/super-admin/TrainersList";
+import { trackEvent } from "@/lib/analytics";
 import {
   isValidHumanName,
   isValidEmailAddress,
@@ -713,6 +714,8 @@ function InviteForm({
         onInvitationSent(
           newPendingAdminInvitation
         );
+
+        trackEvent("Invite Sent", { invited_role: "trainer_admin", source: "super_admin_trainer_admins" });
 
         toast.success(
           invitationResponse?.message ||

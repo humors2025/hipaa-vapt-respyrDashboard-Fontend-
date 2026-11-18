@@ -150,6 +150,12 @@ export default function OrderPage({ code = "", qrId = "" }) {
               </span>
             </label>
 
+            {!referral && ctx?.code_status === "not_active_yet" && (
+              <div className="rounded-[10px] bg-[#FFF6E5] px-3 py-2 text-[12px] text-[#8A5A00]">
+                This gym or trainer code isn&rsquo;t active yet, so the full price applies. The discount starts once the gym or trainer finishes signing up.
+              </div>
+            )}
+
             {error && <div className="rounded-[10px] bg-[#FCEAEB] px-3 py-2 text-[12px] text-[#B5363A]">{error}</div>}
             {notice && (
               <div className="rounded-[10px] bg-[#E5F6EE] px-3 py-2 text-[12px] text-[#1F7A4A]">

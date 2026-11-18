@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { trackEvent } from "@/lib/analytics";
 import autoTable from "jspdf-autotable";
 
 const formatNumber = (value, suffix = "") => {
@@ -194,6 +195,7 @@ export const exportDietAnalysisPDF = async (
     const finalClientName = cleanClientName.replace(/\s+/g, "_");
     const finalWeek = cleanWeek.replace(/\s+/g, "_");
     pdf.save(`${finalClientName}_diet_analysis_${finalWeek}.pdf`);
+    trackEvent("Report Exported", { report: "diet_analysis", format: "pdf" });
 
     return true;
   } catch (error) {
@@ -416,6 +418,7 @@ export const exportDietPlanPDF = async (clientName, selectedWeek, plan) => {
     const finalClientName = cleanClientName.replace(/\s+/g, "_");
     const finalWeek = cleanWeek.replace(/\s+/g, "_");
     pdf.save(`${finalClientName}_diet_plan_${finalWeek}.pdf`);
+    trackEvent("Report Exported", { report: "diet_plan", format: "pdf" });
 
     return true;
   } catch (error) {
