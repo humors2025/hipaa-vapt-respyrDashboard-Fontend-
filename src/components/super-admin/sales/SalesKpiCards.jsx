@@ -56,7 +56,7 @@ export function SalesKpiCard({ label, value, amount, hint, accent, loading, delt
           </div>
         ))}
       {!loading && <DeltaLine delta={delta} label={deltaLabel} accent={accent} />}
-      <div className={accent ? "text-[11px] opacity-85 truncate" : "text-[#A1A1A1] text-[11px] truncate"}>{loading ? " " : hint}</div>
+      <div className={accent ? "text-[11px] leading-snug opacity-85 break-words" : "text-[#A1A1A1] text-[11px] leading-snug break-words"}>{loading ? " " : hint}</div>
     </div>
   );
 }
