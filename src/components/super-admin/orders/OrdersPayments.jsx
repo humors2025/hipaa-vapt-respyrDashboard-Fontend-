@@ -1038,7 +1038,7 @@ function netByCurrency(summary) {
   return [...byCur.entries()].map(([cur, amt]) => formatMoney(amt, cur)).join(" · ");
 }
 
-// Five count cards at the top of the Payments tab: total sales (first payments
+// Five count cards at the top of every tab except Test codes: total sales (first payments
 // + renewals), first payments, renewals, cancellations, upcoming renewals.
 // Each comes from its own request with limit 1, since only the totals matter.
 // Sales count paid invoices (refunded ones included, as on the Renewals tab);
@@ -1267,7 +1267,7 @@ function PaymentsOverview() {
           })}
         </div>
 
-        {tab === "payments" && <PaymentsOverview />}
+        {tab !== "codes" && <PaymentsOverview />}
 
         {paymentsLike && <PaymentSummary summary={current?.summary} />}
 
