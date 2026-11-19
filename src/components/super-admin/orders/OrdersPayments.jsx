@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Copy } from "lucide-react";
+import { Copy, QrCode } from "lucide-react";
 import {
   ORDERS_SEARCH_MIN_LENGTH,
   fetchPaymentTransactionsService,
@@ -64,6 +64,29 @@ function errorMessage(err, fallback) {
 }
 
 export const Dash = () => <span className="text-[#A1A1A1]">—</span>;
+
+// Code column: the referral code, plus a "Scanned QR" tag when the buyer came
+// in through a QR sticker (referral_subscriptions.qr_id is only saved when the
+// order page was opened from the sticker's link, never for a typed code).
+export function CodeCell({ row }) {
+  if (!row?.partner_code && !row?.qr_id) return <Dash />;
+  return (
+    <div className="flex flex-col items-start gap-1">
+      {row.partner_code && <span className="font-mono text-[11px] text-[#535359]">{row.partner_code}</span>}
+      {row.qr_id ? (
+        <span
+          title={`Bought by scanning QR sticker ${row.qr_id}`}
+          className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[#EEF4FE] px-2 py-0.5 text-[11px] font-medium text-[#308BF9]"
+        >
+          <QrCode className="size-3" aria-hidden="true" />
+          Scanned QR · <span className="font-mono">{row.qr_id}</span>
+        </span>
+      ) : (
+        row.partner_code && <span className="text-[11px] text-[#A1A1A1]">Code or link, no scan</span>
+      )}
+    </div>
+  );
+}
 
 // Older copy path: select a hidden textarea and copy it. Used where the
 // Clipboard API is missing (plain-http LAN dev URL) or refused by the browser.
@@ -293,7 +316,7 @@ function ShippingTable({ rows, ...shell }) {
               )}
             </td>
             <td className={`${td} whitespace-nowrap`}>
-              {r.partner_code ? <span className="font-mono text-[11px] text-[#535359]">{r.partner_code}</span> : <Dash />}
+              <CodeCell row={r} />
             </td>
             <td className={`${td} max-w-[200px]`}>
               <FacilityName facility={r.facility} />
@@ -363,7 +386,7 @@ function PaymentsTable({ rows, ...shell }) {
               <Customer customer={r.customer} />
             </td>
             <td className={`${td} whitespace-nowrap`}>
-              {r.partner_code ? <span className="font-mono text-[11px] text-[#535359]">{r.partner_code}</span> : <Dash />}
+              <CodeCell row={r} />
             </td>
             <td className={`${td} text-[#535359] whitespace-nowrap`}>{PAYMENT_TYPE_LABEL[r.type] || humanizeStatus(r.type)}</td>
             <td className={`${td} text-[#535359] whitespace-nowrap`}>
@@ -426,7 +449,7 @@ function RenewalsTable({ rows, ...shell }) {
               <Customer customer={r.customer} />
             </td>
             <td className={`${td} whitespace-nowrap`}>
-              {r.partner_code ? <span className="font-mono text-[11px] text-[#535359]">{r.partner_code}</span> : <Dash />}
+              <CodeCell row={r} />
             </td>
             <td className={`${td} max-w-[200px]`}>
               <FacilityName facility={r.facility} />
@@ -510,7 +533,7 @@ function CancellationsTable({ rows, ...shell }) {
               {r.customer?.phone && <div className="text-[#535359] text-[11px] truncate">{r.customer.phone}</div>}
             </td>
             <td className={`${td} whitespace-nowrap`}>
-              {r.partner_code ? <span className="font-mono text-[11px] text-[#535359]">{r.partner_code}</span> : <Dash />}
+              <CodeCell row={r} />
             </td>
             <td className={`${td} max-w-[200px]`}>
               <FacilityName facility={r.facility} />
@@ -661,7 +684,7 @@ function UpcomingRenewalsTable({ rows, canRepair = false, ...shell }) {
               <Customer customer={r.customer} />
             </td>
             <td className={`${td} whitespace-nowrap`}>
-              {r.partner_code ? <span className="font-mono text-[11px] text-[#535359]">{r.partner_code}</span> : <Dash />}
+              <CodeCell row={r} />
             </td>
             <td className={`${td} max-w-[200px]`}>
               <FacilityName facility={r.facility} />
