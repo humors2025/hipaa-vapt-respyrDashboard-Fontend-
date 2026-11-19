@@ -1028,6 +1028,85 @@ export default function OrdersPayments({ showTestCodes = false }) {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+// "$348.00 · ₹1,200.00": what went through (paid minus refunded) per currency.
+function netByCurrency(summary) {
+  const byCur = new Map();
+  for (const s of summary || []) {
+    const cur = s.currency || "usd";
+    byCur.set(cur, (byCur.get(cur) || 0) + (Number(s.amount_paid) || 0) - (Number(s.amount_refunded) || 0));
+  }
+  return [...byCur.entries()].map(([cur, amt]) => formatMoney(amt, cur)).join(" · ");
+}
+
+// Five count cards at the top of the Payments tab: total sales (first payments
+// + renewals), first payments, renewals, cancellations, upcoming renewals.
+// Each comes from its own request with limit 1, since only the totals matter.
+// Sales count paid invoices (refunded ones included, as on the Renewals tab);
+// failed and open attempts are left out.
+function PaymentsOverview() {
+  const [stats, setStats] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([
+      fetchPaymentTransactionsService({ type: "first_payment", paidOnly: true, limit: 1 }),
+      fetchPaymentTransactionsService({ type: "renewal", paidOnly: true, limit: 1 }),
+      fetchCancellationsService({ limit: 1 }),
+      fetchUpcomingRenewalsService({ days: UPCOMING_DAYS, limit: 1 }),
+    ])
+      .then(([first, renew, cancel, upcoming]) => {
+        if (!alive) return;
+        if ([first, renew, cancel, upcoming].some((r) => r?.status === false)) throw new Error("failed");
+        const firstCount = first?.pagination?.total || 0;
+        const renewCount = renew?.pagination?.total || 0;
+        setStats({
+          total: { count: firstCount + renewCount, amount: netByCurrency([...(first?.summary || []), ...(renew?.summary || [])]) },
+          first: { count: firstCount, amount: netByCurrency(first?.summary) },
+          renew: { count: renewCount, amount: netByCurrency(renew?.summary) },
+          cancel: { count: cancel?.summary?.total ?? cancel?.pagination?.total ?? 0, scheduled: cancel?.summary?.scheduled || 0, ended: cancel?.summary?.ended || 0 },
+          upcoming: { count: upcoming?.pagination?.total || 0 },
+        });
+      })
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (failed) return <p className="text-[#A66B00] text-[12px]">Could not load the sales totals.</p>;
+
+  const cards = [
+    { key: "total", label: "Total sales", hint: "First payments + renewals", accent: "#308BF9" },
+    { key: "first", label: "New Sales", hint: "New purchases", accent: "#16A34A" },
+    { key: "renew", label: "Renewal sales", hint: "Plans that renewed and were paid", accent: "#7C3AED" },
+    { key: "cancel", label: "Cancellations", hint: null, accent: "#DC2626" },
+    { key: "upcoming", label: "Upcoming renewals", hint: `Renewing in the next ${UPCOMING_DAYS} days`, accent: "#D97706" },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+      {cards.map((c) => {
+        const s = stats?.[c.key];
+        const hint =
+          c.key === "cancel" && s ? `${s.scheduled} still active, won't renew · ${s.ended} ended` : c.key === "cancel" ? "Members who cancelled" : c.hint;
+        return (
+          <div key={c.key} className="rounded-[12px] border border-[#E1E6ED] bg-white px-4 py-3 flex flex-col gap-1" style={{ borderTop: `3px solid ${c.accent}` }}>
+            <span className="text-[#535359] text-[11px] font-semibold">{c.label}</span>
+            {s ? (
+              <span className="text-[#252525] text-[22px] font-bold tabular-nums leading-tight">{s.count.toLocaleString()}</span>
+            ) : (
+              <Skeleton className="h-[26px] w-12" />
+            )}
+            {s?.amount ? <span className="text-[#252525] text-[12px] font-semibold tabular-nums">{s.amount}</span> : null}
+            <span className="text-[#A1A1A1] text-[11px] leading-snug">{hint}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1187,6 +1266,8 @@ export default function OrdersPayments({ showTestCodes = false }) {
             );
           })}
         </div>
+
+        {tab === "payments" && <PaymentsOverview />}
 
         {paymentsLike && <PaymentSummary summary={current?.summary} />}
 
