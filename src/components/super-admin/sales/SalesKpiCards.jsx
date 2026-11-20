@@ -27,21 +27,30 @@ function DeltaLine({ delta, label, accent }) {
 // primary-blue accent card.
 // amount: optional money line under the main value (e.g. revenue for a count).
 // delta: percentChange() result vs the previous period; deltaLabel: "vs last month".
-export function SalesKpiCard({ label, value, amount, hint, accent, loading, delta, deltaLabel }) {
+// highlight: amber card (tinted, thick left border, amber value) for a number
+// that needs attention, such as renewals still to come.
+export function SalesKpiCard({ label, value, amount, hint, accent, highlight, loading, delta, deltaLabel }) {
+  const box = accent
+    ? "bg-[#308BF9] rounded-[10px] p-4 text-white"
+    : highlight
+    ? "bg-[#FFF6E5] rounded-[10px] p-4 border border-[#F5C26B] border-l-[4px] border-l-[#E8A33D] shadow-[0_2px_8px_rgba(232,163,61,0.18)]"
+    : "bg-white rounded-[10px] p-4 border border-[#E1E6ED] hover:border-[#308BF9] transition-colors";
   return (
-    <div
-      className={
-        accent
-          ? "bg-[#308BF9] rounded-[10px] p-4 text-white flex flex-col gap-1 min-w-0"
-          : "bg-white rounded-[10px] p-4 border border-[#E1E6ED] flex flex-col gap-1 min-w-0 hover:border-[#308BF9] transition-colors"
-      }
-    >
-      <div className={accent ? "text-[12px] opacity-85" : "text-[#535359] text-[12px]"}>{label}</div>
+    <div className={`${box} flex flex-col gap-1 min-w-0`}>
+      <div
+        className={
+          accent ? "text-[12px] opacity-85" : highlight ? "text-[#8A5A00] text-[12px] font-semibold" : "text-[#535359] text-[12px]"
+        }
+      >
+        {label}
+      </div>
       {loading ? (
         <Skeleton className={`h-[26px] w-3/4 mt-1 ${accent ? "!bg-white/25" : ""}`} />
       ) : (
         <div
-          className={`text-[22px] xl:text-[24px] font-bold leading-tight mt-1 truncate tabular-nums ${accent ? "" : "text-[#252525]"}`}
+          className={`text-[22px] xl:text-[24px] font-bold leading-tight mt-1 truncate tabular-nums ${
+            accent ? "" : highlight ? "text-[#B86E00]" : "text-[#252525]"
+          }`}
           title={typeof value === "string" ? value : undefined}
         >
           {value}
@@ -56,7 +65,15 @@ export function SalesKpiCard({ label, value, amount, hint, accent, loading, delt
           </div>
         ))}
       {!loading && <DeltaLine delta={delta} label={deltaLabel} accent={accent} />}
-      <div className={accent ? "text-[11px] leading-snug opacity-85 break-words" : "text-[#A1A1A1] text-[11px] leading-snug break-words"}>{loading ? " " : hint}</div>
+      <div
+        className={
+          accent
+            ? "text-[11px] leading-snug opacity-85 break-words"
+            : highlight
+            ? "text-[#8A5A00] text-[11px] leading-snug break-words"
+            : "text-[#A1A1A1] text-[11px] leading-snug break-words"
+        }
+      >{loading ? " " : hint}</div>
     </div>
   );
 }
@@ -65,11 +82,12 @@ export function SalesKpiCard({ label, value, amount, hint, accent, loading, delt
 // when it failed — the cards then simply show no change line).
 // compareLabel: "vs last month" etc.
 // renewals: overview.retention.renewals (null when the environment has no payment rows).
+// upcoming: overview.retention.upcoming ({ total }), null on an older backend.
 // period: "week" | "month" | "year", for the "this month" wording.
 const PERIOD_WORD = { week: "this week", month: "this month", year: "this year" };
 
 // overall: view=monthly response (all-time totals), undefined while loading.
-export default function SalesKpiCards({ summary, breakdown, renewals, overall, previous, compareLabel, period, loading }) {
+export default function SalesKpiCards({ summary, breakdown, renewals, upcoming, overall, previous, compareLabel, period, loading }) {
   const s = summary || {};
   const b = breakdown || {};
   const prev = previous?.summary;
@@ -118,6 +136,12 @@ export default function SalesKpiCards({ summary, breakdown, renewals, overall, p
       delta: renewals ? change(renewals.payments, prevRenewals?.payments) : null,
     },
     {
+      label: `Upcoming Renewals ${when}`,
+      value: upcoming ? formatCount(upcoming.total) : "—",
+      highlight: true,
+      hint: "Plans set to renew from now until the period ends (cancelled plans not counted)",
+    },
+    {
       label: "Overall Sales (all time)",
       value: overall ? formatMoney(overall.totals?.total_sales, overall.currency) : "—",
       amount: overall
@@ -128,7 +152,7 @@ export default function SalesKpiCards({ summary, breakdown, renewals, overall, p
   ];
 
   return (
-    <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+    <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-4 2xl:grid-cols-7 gap-3">
       {cards.map((c) => (
         <SalesKpiCard key={c.label} {...c} deltaLabel={compareLabel} loading={loading} />
       ))}
