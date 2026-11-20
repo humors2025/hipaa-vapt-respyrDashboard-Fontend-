@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { fetchPaymentTransactionsService } from "@/services/superAdminOrdersService";
+import { fetchCancellationsService } from "@/services/superAdminOrdersService";
 import { formatCount, formatMoney, formatPercent, percentChange } from "./salesFormat";
 import { Skeleton } from "./SalesUi";
 
@@ -105,28 +105,24 @@ export function SalesKpiCard({ label, value, amount, hint, accent, highlight, lo
 // period: "week" | "month" | "year", for the "this month" wording.
 const PERIOD_WORD = { week: "this week", month: "this month", year: "this year" };
 
-// overall: view=monthly response (all-time totals), undefined while loading.
-// Renewable customers: the Orders › Renewals tab total (every paid renewal so far,
-// refunded ones included), from the same request as the Orders top cards, so the two
-// numbers always match. Not tied to the period or trainer admin picked here.
-function useRenewalTotals() {
+// Cancellations: the Orders › Cancellations tab total (everyone who cancelled, still
+// active until their paid month ends or already ended), from the same request as the
+// Orders top cards, so the two numbers always match. Not tied to the period or
+// trainer admin picked here.
+function useCancellationTotals() {
   const [state, setState] = useState({ loading: true, data: null });
   useEffect(() => {
     let alive = true;
-    fetchPaymentTransactionsService({ type: "renewal", paidOnly: true, limit: 1 })
+    fetchCancellationsService({ limit: 1 })
       .then((res) => {
         if (!alive) return;
         if (res?.status === false) throw new Error("failed");
-        const byCur = new Map();
-        for (const row of res?.summary || []) {
-          const cur = row.currency || "usd";
-          byCur.set(cur, (byCur.get(cur) || 0) + (Number(row.amount_paid) || 0) - (Number(row.amount_refunded) || 0));
-        }
         setState({
           loading: false,
           data: {
-            count: res?.pagination?.total || 0,
-            amount: [...byCur.entries()].map(([cur, amt]) => formatMoney(amt, cur)).join(" · "),
+            count: res?.summary?.total ?? res?.pagination?.total ?? 0,
+            scheduled: res?.summary?.scheduled || 0,
+            ended: res?.summary?.ended || 0,
           },
         });
       })
@@ -138,8 +134,9 @@ function useRenewalTotals() {
   return state;
 }
 
+// overall: view=monthly response (all-time totals), undefined while loading.
 export default function SalesKpiCards({ summary, breakdown, renewals, upcoming, overall, previous, compareLabel, period, loading }) {
-  const renewable = useRenewalTotals();
+  const cancellations = useCancellationTotals();
   const s = summary || {};
   const b = breakdown || {};
   const prev = previous?.summary;
@@ -196,13 +193,13 @@ export default function SalesKpiCards({ summary, breakdown, renewals, upcoming, 
       href: "/super-admin/orders?tab=upcoming",
     },
     {
-      label: "Renewable customers",
-      value: renewable.data ? formatCount(renewable.data.count) : "—",
-      amount: renewable.data?.amount ? `${renewable.data.amount} collected` : undefined,
-      hint: renewable.data
-        ? "All paid renewals so far, as in Orders › Renewals (all trainer admins)"
-        : "Could not load the Orders renewals",
-      cardLoading: renewable.loading,
+      label: "Cancellations",
+      value: cancellations.data ? formatCount(cancellations.data.count) : "—",
+      hint: cancellations.data
+        ? `${formatCount(cancellations.data.scheduled)} still active, won't renew · ${formatCount(cancellations.data.ended)} ended (all time, as in Orders)`
+        : "Could not load the Orders cancellations",
+      href: "/super-admin/orders?tab=cancellations",
+      cardLoading: cancellations.loading,
     },
     {
       label: "Overall Sales (all time)",
