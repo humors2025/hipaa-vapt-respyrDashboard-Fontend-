@@ -302,6 +302,7 @@ export default function SuperAdminSalesAnalyticsPage() {
             summary={ovError ? null : summary}
             breakdown={ovError ? null : breakdown}
             renewals={ovError ? null : overview?.retention?.renewals}
+            upcoming={ovError ? null : overview?.retention?.upcoming}
             overall={monthlyError ? null : monthly}
             previous={ovError ? null : previousOverview}
             compareLabel={compareLabel}
