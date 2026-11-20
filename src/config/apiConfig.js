@@ -213,6 +213,8 @@ export const API_ENDPOINTS = {
     SUPERADMINREADINGTRACKER: `/${API_VERSION}/dietitian/api/web/super-admin-reading-tracker`,
     // Re-attach a subscription's own referral promo code in Stripe (super_admin).
     RESTORESUBSCRIPTIONDISCOUNT: `/${API_VERSION}/dietitian/api/web/restore-subscription-discount`,
+    // FedEx tracking numbers on Orders › Shipping (save / remove / refresh status).
+    SHIPMENTTRACKING: `/${API_VERSION}/dietitian/api/web/shipment-tracking`,
     // Facility admin › Payments: the same payment rows, for their own facility only.
     FACILITYADMINPAYMENTS: `/${API_VERSION}/dietitian/api/web/facility-admin-payments`,
     SUPERADMINTESTCODES: `/${API_VERSION}/dietitian/api/web/super-admin-test-codes`,

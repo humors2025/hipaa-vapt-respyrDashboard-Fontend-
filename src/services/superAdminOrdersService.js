@@ -10,7 +10,11 @@
 //              (the gym behind the partner code; null for website purchases and trainers outside
 //              a facility), subscription_status (active | expired | cancelled | …; "expired" is
 //              derived when an active plan's current_period_end has passed), stripe_status,
-//              current_period_start, current_period_end, canceled_at, stripe_subscription_id } ],
+//              current_period_start, current_period_end, canceled_at, stripe_subscription_id,
+//              tracking: { carrier, tracking_number, tracking_url, status_code, status_text, delivered,
+//              estimated_delivery, delivered_at, last_event: { at, text, location } | null,
+//              events: [ { at, code, text, location } ] (newest first), error, checked_at,
+//              added_by, added_at } | null } ],
 //              pagination: { page, limit, total, total_pages } }
 // payments → { status, payments: [ { id, date, customer: { name, email }, partner_code,
 //              facility (same shape as a shipping row's, or null),
@@ -138,3 +142,25 @@ export const verifyTestCodesCodeService = ({ code }) => postTestCodesLock(API_EN
 export const startTestCodesMfaSetupService = () => postTestCodesLock(API_ENDPOINTS.SALES.TESTCODESMFASETUP);
 export const confirmTestCodesMfaSetupService = ({ code }) => postTestCodesLock(API_ENDPOINTS.SALES.TESTCODESMFACONFIRM, { code });
 export const verifyTestCodesMfaService = ({ code }) => postTestCodesLock(API_ENDPOINTS.SALES.TESTCODESMFAVERIFY, { code });
+
+// FedEx tracking (backend shipment-tracking.js, table shipment_tracking).
+// set     → { tracking, lookup_error } (super_admin). The number is saved even
+//           when FedEx does not know it yet; lookup_error says why.
+// remove  → { removed } (super_admin)
+// refresh → { summary: { checked, failed, skipped }, tracking: { [sub_id]: tracking } }
+//           Re-asks FedEx for undelivered numbers, at most every 30 minutes each.
+const postTracking = (payload) =>
+  apiFetcher(API_ENDPOINTS.SALES.SHIPMENTTRACKING, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    timeoutMs: 29000,
+  });
+
+export const saveTrackingNumberService = (stripeSubscriptionId, trackingNumber) =>
+  postTracking({ action: "set", stripe_subscription_id: stripeSubscriptionId, tracking_number: trackingNumber });
+
+export const removeTrackingNumberService = (stripeSubscriptionId) =>
+  postTracking({ action: "remove", stripe_subscription_id: stripeSubscriptionId });
+
+export const refreshTrackingService = (stripeSubscriptionIds, { force = false } = {}) =>
+  postTracking({ action: "refresh", stripe_subscription_ids: stripeSubscriptionIds, ...(force ? { force: true } : {}) });
