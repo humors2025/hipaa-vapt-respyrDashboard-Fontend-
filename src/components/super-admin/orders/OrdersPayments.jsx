@@ -32,6 +32,10 @@ import {
   refreshTrackingService,
 } from "@/services/superAdminOrdersService";
 import TrackingCell from "@/components/super-admin/orders/ShipmentTracking";
+
+// FedEx tracking on the Shipping tab (column, Refresh tracking button, subtitle
+// line). Hidden for now on request (20 Nov 2026); set to true to bring it back.
+const SHOW_FEDEX_TRACKING = false;
 import { formatDate, formatMoney, humanizeStatus } from "@/components/super-admin/sales/salesFormat";
 import { SalesCard, UpdatingPill, Skeleton, EmptyState, SectionError, StatusBadge } from "@/components/super-admin/sales/SalesUi";
 import { SalesPagination } from "@/components/super-admin/sales/PurchaseTable";
@@ -262,7 +266,7 @@ function ShippingTable({ rows, canEditTracking = false, onTrackingChange, ...she
     <TableShell
       {...shell}
       empty={!rows?.length}
-      minWidth="min-w-[1640px]"
+      minWidth={SHOW_FEDEX_TRACKING ? "min-w-[1640px]" : "min-w-[1460px]"}
       head={
         <>
           <th scope="col" className={th}>Purchased</th>
@@ -275,7 +279,7 @@ function ShippingTable({ rows, canEditTracking = false, onTrackingChange, ...she
           <th scope="col" className={th}>Facility admin</th>
           <th scope="col" className={th}>Plan period</th>
           <th scope="col" className={th}>Subscription</th>
-          <th scope="col" className={th}>FedEx tracking</th>
+          {SHOW_FEDEX_TRACKING && <th scope="col" className={th}>FedEx tracking</th>}
         </>
       }
     >
@@ -349,9 +353,11 @@ function ShippingTable({ rows, canEditTracking = false, onTrackingChange, ...she
               <StatusBadge status={plan.status} />
               {plan.note && <div className={`text-[11px] mt-1 whitespace-nowrap ${plan.note.tone}`}>{plan.note.text}</div>}
             </td>
-            <td className={td}>
-              <TrackingCell row={r} canEdit={canEditTracking} onChange={onTrackingChange} />
-            </td>
+            {SHOW_FEDEX_TRACKING && (
+              <td className={td}>
+                <TrackingCell row={r} canEdit={canEditTracking} onChange={onTrackingChange} />
+              </td>
+            )}
           </tr>
         );
       })}
@@ -1278,7 +1284,9 @@ export default function OrdersPayments({ showTestCodes = false }) {
         }
         subtitle={
           tab === "shipping"
-            ? "Name, phone and address entered on Stripe Checkout. Add the FedEx tracking number once a device ships to follow its delivery."
+            ? `Name, phone and address entered on Stripe Checkout.${
+                SHOW_FEDEX_TRACKING ? " Add the FedEx tracking number once a device ships to follow its delivery." : ""
+              }`
             : tab === "payments"
               ? "One row per Stripe invoice. Stripe fee is shown only when it is in the same currency as the payment."
               : tab === "renewals"
@@ -1367,7 +1375,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
               className="w-full rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] text-[#252525] placeholder:text-[#A1A1A1] focus:outline-none focus:border-[#308BF9] transition-colors"
             />
           </label>
-          {tab === "shipping" && current?.addresses?.some((r) => r.tracking && !r.tracking.delivered) && (
+          {SHOW_FEDEX_TRACKING && tab === "shipping" && current?.addresses?.some((r) => r.tracking && !r.tracking.delivered) && (
             <button
               type="button"
               onClick={refreshTracking}
