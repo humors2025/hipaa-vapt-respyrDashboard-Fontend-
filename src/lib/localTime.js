@@ -11,7 +11,7 @@
 //
 // Breath-test reading times (table_test_data.date_time) do NOT go through
 // parseServerTime: they have their own rules in testTime.js (stored clock time,
-// converted from India time after NEXT_PUBLIC_TEST_TIME_IST_SINCE).
+// always read as India time and shown in the viewer's zone).
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const NAIVE_DATE_TIME = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
