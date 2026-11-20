@@ -1,7 +1,8 @@
 "use client";
 
 // Website (/order) purchases as the Stripe webhook records them:
-//   Shipping    one row per purchase: who to ship the device to
+//   Shipping    one row per purchase: who to ship the device to, and the
+//               FedEx tracking number / delivery status once it has shipped
 //   Payments    one row per Stripe invoice: first payment, renewals, failures, refunds
 //   Renewals    renewals that went through (paid; refunds still shown), with
 //               which renewal each is and where the plan stands now
@@ -18,7 +19,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Copy, QrCode } from "lucide-react";
+import { Copy, QrCode, RefreshCw } from "lucide-react";
 import {
   ORDERS_SEARCH_MIN_LENGTH,
   fetchPaymentTransactionsService,
@@ -28,7 +29,9 @@ import {
   fetchCancellationsService,
   generateTestCodesService,
   restoreSubscriptionDiscountService,
+  refreshTrackingService,
 } from "@/services/superAdminOrdersService";
+import TrackingCell from "@/components/super-admin/orders/ShipmentTracking";
 import { formatDate, formatMoney, humanizeStatus } from "@/components/super-admin/sales/salesFormat";
 import { SalesCard, UpdatingPill, Skeleton, EmptyState, SectionError, StatusBadge } from "@/components/super-admin/sales/SalesUi";
 import { SalesPagination } from "@/components/super-admin/sales/PurchaseTable";
@@ -254,12 +257,12 @@ function FacilityAdmin({ facility }) {
   );
 }
 
-function ShippingTable({ rows, ...shell }) {
+function ShippingTable({ rows, canEditTracking = false, onTrackingChange, ...shell }) {
   return (
     <TableShell
       {...shell}
       empty={!rows?.length}
-      minWidth="min-w-[1420px]"
+      minWidth="min-w-[1640px]"
       head={
         <>
           <th scope="col" className={th}>Purchased</th>
@@ -272,6 +275,7 @@ function ShippingTable({ rows, ...shell }) {
           <th scope="col" className={th}>Facility admin</th>
           <th scope="col" className={th}>Plan period</th>
           <th scope="col" className={th}>Subscription</th>
+          <th scope="col" className={th}>FedEx tracking</th>
         </>
       }
     >
@@ -344,6 +348,9 @@ function ShippingTable({ rows, ...shell }) {
             <td className={td}>
               <StatusBadge status={plan.status} />
               {plan.note && <div className={`text-[11px] mt-1 whitespace-nowrap ${plan.note.tone}`}>{plan.note.text}</div>}
+            </td>
+            <td className={td}>
+              <TrackingCell row={r} canEdit={canEditTracking} onChange={onTrackingChange} />
             </td>
           </tr>
         );
@@ -1021,13 +1028,6 @@ export function PaymentSummary({ summary }) {
   );
 }
 
-export default function OrdersPayments({ showTestCodes = false }) {
-  const tabs = showTestCodes ? TABS : TABS.filter((t) => t.value !== "codes");
-  const [tab, setTab] = useState("shipping");
-  const [status, setStatus] = useState("all");
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
 // "$348.00 · ₹1,200.00": what went through (paid minus refunded) per currency.
 function netByCurrency(summary) {
   const byCur = new Map();
@@ -1107,10 +1107,18 @@ function PaymentsOverview() {
   );
 }
 
+export default function OrdersPayments({ showTestCodes = false }) {
+  const tabs = showTestCodes ? TABS : TABS.filter((t) => t.value !== "codes");
+  const [tab, setTab] = useState("shipping");
+  const [status, setStatus] = useState("all");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [refreshingTracking, setRefreshingTracking] = useState(false);
   const reqId = useRef(0);
 
   // Open a tab straight from a link, e.g. /super-admin/orders?tab=cancellations.
@@ -1179,6 +1187,42 @@ function PaymentsOverview() {
     load();
   }, [load]);
 
+  // Put a row's new FedEx tracking (or null after removing it) into the list
+  // on screen without reloading the page.
+  const setRowTracking = useCallback((subId, tracking) => {
+    setData((d) =>
+      d?.view === "shipping"
+        ? { ...d, addresses: d.addresses.map((r) => (r.stripe_subscription_id === subId ? { ...r, tracking } : r)) }
+        : d
+    );
+  }, []);
+
+  // Ask FedEx again for this page's undelivered parcels (the backend skips
+  // any checked in the last 30 minutes).
+  const refreshTracking = async () => {
+    const ids = (data?.view === "shipping" ? data.addresses : [])
+      .filter((r) => r.tracking && !r.tracking.delivered)
+      .map((r) => r.stripe_subscription_id);
+    if (!ids.length) {
+      toast.info("No parcels in transit on this page");
+      return;
+    }
+    setRefreshingTracking(true);
+    try {
+      const res = await refreshTrackingService(ids);
+      if (res?.status === false) throw new Error(res?.message || "Could not refresh tracking");
+      for (const [subId, tracking] of Object.entries(res.tracking || {})) setRowTracking(subId, tracking);
+      const { checked = 0, failed = 0, skipped = 0 } = res.summary || {};
+      if (!checked && skipped) toast.success("Tracking is up to date (checked in the last 30 minutes)");
+      else if (failed) toast.warning(`Checked ${checked} parcel${checked === 1 ? "" : "s"}; FedEx had no answer for ${failed}`);
+      else toast.success(`Checked ${checked} parcel${checked === 1 ? "" : "s"} with FedEx`);
+    } catch (err) {
+      toast.error(errorMessage(err, "Could not refresh tracking"));
+    } finally {
+      setRefreshingTracking(false);
+    }
+  };
+
   const changeTab = (value) => {
     if (value === tab) return;
     trackEvent("Orders Tab Viewed", { tab: value });
@@ -1234,7 +1278,7 @@ function PaymentsOverview() {
         }
         subtitle={
           tab === "shipping"
-            ? "Name, phone and address entered on Stripe Checkout"
+            ? "Name, phone and address entered on Stripe Checkout. Add the FedEx tracking number once a device ships to follow its delivery."
             : tab === "payments"
               ? "One row per Stripe invoice. Stripe fee is shown only when it is in the same currency as the payment."
               : tab === "renewals"
@@ -1323,6 +1367,17 @@ function PaymentsOverview() {
               className="w-full rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] text-[#252525] placeholder:text-[#A1A1A1] focus:outline-none focus:border-[#308BF9] transition-colors"
             />
           </label>
+          {tab === "shipping" && current?.addresses?.some((r) => r.tracking && !r.tracking.delivered) && (
+            <button
+              type="button"
+              onClick={refreshTracking}
+              disabled={refreshingTracking}
+              className="inline-flex items-center gap-1.5 rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] font-semibold text-[#535359] hover:bg-[#EEF4FE] hover:text-[#308BF9] disabled:opacity-60 cursor-pointer transition-colors"
+            >
+              <RefreshCw className={`size-3.5 ${refreshingTracking ? "animate-spin" : ""}`} aria-hidden="true" />
+              {refreshingTracking ? "Checking FedEx…" : "Refresh tracking"}
+            </button>
+          )}
           {(paymentsLike || tab === "cancellations") && (
             <label className="flex flex-col gap-1 min-w-[170px]">
               <span className="text-[#535359] text-[11px] font-semibold">Status</span>
@@ -1353,6 +1408,8 @@ function PaymentsOverview() {
         {tab === "shipping" ? (
           <ShippingTable
             rows={current?.addresses}
+            canEditTracking={showTestCodes}
+            onTrackingChange={setRowTracking}
             {...shell}
             emptyMessage={filtersActive ? "No addresses match this search." : "No shipping addresses recorded yet."}
           />
