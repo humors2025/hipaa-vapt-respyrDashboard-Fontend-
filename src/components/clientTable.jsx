@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { selectClients, getClientsForDietician } from "../store/clientSlice";
 import { useDispatch, useSelector } from "react-redux";
 import { resolveProfileImage } from "../lib/profileImage";
+import { formatTestTimeAgo, formatTestTimeExact } from "@/lib/testTime";
 
 export default function ClientTable({
   showUserProfile = true,
@@ -123,62 +124,6 @@ export default function ClientTable({
   };
 
 
-  // Helper function to format last tested text
-// The API tags last_logged_date with "Z" (UTC) but the value is actually
-// server local wall-clock time (p_created has no timezone at all). Parsing it
-// as UTC shifts it into the future, so we read the wall-clock components and
-// build a local Date instead of trusting the "Z".
-const parseServerDate = (dateString) => {
-  const m = String(dateString).match(
-    /(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})/
-  );
-  if (!m) return new Date(dateString);
-  return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
-};
-
-const formatLastLoggedDate = (dateString) => {
-  if (!dateString) return "No test yet";
-
-  try {
-    const testDate = parseServerDate(dateString);
-    const now = new Date();
-
-    if (isNaN(testDate.getTime())) return "No test yet";
-
-    // Clamp small negative diffs (clock skew) to 0.
-    const diffMs = Math.max(0, now - testDate);
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-
-    if (diffHours < 24) {
-      if (diffMinutes < 1) return "Last tested just now";
-      if (diffMinutes < 60) return `Last tested ${diffMinutes} min${diffMinutes > 1 ? "s" : ""} ago`;
-      return `Last tested ${diffHours} hr${diffHours > 1 ? "s" : ""} ago`;
-    }
-
-    return testDate.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  } catch (error) {
-    return "No test yet";
-  }
-};
-
-
-// Exact date and time of the last test, e.g. "20 Nov 2026, 7:27 PM", read the same
-// way as above (stored wall-clock time, the "Z" ignored). null when there is no test.
-const formatLastLoggedExact = (dateString) => {
-  if (!dateString) return null;
-  const d = parseServerDate(dateString);
-  if (isNaN(d.getTime())) return null;
-  const date = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-  return `${date}, ${time}`;
-};
-
-
   const transformClientData = (apiData) => {
     if (!apiData || !Array.isArray(apiData)) return [];
 
@@ -208,8 +153,8 @@ const formatLastLoggedExact = (dateString) => {
           : "No test",
 
       // Last test
-      last_logged: formatLastLoggedDate(client.last_logged_date),
-      last_logged_exact: formatLastLoggedExact(client.last_logged_date),
+      last_logged: formatTestTimeAgo(client.last_logged_date),
+      last_logged_exact: formatTestTimeExact(client.last_logged_date),
 
       // Level type
       level_type: client.level_type ?? "N/A",
