@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { fetchPaymentTransactionsService } from "@/services/superAdminOrdersService";
 import { formatCount, formatMoney, formatPercent, percentChange } from "./salesFormat";
 import { Skeleton } from "./SalesUi";
@@ -31,14 +32,25 @@ function DeltaLine({ delta, label, accent }) {
 // delta: percentChange() result vs the previous period; deltaLabel: "vs last month".
 // highlight: amber card (tinted, thick left border, amber value) for a number
 // that needs attention, such as renewals still to come.
-export function SalesKpiCard({ label, value, amount, hint, accent, highlight, loading, delta, deltaLabel }) {
+// href: makes the whole card a link (e.g. to the matching Orders tab).
+export function SalesKpiCard({ label, value, amount, hint, accent, highlight, loading, delta, deltaLabel, href }) {
   const box = accent
     ? "bg-[#308BF9] rounded-[10px] p-4 text-white"
     : highlight
     ? "bg-[#FFF6E5] rounded-[10px] p-4 border border-[#F5C26B] border-l-[4px] border-l-[#E8A33D] shadow-[0_2px_8px_rgba(232,163,61,0.18)]"
     : "bg-white rounded-[10px] p-4 border border-[#E1E6ED] hover:border-[#308BF9] transition-colors";
+  const Wrapper = href ? Link : "div";
+  const linkProps = href
+    ? {
+        href,
+        "aria-label": `${label}: open in Orders`,
+        className: `${box} flex flex-col gap-1 min-w-0 cursor-pointer ${
+          highlight ? "hover:shadow-[0_4px_14px_rgba(232,163,61,0.35)] transition-shadow" : ""
+        }`,
+      }
+    : { className: `${box} flex flex-col gap-1 min-w-0` };
   return (
-    <div className={`${box} flex flex-col gap-1 min-w-0`}>
+    <Wrapper {...linkProps}>
       <div
         className={
           accent ? "text-[12px] opacity-85" : highlight ? "text-[#8A5A00] text-[12px] font-semibold" : "text-[#535359] text-[12px]"
@@ -76,7 +88,12 @@ export function SalesKpiCard({ label, value, amount, hint, accent, highlight, lo
             : "text-[#A1A1A1] text-[11px] leading-snug break-words"
         }
       >{loading ? " " : hint}</div>
-    </div>
+      {href && !loading && (
+        <div className={`text-[11px] font-semibold mt-auto pt-1 ${highlight ? "text-[#B86E00]" : "text-[#308BF9]"}`}>
+          View in Orders →
+        </div>
+      )}
+    </Wrapper>
   );
 }
 
@@ -168,6 +185,7 @@ export default function SalesKpiCards({ summary, breakdown, renewals, upcoming, 
       value: renewals ? formatCount(renewals.payments) : "—",
       amount: renewals ? `${formatMoney(renewals.net_sales, cur)} collected` : undefined,
       hint: renewals ? "Members who paid again for the next month" : "Renewals are not recorded here yet",
+      href: "/super-admin/orders?tab=renewals",
       delta: renewals ? change(renewals.payments, prevRenewals?.payments) : null,
     },
     {
@@ -175,6 +193,7 @@ export default function SalesKpiCards({ summary, breakdown, renewals, upcoming, 
       value: upcoming ? formatCount(upcoming.total) : "—",
       highlight: true,
       hint: "Plans set to renew from now until the period ends (cancelled plans not counted)",
+      href: "/super-admin/orders?tab=upcoming",
     },
     {
       label: "Renewable customers",

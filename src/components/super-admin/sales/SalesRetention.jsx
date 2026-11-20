@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { formatCount, formatDate, formatMoney, formatRate } from "./salesFormat";
 import { EmptyState, SalesCard, SectionError, Skeleton, UpdatingPill } from "./SalesUi";
 
@@ -118,6 +119,8 @@ function Block({ tag, tagTone, question, parts, total, center, centerLabel, sent
   );
 }
 
+const CANCELLATIONS_HREF = "/super-admin/orders?tab=cancellations";
+
 // Who cancelled in the selected dates: ring (still has access vs gone) + names.
 function Cancellations({ data, rangeLabel }) {
   const total = data?.total || 0;
@@ -126,9 +129,21 @@ function Cancellations({ data, rangeLabel }) {
     { key: "ended", label: "Already gone", count: data?.ended || 0, color: RED },
   ];
   const list = data?.list || [];
+  const router = useRouter();
+  const openOrders = () => router.push(CANCELLATIONS_HREF);
 
+  // The whole box opens Orders › Cancellations.
   return (
-    <div className="rounded-[12px] border border-[#E1E6ED] p-4 flex flex-col gap-3 min-w-0">
+    <div
+      role="link"
+      tabIndex={0}
+      aria-label="Open Orders, Cancellations tab"
+      onClick={openOrders}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") openOrders();
+      }}
+      className="rounded-[12px] border border-[#E1E6ED] p-4 flex flex-col gap-3 min-w-0 cursor-pointer hover:border-[#308BF9] focus:outline-none focus-visible:border-[#308BF9] transition-colors"
+    >
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="flex flex-col gap-1.5">
           <span className="self-start rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-[#F0F3F7] text-[#535359]">
@@ -137,7 +152,8 @@ function Cancellations({ data, rangeLabel }) {
           <div className="text-[#252525] text-[14px] font-bold leading-snug">Who cancelled in these dates?</div>
         </div>
         <a
-          href="/super-admin/orders?tab=cancellations"
+          href={CANCELLATIONS_HREF}
+          onClick={(e) => e.stopPropagation()}
           className="text-[12px] font-semibold text-[#308BF9] hover:underline whitespace-nowrap"
         >
           See all cancellations →
