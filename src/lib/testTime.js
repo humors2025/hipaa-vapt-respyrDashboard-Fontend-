@@ -4,7 +4,7 @@
 // sends it ("2026-11-20T19:27:08.000Z"), but that Z means nothing, so it is ignored.
 //
 // Until now the app saved each phone's own clock time, so the zone of an old test
-// is unknown and it is shown exactly as stored, marked "client's time".
+// is unknown and it is shown exactly as stored.
 //
 // From NEXT_PUBLIC_TEST_TIME_IST_SINCE on (India time, "YYYY-MM-DD" or
 // "YYYY-MM-DD HH:MM"), tests are saved in India time (UTC+5:30, no daylight
@@ -66,14 +66,12 @@ export function formatTestTimeAgo(value, { noTest = "No test yet", dateStyle = "
 
 /**
  * Exact date and time: "20 Nov 2026, 7:57 AM CST" in the viewer's zone for
- * converted tests, "20 Nov 2026, 7:27 PM (client's time)" for older ones.
+ * converted tests, "20 Nov 2026, 7:27 PM" (as stored, no zone) for older ones.
  */
 export function formatTestTimeExact(value) {
   const t = readTestTime(value);
   if (!t) return null;
   const date = t.date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   const time = t.date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-  return t.converted
-    ? `${date}, ${time} ${getTimeZoneLabel(t.date)}`
-    : `${date}, ${time} (client's time)`;
+  return t.converted ? `${date}, ${time} ${getTimeZoneLabel(t.date)}` : `${date}, ${time}`;
 }
