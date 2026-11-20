@@ -3,47 +3,26 @@
 // The column stores a clock time with no time zone. The API adds a "Z" when it
 // sends it ("2026-11-20T19:27:08.000Z"), but that Z means nothing, so it is ignored.
 //
-// Until now the app saved each phone's own clock time, so the zone of an old test
-// is unknown and it is shown exactly as stored.
-//
-// From NEXT_PUBLIC_TEST_TIME_IST_SINCE on (India time, "YYYY-MM-DD" or
-// "YYYY-MM-DD HH:MM"), tests are saved in India time (UTC+5:30, no daylight
-// saving), so they are converted to each viewer's own time zone. Leave the
-// variable empty until the database really saves India time.
+// Every stored test time is read as India time (UTC+5:30, no daylight saving) and
+// shown in each viewer's own time zone: 7:27 PM stored = 7:27 PM IST in India,
+// 7:57 AM CST in Texas, 1:57 PM GMT in London.
 
 import { getTimeZoneLabel } from "./localTime";
 
 const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
 const WALL_CLOCK = /(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/;
 
-function cutover() {
-  const raw = (process.env.NEXT_PUBLIC_TEST_TIME_IST_SINCE || "").trim();
-  const m = raw.match(/^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}))?$/);
-  if (!m) return null;
-  return `${m[1]} ${m[2] || "00:00"}:00`;
-}
-
 /**
- * Reads a test time. Returns null when there is none, otherwise
- * { date, converted }:
- *   converted = true  -> date is the exact moment (saved in India time);
- *                         show it in the viewer's zone.
- *   converted = false -> date holds the stored clock time as if it were the
- *                         viewer's own (zone unknown); show it as stored.
+ * Reads a test time as India time. Returns null when there is none, otherwise
+ * { date, converted: true } where date is the exact moment.
  */
 export function readTestTime(value) {
   if (!value) return null;
   const m = String(value).match(WALL_CLOCK);
   if (!m) return null;
   const [, y, mo, d, h, mi, s = "00"] = m;
-  const since = cutover();
-  const wall = `${y}-${mo}-${d} ${h}:${mi}:${s}`;
-  if (since && wall >= since) {
-    const utc = Date.UTC(+y, +mo - 1, +d, +h, +mi, +s) - IST_OFFSET_MS;
-    return { date: new Date(utc), converted: true };
-  }
-  const local = new Date(+y, +mo - 1, +d, +h, +mi, +s);
-  return Number.isNaN(local.getTime()) ? null : { date: local, converted: false };
+  const date = new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s) - IST_OFFSET_MS);
+  return Number.isNaN(date.getTime()) ? null : { date, converted: true };
 }
 
 /** "Last tested 2 hrs ago", or the date once it is a day or more ago. */
@@ -65,8 +44,7 @@ export function formatTestTimeAgo(value, { noTest = "No test yet", dateStyle = "
 }
 
 /**
- * Exact date and time: "20 Nov 2026, 7:57 AM CST" in the viewer's zone for
- * converted tests, "20 Nov 2026, 7:27 PM" (as stored, no zone) for older ones.
+ * Exact date and time in the viewer's zone, e.g. "20 Nov 2026, 7:57 AM CST".
  */
 export function formatTestTimeExact(value) {
   const t = readTestTime(value);
