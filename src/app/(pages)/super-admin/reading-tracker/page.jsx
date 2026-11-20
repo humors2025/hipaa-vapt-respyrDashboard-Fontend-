@@ -124,15 +124,16 @@ const CARDS = [
     details: (row, today) => [readingsLabel(row.today_count), dayTimesLine(row, today)],
   },
   {
-    key: "readings_today",
-    label: "Readings today",
-    field: "readings_today",
-    hint: "Total tests done today by all clients. A client who tested 3 times counts as 3.",
-    tone: "text-[#308BF9]",
+    key: "missed_today",
+    label: "Total reading missed today",
+    // Linked clients with no test yet today: the chart's "pending" count for today.
+    count: (res) => res?.charts?.daily?.find((d) => d.day === res.today)?.pending ?? 0,
+    hint: "Clients signed up in the app who have not done any test today yet.",
+    tone: "text-[#B5363A]",
     todayOnly: true,
-    show: "taken_today",
+    show: "pending_today",
     sort: "name",
-    details: (row, today) => [readingsLabel(row.today_count), dayTimesLine(row, today)],
+    details: (row) => [boughtLine(row), `Last reading: ${formatDateTime(row.last_reading)}`],
   },
   {
     key: "first_today",
@@ -221,6 +222,8 @@ const CARDS = [
   },
 ];
 
+const cardValue = (card, res) => (card.count ? card.count(res) : res?.summary?.[card.field]);
+
 function CardPopup({ card, month, onClose, onOpenProfile }) {
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
@@ -285,7 +288,7 @@ function CardPopup({ card, month, onClose, onOpenProfile }) {
           <div>
             <h2 className="text-[#252525] text-[15px] font-bold">
               {card.label}
-              {data?.summary ? `: ${data.summary[card.field] ?? 0}` : ""}
+              {data?.summary ? `: ${cardValue(card, data) ?? 0}` : ""}
             </h2>
             <p className="text-[#535359] text-[11px] mt-0.5">{card.hint}</p>
           </div>
@@ -513,7 +516,7 @@ export default function ReadingTrackerPage() {
             <SummaryCard
               key={card.key}
               label={card.label}
-              value={summary[card.field]}
+              value={cardValue(card, data)}
               hint={card.hint}
               tone={card.tone}
               onClick={() => setPopupCard(card)}
