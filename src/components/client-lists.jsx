@@ -8,6 +8,7 @@ import { fetchClientsDashboard } from "../services/authService";
 import { cookieManager } from "../lib/cookies";
 import { zoneLabel } from "@/lib/utils";
 import { resolveProfileImage } from "../lib/profileImage";
+import { formatTestTimeAgo } from "@/lib/testTime";
 
 function decodeJwt(token) {
   try {
@@ -204,41 +205,10 @@ export default function ClientLists() {
     return "#535359";
   };
 
-  const formatLastLoggedDate = (lastLoggedDate) => {
-    if (!lastLoggedDate) return "No test yet";
-
-    // The API sends last_logged_date as local (IST) wall-clock time but suffixes
-    // it with "Z" (e.g. "2026-06-18T15:03:53.000Z"). Parsing that as UTC shifts it
-    // ~5.5h into the future vs the local clock, so the diff is ~0 and it always
-    // showed "Last tested just now". Strip the trailing "Z"/zone and parse the
-    // wall-clock components as local time so the elapsed time is real.
-    const normalized = lastLoggedDate
-      .replace(" ", "T")
-      .replace(/(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/i, "");
-    const parsedDate = new Date(normalized);
-
-    if (isNaN(parsedDate.getTime())) return "No test yet";
-
-    const now = new Date();
-    // Clamp to 0 so a near-now/future timestamp never produces a negative diff.
-    const diffMs = Math.max(0, now - parsedDate);
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-
-    if (diffMs < 24 * 60 * 60 * 1000) {
-      if (diffMinutes < 1) {
-        return "Last tested just now";
-      }
-
-      if (diffMinutes < 60) {
-        return `Last tested ${diffMinutes} min${diffMinutes > 1 ? "s" : ""} ago`;
-      }
-
-      return `Last tested ${diffHours} hr${diffHours > 1 ? "s" : ""} ago`;
-    }
-
-    return parsedDate.toLocaleDateString("en-GB");
-  };
+  // Test times: see src/lib/testTime.js (converted to the viewer's zone once
+  // tests are saved in India time; older ones are shown as stored).
+  const formatLastLoggedDate = (lastLoggedDate) =>
+    formatTestTimeAgo(lastLoggedDate, { dateStyle: "numeric" });
 
   return (
     <>
