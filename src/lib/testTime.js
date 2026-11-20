@@ -5,9 +5,7 @@
 //
 // Every stored test time is read as India time (UTC+5:30, no daylight saving) and
 // shown in each viewer's own time zone: 7:27 PM stored = 7:27 PM IST in India,
-// 7:57 AM CST in Texas, 1:57 PM GMT in London.
-
-import { getTimeZoneLabel } from "./localTime";
+// 7:57 AM in Texas, 1:57 PM in London (no zone name is shown).
 
 const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
 const WALL_CLOCK = /(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/;
@@ -44,12 +42,12 @@ export function formatTestTimeAgo(value, { noTest = "No test yet", dateStyle = "
 }
 
 /**
- * Exact date and time in the viewer's zone, e.g. "20 Nov 2026, 7:57 AM CST".
+ * Exact date and time in the viewer's zone, no zone name: "20 Nov 2026, 7:57 AM".
  */
 export function formatTestTimeExact(value) {
   const t = readTestTime(value);
   if (!t) return null;
   const date = t.date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   const time = t.date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-  return t.converted ? `${date}, ${time} ${getTimeZoneLabel(t.date)}` : `${date}, ${time}`;
+  return `${date}, ${time}`;
 }
