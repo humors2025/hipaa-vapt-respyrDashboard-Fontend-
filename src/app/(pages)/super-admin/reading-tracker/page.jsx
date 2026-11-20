@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchReadingTrackerService } from "@/services/superAdminReadingTrackerService";
 import ReadingTrackerCharts from "@/components/super-admin/ReadingTrackerCharts";
@@ -75,21 +75,6 @@ function formatDateTime(value) {
 
 function readingsLabel(count) {
   return `${count} reading${count === 1 ? "" : "s"}`;
-}
-
-function SummaryCard({ label, value, hint, tone = "text-[#252525]", onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-haspopup="dialog"
-      className="rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2.5 text-left cursor-pointer hover:border-[#308BF9] focus:outline-none focus:border-[#308BF9]"
-    >
-      <span className="block text-[#A1A1A1] text-[11px]">{label}</span>
-      <span className={`block text-[16px] font-bold mt-0.5 ${tone}`}>{value ?? 0}</span>
-      <span className="block text-[#535359] text-[10px] leading-snug mt-0.5">{hint}</span>
-    </button>
-  );
 }
 
 const statusLabel = (row) => (row.subscription_status || "unknown").replace(/_/g, " ");
@@ -224,21 +209,132 @@ const CARDS = [
 
 const cardValue = (card, res) => (card.count ? card.count(res) : res?.summary?.[card.field]);
 
-function CardPopup({ card, month, onClose, onOpenProfile }) {
+// Colour and icon for each card in the left column.
+const CARD_LOOK = {
+  paid: { tone: "dark" },
+  took_today: { tone: "green" },
+  missed_today: { tone: "red" },
+  first_today: { tone: "green", icon: "plus" },
+  first_month: { tone: "blue", icon: "star" },
+  never: { tone: "orange", icon: "alert" },
+  days_taken: { tone: "green", icon: "calendar" },
+  total_readings: { tone: "blue", icon: "chart" },
+  days_missed: { tone: "red", icon: "calendarX" },
+  no_reading: { tone: "orange", icon: "pause" },
+  not_linked: { tone: "muted", icon: "unlink" },
+};
+
+const TONE = {
+  dark: { bg: "bg-[#252525]", text: "text-[#252525]", dot: "bg-[#252525]", ring: "ring-[#308BF9]" },
+  blue: { bg: "bg-[#E9F3FF]", text: "text-[#308BF9]", dot: "bg-[#308BF9]", ring: "ring-[#308BF9]" },
+  green: { bg: "bg-[#EAFFEF]", text: "text-[#3FAF58]", dot: "bg-[#3FAF58]", ring: "ring-[#3FAF58]" },
+  red: { bg: "bg-[#FDECEE]", text: "text-[#E74C3C]", dot: "bg-[#E74C3C]", ring: "ring-[#E74C3C]" },
+  orange: { bg: "bg-[#FFF4E1]", text: "text-[#E48326]", dot: "bg-[#E48326]", ring: "ring-[#E48326]" },
+  muted: { bg: "bg-[#F5F7FA]", text: "text-[#738298]", dot: "bg-[#738298]", ring: "ring-[#738298]" },
+};
+
+const toneOf = (card) => TONE[CARD_LOOK[card.key]?.tone] || TONE.dark;
+
+function MetricIcon({ type }) {
+  const props = { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", "aria-hidden": true };
+  switch (type) {
+    case "chart":
+      return (
+        <svg {...props}>
+          <path d="M3 12l2.5-3 2.5 1.5L11 6l2 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+          <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.2" />
+        </svg>
+      );
+    case "calendar":
+      return (
+        <svg {...props}>
+          <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M2 6.5h12" stroke="currentColor" strokeWidth="1.2" />
+          <circle cx="5.5" cy="9.5" r="1" fill="currentColor" />
+          <circle cx="8" cy="9.5" r="1" fill="currentColor" />
+        </svg>
+      );
+    case "calendarX":
+      return (
+        <svg {...props}>
+          <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M2 6.5h12" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M6.5 9l3 3M9.5 9l-3 3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+        </svg>
+      );
+    case "plus":
+      return (
+        <svg {...props}>
+          <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+      );
+    case "star":
+      return (
+        <svg {...props}>
+          <path d="M8 2l1.8 3.6L14 6.2l-3 2.9.7 4.1L8 11.3 4.3 13.2l.7-4.1-3-2.9 4.2-.6L8 2z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+        </svg>
+      );
+    case "alert":
+      return (
+        <svg {...props}>
+          <path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13z" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+      );
+    case "pause":
+      return (
+        <svg {...props}>
+          <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M2 6.5h12" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M8 9v2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      );
+    case "unlink":
+      return (
+        <svg {...props}>
+          <path d="M6.5 10l-1.5 1.5a2 2 0 002.8 2.8L9.5 13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          <path d="M9.5 6l1.5-1.5a2 2 0 00-2.8-2.8L6.5 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          <path d="M3.5 12.5L12.5 3.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
+function Pager({ pagination, page, loading, setPage }) {
+  if (!(pagination?.total_pages > 1)) return null;
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        disabled={page <= 1 || loading}
+        onClick={() => setPage((p) => Math.max(1, p - 1))}
+        className="rounded-full border border-[#E1E6ED] text-[#535359] text-[11px] font-semibold px-3 py-1 disabled:opacity-40 cursor-pointer"
+      >
+        Prev
+      </button>
+      <span className="text-[#535359] text-[11px]">
+        Page {pagination.page} of {pagination.total_pages}
+      </span>
+      <button
+        type="button"
+        disabled={page >= pagination.total_pages || loading}
+        onClick={() => setPage((p) => p + 1)}
+        className="rounded-full border border-[#E1E6ED] text-[#535359] text-[11px] font-semibold px-3 py-1 disabled:opacity-40 cursor-pointer"
+      >
+        Next
+      </button>
+    </div>
+  );
+}
+
+// Right-hand table: the clients behind the selected card, straight from the API.
+function CardTable({ card, month, search, reloadKey, onOpenProfile, onClearSearch }) {
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const closeRef = useRef(null);
-
-  useEffect(() => {
-    closeRef.current?.focus();
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
 
   useEffect(() => {
     let stale = false;
@@ -248,6 +344,7 @@ function CardPopup({ card, month, onClose, onOpenProfile }) {
       month,
       show: card.show,
       sort: card.sort || "name",
+      search,
       page,
       limit: POPUP_LIMIT,
     })
@@ -267,110 +364,135 @@ function CardPopup({ card, month, onClose, onOpenProfile }) {
     return () => {
       stale = true;
     };
-  }, [card, month, page]);
+  }, [card, month, search, page, reloadKey]);
 
   const rows = data?.rows ?? [];
   const pagination = data?.pagination;
+  const tone = toneOf(card);
 
   return (
-    <div
-      className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={card.label}
-        onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-[15px] shadow-lg w-full max-w-[640px] max-h-[85vh] flex flex-col"
-      >
-        <div className="flex items-start justify-between gap-4 p-4 border-b border-[#E1E6ED]">
-          <div>
-            <h2 className="text-[#252525] text-[15px] font-bold">
+    <div className="bg-white rounded-[15px] border border-[#E1E6ED] overflow-hidden">
+      <div className="flex items-start justify-between gap-3 px-5 py-3 border-b border-[#F5F7FA]">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2.5">
+            <div className={`w-2 h-2 rounded-full shrink-0 ${tone.dot}`} />
+            <span className="text-[#252525] text-[13px] font-semibold tracking-[-0.26px]">
               {card.label}
-              {data?.summary ? `: ${cardValue(card, data) ?? 0}` : ""}
-            </h2>
-            <p className="text-[#535359] text-[11px] mt-0.5">{card.hint}</p>
+            </span>
+            <span className="rounded-full bg-[#F5F7FA] text-[#535359] text-[11px] font-semibold px-2 py-0.5 tabular-nums">
+              {pagination?.total ?? (loading ? "…" : 0)}
+            </span>
           </div>
+          <p className="text-[#A1A1A1] text-[11px] mt-1 tracking-[-0.22px]">{card.hint}</p>
+        </div>
+        {search && (
           <button
-            ref={closeRef}
             type="button"
-            onClick={onClose}
-            className="rounded-full border border-[#E1E6ED] text-[#535359] text-[11px] font-semibold px-3 py-1 cursor-pointer shrink-0"
+            onClick={onClearSearch}
+            className="text-[#A1A1A1] text-[11px] hover:text-[#252525] transition-colors cursor-pointer tracking-[-0.22px] shrink-0"
           >
-            Close
+            Clear search
           </button>
-        </div>
-
-        <div className="overflow-y-auto p-4 flex flex-col gap-2 text-[12px]">
-          {error ? (
-            <div className="bg-[#FEF2F2] border border-[#FCA5A5] text-[#B91C1C] rounded-[10px] p-3">
-              {error}
-            </div>
-          ) : loading && rows.length === 0 ? (
-            <div className="py-6 text-center text-[#A1A1A1]">Loading...</div>
-          ) : rows.length === 0 ? (
-            <div className="py-6 text-center text-[#A1A1A1]">No clients here.</div>
-          ) : (
-            rows.map((row) => (
-              <div
-                key={row.profile_id || row.email || row.purchased_on}
-                className="rounded-[10px] border border-[#E1E6ED] px-3 py-2"
-              >
-                {row.linked ? (
-                  <button
-                    type="button"
-                    onClick={() => onOpenProfile(row)}
-                    className="text-[#252525] font-semibold hover:text-[#308BF9] text-left cursor-pointer"
-                  >
-                    {row.name || row.profile_id}
-                  </button>
-                ) : (
-                  <div className="text-[#252525] font-semibold">{row.name || "–"}</div>
-                )}
-                <div className="text-[#A1A1A1] text-[11px] break-all">
-                  {row.email || "–"} · {row.profile_id || "No profile ID yet"}
-                </div>
-                {createdLabel(row) && (
-                  <div className="text-[#535359] text-[11px] mt-0.5">{createdLabel(row)}</div>
-                )}
-                {card.details(row, data.today).map((line) => (
-                  <div key={line} className="text-[#535359] text-[11px] mt-0.5">
-                    {line}
-                  </div>
-                ))}
-              </div>
-            ))
-          )}
-        </div>
-
-        {pagination?.total_pages > 1 && (
-          <div className="flex items-center justify-between gap-3 p-3 border-t border-[#E1E6ED]">
-            <span className="text-[#A1A1A1] text-[11px]">{pagination.total} clients</span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={page <= 1 || loading}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="rounded-full border border-[#E1E6ED] text-[#535359] text-[11px] font-semibold px-3 py-1 disabled:opacity-40 cursor-pointer"
-              >
-                Prev
-              </button>
-              <span className="text-[#535359] text-[11px]">
-                Page {pagination.page} of {pagination.total_pages}
-              </span>
-              <button
-                type="button"
-                disabled={page >= pagination.total_pages || loading}
-                onClick={() => setPage((p) => p + 1)}
-                className="rounded-full border border-[#E1E6ED] text-[#535359] text-[11px] font-semibold px-3 py-1 disabled:opacity-40 cursor-pointer"
-              >
-                Next
-              </button>
-            </div>
-          </div>
         )}
       </div>
+
+      {error ? (
+        <div className="m-4 bg-[#FDECEE] border border-[#F5C2C7] text-[#B02A37] rounded-[10px] p-3 text-[12px]">
+          {error}
+        </div>
+      ) : loading && rows.length === 0 ? (
+        <div className="px-5 py-12 text-center">
+          <div className="inline-flex flex-col items-center gap-3">
+            <div className="w-6 h-6 border-2 border-[#E1E6ED] border-t-[#308BF9] rounded-full animate-spin" />
+            <span className="text-[#A1A1A1] text-[12px] tracking-[-0.24px]">Loading clients...</span>
+          </div>
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="px-5 py-12 text-center text-[#A1A1A1] text-[12px] tracking-[-0.24px]">
+          {search ? "No clients match your search." : "No clients here."}
+        </div>
+      ) : (
+        <div className={`max-h-[640px] overflow-auto ${loading ? "opacity-60" : ""}`}>
+          <table className="w-full text-[12px]">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-[#F5F7FA] text-[#738298] text-left">
+                <th className="py-2.5 px-5 font-medium w-10">#</th>
+                <th className="py-2.5 px-4 font-medium">Client</th>
+                <th className="py-2.5 px-4 font-medium">Profile ID</th>
+                <th className="py-2.5 px-4 font-medium">Details</th>
+                <th className="py-2.5 px-4 font-medium text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr
+                  key={row.profile_id || row.email || row.purchased_on}
+                  className="border-t border-[#F5F7FA] hover:bg-[#F8FAFC] transition-colors align-top"
+                >
+                  <td className="py-3 px-5 text-[#A1A1A1] tabular-nums">
+                    {((pagination?.page || 1) - 1) * POPUP_LIMIT + i + 1}
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-7 h-7 rounded-full bg-[#F5F7FA] flex items-center justify-center text-[#738298] text-[11px] font-semibold shrink-0 uppercase">
+                        {(row.name || row.email || "?").charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        {row.linked ? (
+                          <button
+                            type="button"
+                            onClick={() => onOpenProfile(row)}
+                            className="text-[#252525] font-medium hover:text-[#308BF9] text-left cursor-pointer tracking-[-0.24px]"
+                          >
+                            {row.name || row.profile_id}
+                          </button>
+                        ) : (
+                          <div className="text-[#252525] font-medium tracking-[-0.24px]">{row.name || "–"}</div>
+                        )}
+                        <div className="text-[#535359] text-[11px] break-all">{row.email || "–"}</div>
+                        {createdLabel(row) && (
+                          <div className="text-[#A1A1A1] text-[10px] whitespace-nowrap">{createdLabel(row)}</div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-[#535359] font-mono text-[11px] whitespace-nowrap">
+                    {row.profile_id || "No profile ID yet"}
+                  </td>
+                  <td className="py-3 px-4 text-[#535359] text-[11px] min-w-[200px]">
+                    {card.details(row, data.today).map((line) => (
+                      <div key={line}>{line}</div>
+                    ))}
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <div className="flex flex-col items-end gap-1">
+                      <span
+                        className={`inline-flex rounded-full text-[10px] font-semibold px-2.5 py-0.5 capitalize whitespace-nowrap ${
+                          STATUS_STYLES[row.subscription_status] || "bg-[#F1F3F5] text-[#535359]"
+                        }`}
+                      >
+                        {statusLabel(row)}
+                      </span>
+                      {!row.linked && (
+                        <span className="inline-flex rounded-full text-[10px] font-semibold px-2.5 py-0.5 bg-[#F5F7FA] text-[#738298] whitespace-nowrap">
+                          Not linked
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {pagination?.total_pages > 1 && (
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-[#F5F7FA]">
+          <span className="text-[#A1A1A1] text-[11px]">{pagination.total} clients</span>
+          <Pager pagination={pagination} page={page} loading={loading} setPage={setPage} />
+        </div>
+      )}
     </div>
   );
 }
@@ -407,8 +529,19 @@ export default function ReadingTrackerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [openProfileId, setOpenProfileId] = useState(null);
-  const [popupCard, setPopupCard] = useState(null);
-  const closePopup = useCallback(() => setPopupCard(null), []);
+  const [activeKey, setActiveKey] = useState(CARDS[0].key);
+  const [cardQ, setCardQ] = useState("");
+  const [cardSearch, setCardSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setCardSearch(cardQ.trim()), 400);
+    return () => clearTimeout(timer);
+  }, [cardQ]);
+
+  const clearCardSearch = useCallback(() => {
+    setCardQ("");
+    setCardSearch("");
+  }, []);
 
   // Open reading lists belong to the rows on screen.
   useEffect(() => {
@@ -466,6 +599,22 @@ export default function ReadingTrackerPage() {
   // Today's numbers only exist while the current month is on screen.
   const showToday = !!data?.today && data.month === data.today.slice(0, 7);
   const columnCount = days.length + (showToday ? 6 : 5);
+  const visibleCards = CARDS.filter((card) => !card.todayOnly || showToday);
+  // A today-only card falls back to Paid profiles when a past month is picked.
+  const activeCard = visibleCards.find((c) => c.key === activeKey) || CARDS[0];
+  const heroCard = CARDS[0];
+  const tileCards = visibleCards.filter((c) => c.key === "took_today" || c.key === "missed_today");
+  const listCards = visibleCards.filter((c) => !["paid", "took_today", "missed_today"].includes(c.key));
+  const pickCard = (card) => {
+    setActiveKey(card.key);
+    clearCardSearch();
+  };
+  const valueOrPulse = (card, pulseCls) =>
+    loading && !summary ? (
+      <span className={`inline-block rounded-[6px] animate-pulse ${pulseCls}`} />
+    ) : (
+      cardValue(card, data) ?? 0
+    );
 
   const openProfile = (row) => {
     if (!row.profile_id) return;
@@ -485,45 +634,173 @@ export default function ReadingTrackerPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-[#252525] text-[20px] font-bold leading-tight tracking-[-0.4px]">
+          <h1 className="text-[#252525] text-[20px] font-semibold leading-tight tracking-[-0.4px]">
             Reading Tracker
           </h1>
-          <p className="text-[#535359] text-[13px] mt-1">
+          <p className="text-[#535359] text-[13px] mt-1 tracking-[-0.26px] max-w-[720px]">
             Clients with a successful payment in Orders › Payments, and the days they took or
             missed a breath reading. A day is marked missed once it has ended in US Pacific time.
             Reading dates and times are as stored with each test.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setReloadKey((k) => k + 1)}
-          disabled={loading}
-          className="rounded-full bg-[#EEF4FE] text-[#308BF9] text-[11px] font-semibold px-3 py-1 disabled:opacity-60 cursor-pointer"
-        >
-          {loading ? "Loading..." : "Refresh"}
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            type="month"
+            aria-label="Month"
+            value={month}
+            max={currentMonth()}
+            onChange={(e) => {
+              if (!e.target.value) return;
+              setMonth(e.target.value);
+              setShow("all");
+              setPage(1);
+            }}
+            className="rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] focus:outline-none focus:border-[#308BF9]"
+          />
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            disabled={loading}
+            className="rounded-[15px] bg-[#252525] text-white text-[12px] font-semibold px-4 py-2 disabled:opacity-55 cursor-pointer hover:bg-[#3a3a3a] transition-colors tracking-[-0.24px] shadow-[0_4px_12px_rgba(37,37,37,0.18)]"
+          >
+            {loading ? "Loading..." : "Refresh"}
+          </button>
+        </div>
       </div>
 
       {error && (
-        <div className="bg-[#FEF2F2] border border-[#FCA5A5] text-[#B91C1C] rounded-[10px] p-3 text-[12px]">
+        <div className="bg-[#FDECEE] border border-[#F5C2C7] text-[#B02A37] rounded-[10px] p-3 text-[12px] tracking-[-0.24px]">
           {error}
         </div>
       )}
 
-      {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          {CARDS.filter((card) => !card.todayOnly || showToday).map((card) => (
-            <SummaryCard
-              key={card.key}
-              label={card.label}
-              value={cardValue(card, data)}
-              hint={card.hint}
-              tone={card.tone}
-              onClick={() => setPopupCard(card)}
-            />
-          ))}
+      <div className="flex flex-col lg:flex-row gap-5 items-start">
+        {/* Left: every number is a card; clicking one lists its clients on the right. */}
+        <div className="w-full lg:w-[320px] shrink-0 flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => pickCard(heroCard)}
+            aria-pressed={activeCard.key === heroCard.key}
+            className={`text-left rounded-[15px] p-5 text-white bg-[#252525] transition-all duration-150 cursor-pointer ${
+              activeCard.key === heroCard.key
+                ? "ring-2 ring-[#308BF9] ring-offset-2"
+                : "hover:ring-2 hover:ring-[#252525]/20 hover:ring-offset-1"
+            }`}
+          >
+            <div className="text-[11px] font-medium uppercase tracking-[0.4px] opacity-70">
+              {heroCard.label}
+            </div>
+            <div className="text-[40px] font-bold leading-none mt-1 tracking-[-1px]">
+              {valueOrPulse(heroCard, "w-14 h-10 bg-white/10")}
+            </div>
+            <div className="text-[11px] opacity-60 mt-2 tracking-[-0.22px]">{heroCard.hint}</div>
+          </button>
+
+          {tileCards.length > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              {tileCards.map((card) => {
+                const tone = toneOf(card);
+                const isActive = activeCard.key === card.key;
+                return (
+                  <button
+                    key={card.key}
+                    type="button"
+                    onClick={() => pickCard(card)}
+                    aria-pressed={isActive}
+                    title={card.hint}
+                    className={`text-left rounded-[15px] p-4 transition-all duration-150 cursor-pointer ${tone.bg} ${
+                      isActive ? `ring-2 ${tone.ring} ring-offset-2` : "hover:ring-2 hover:ring-black/5 hover:ring-offset-1"
+                    }`}
+                  >
+                    <div className={`text-[10px] font-medium uppercase tracking-[0.3px] leading-tight ${tone.text}`}>
+                      {card.label}
+                    </div>
+                    <div className={`text-[28px] font-bold leading-none mt-1.5 tracking-[-0.8px] ${tone.text}`}>
+                      {valueOrPulse(card, "w-8 h-7 bg-black/5")}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="bg-white rounded-[15px] border border-[#E1E6ED] overflow-hidden">
+            {listCards.map((card, i) => {
+              const tone = toneOf(card);
+              const isActive = activeCard.key === card.key;
+              return (
+                <button
+                  key={card.key}
+                  type="button"
+                  onClick={() => pickCard(card)}
+                  aria-pressed={isActive}
+                  title={card.hint}
+                  className={`w-full flex items-center justify-between gap-3 px-4 py-3 cursor-pointer transition-all duration-150 ${
+                    i < listCards.length - 1 ? "border-b border-[#F5F7FA]" : ""
+                  } ${isActive ? "bg-[#F0F7FF]" : "hover:bg-[#FAFBFC]"}`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-7 h-7 rounded-[8px] flex items-center justify-center shrink-0 ${tone.bg} ${tone.text}`}>
+                      <MetricIcon type={CARD_LOOK[card.key]?.icon} />
+                    </div>
+                    <span
+                      className={`text-[12px] text-left tracking-[-0.24px] ${
+                        isActive ? "text-[#252525] font-semibold" : "text-[#535359]"
+                      }`}
+                    >
+                      {card.label}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-[14px] font-bold tracking-[-0.28px] tabular-nums ${tone.text}`}>
+                      {valueOrPulse(card, "w-6 h-4 bg-[#F5F7FA]")}
+                    </span>
+                    {isActive && (
+                      <svg width="6" height="10" viewBox="0 0 6 10" fill="none" className="text-[#308BF9]" aria-hidden>
+                        <path d="M1 1l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      )}
+
+        {/* Right: the selected card's clients. */}
+        <div className="flex-1 min-w-0 w-full flex flex-col gap-4">
+          <div className="relative">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1A1]"
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              aria-hidden
+            >
+              <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M9.5 9.5L13 13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            </svg>
+            <input
+              type="text"
+              aria-label={`Search ${activeCard.label}`}
+              placeholder="Search by name, email, or profile ID..."
+              value={cardQ}
+              onChange={(e) => setCardQ(e.target.value)}
+              className="w-full rounded-[10px] border border-[#E1E6ED] bg-white pl-9 pr-3 py-2.5 text-[12px] text-[#252525] placeholder:text-[#A1A1A1] focus:outline-none focus:border-[#308BF9] focus:shadow-[0_0_0_3px_rgba(48,139,249,0.08)] transition-all tracking-[-0.24px]"
+            />
+          </div>
+          <CardTable
+            key={`${activeCard.key}|${month}|${cardSearch}`}
+            card={activeCard}
+            month={month}
+            search={cardSearch}
+            reloadKey={reloadKey}
+            onOpenProfile={openProfile}
+            onClearSearch={clearCardSearch}
+          />
+        </div>
+      </div>
 
       {data?.charts && <ReadingTrackerCharts charts={data.charts} today={data.today} />}
 
@@ -539,25 +816,18 @@ export default function ReadingTrackerPage() {
         />
       )}
 
+      <div>
+        <h2 className="text-[#252525] text-[15px] font-semibold tracking-[-0.3px]">Day-by-day calendar</h2>
+        <p className="text-[#535359] text-[12px] mt-0.5">Every client&apos;s readings for each day of the month.</p>
+      </div>
+
       <div className="flex flex-wrap gap-3 items-center">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
+          aria-label="Search the calendar"
           placeholder="Search by name, email, or profile ID"
           className="rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] flex-1 min-w-[240px] focus:outline-none focus:border-[#308BF9]"
-        />
-        <input
-          type="month"
-          aria-label="Month"
-          value={month}
-          max={currentMonth()}
-          onChange={(e) => {
-            if (!e.target.value) return;
-            setMonth(e.target.value);
-            setShow("all");
-            setPage(1);
-          }}
-          className="rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] focus:outline-none focus:border-[#308BF9]"
         />
         <select
           aria-label="Show"
@@ -790,10 +1060,6 @@ export default function ReadingTrackerPage() {
           </tbody>
         </table>
       </div>
-
-      {popupCard && (
-        <CardPopup card={popupCard} month={month} onClose={closePopup} onOpenProfile={openProfile} />
-      )}
 
       {pagination?.total > 0 && (
         <div className="flex items-center justify-between flex-wrap gap-3">
