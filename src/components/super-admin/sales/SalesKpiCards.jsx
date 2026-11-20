@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { fetchPaymentTransactionsService } from "@/services/superAdminOrdersService";
 import { formatCount, formatMoney, formatPercent, percentChange } from "./salesFormat";
 import { Skeleton } from "./SalesUi";
 
@@ -29,14 +32,25 @@ function DeltaLine({ delta, label, accent }) {
 // delta: percentChange() result vs the previous period; deltaLabel: "vs last month".
 // highlight: amber card (tinted, thick left border, amber value) for a number
 // that needs attention, such as renewals still to come.
-export function SalesKpiCard({ label, value, amount, hint, accent, highlight, loading, delta, deltaLabel }) {
+// href: makes the whole card a link (e.g. to the matching Orders tab).
+export function SalesKpiCard({ label, value, amount, hint, accent, highlight, loading, delta, deltaLabel, href }) {
   const box = accent
     ? "bg-[#308BF9] rounded-[10px] p-4 text-white"
     : highlight
     ? "bg-[#FFF6E5] rounded-[10px] p-4 border border-[#F5C26B] border-l-[4px] border-l-[#E8A33D] shadow-[0_2px_8px_rgba(232,163,61,0.18)]"
     : "bg-white rounded-[10px] p-4 border border-[#E1E6ED] hover:border-[#308BF9] transition-colors";
+  const Wrapper = href ? Link : "div";
+  const linkProps = href
+    ? {
+        href,
+        "aria-label": `${label}: open in Orders`,
+        className: `${box} flex flex-col gap-1 min-w-0 cursor-pointer ${
+          highlight ? "hover:shadow-[0_4px_14px_rgba(232,163,61,0.35)] transition-shadow" : ""
+        }`,
+      }
+    : { className: `${box} flex flex-col gap-1 min-w-0` };
   return (
-    <div className={`${box} flex flex-col gap-1 min-w-0`}>
+    <Wrapper {...linkProps}>
       <div
         className={
           accent ? "text-[12px] opacity-85" : highlight ? "text-[#8A5A00] text-[12px] font-semibold" : "text-[#535359] text-[12px]"
@@ -74,7 +88,12 @@ export function SalesKpiCard({ label, value, amount, hint, accent, highlight, lo
             : "text-[#A1A1A1] text-[11px] leading-snug break-words"
         }
       >{loading ? " " : hint}</div>
-    </div>
+      {href && !loading && (
+        <div className={`text-[11px] font-semibold mt-auto pt-1 ${highlight ? "text-[#B86E00]" : "text-[#308BF9]"}`}>
+          View in Orders →
+        </div>
+      )}
+    </Wrapper>
   );
 }
 
@@ -87,7 +106,40 @@ export function SalesKpiCard({ label, value, amount, hint, accent, highlight, lo
 const PERIOD_WORD = { week: "this week", month: "this month", year: "this year" };
 
 // overall: view=monthly response (all-time totals), undefined while loading.
+// Renewable customers: the Orders › Renewals tab total (every paid renewal so far,
+// refunded ones included), from the same request as the Orders top cards, so the two
+// numbers always match. Not tied to the period or trainer admin picked here.
+function useRenewalTotals() {
+  const [state, setState] = useState({ loading: true, data: null });
+  useEffect(() => {
+    let alive = true;
+    fetchPaymentTransactionsService({ type: "renewal", paidOnly: true, limit: 1 })
+      .then((res) => {
+        if (!alive) return;
+        if (res?.status === false) throw new Error("failed");
+        const byCur = new Map();
+        for (const row of res?.summary || []) {
+          const cur = row.currency || "usd";
+          byCur.set(cur, (byCur.get(cur) || 0) + (Number(row.amount_paid) || 0) - (Number(row.amount_refunded) || 0));
+        }
+        setState({
+          loading: false,
+          data: {
+            count: res?.pagination?.total || 0,
+            amount: [...byCur.entries()].map(([cur, amt]) => formatMoney(amt, cur)).join(" · "),
+          },
+        });
+      })
+      .catch(() => alive && setState({ loading: false, data: null }));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return state;
+}
+
 export default function SalesKpiCards({ summary, breakdown, renewals, upcoming, overall, previous, compareLabel, period, loading }) {
+  const renewable = useRenewalTotals();
   const s = summary || {};
   const b = breakdown || {};
   const prev = previous?.summary;
@@ -133,6 +185,7 @@ export default function SalesKpiCards({ summary, breakdown, renewals, upcoming, 
       value: renewals ? formatCount(renewals.payments) : "—",
       amount: renewals ? `${formatMoney(renewals.net_sales, cur)} collected` : undefined,
       hint: renewals ? "Members who paid again for the next month" : "Renewals are not recorded here yet",
+      href: "/super-admin/orders?tab=renewals",
       delta: renewals ? change(renewals.payments, prevRenewals?.payments) : null,
     },
     {
@@ -140,6 +193,16 @@ export default function SalesKpiCards({ summary, breakdown, renewals, upcoming, 
       value: upcoming ? formatCount(upcoming.total) : "—",
       highlight: true,
       hint: "Plans set to renew from now until the period ends (cancelled plans not counted)",
+      href: "/super-admin/orders?tab=upcoming",
+    },
+    {
+      label: "Renewable customers",
+      value: renewable.data ? formatCount(renewable.data.count) : "—",
+      amount: renewable.data?.amount ? `${renewable.data.amount} collected` : undefined,
+      hint: renewable.data
+        ? "All paid renewals so far, as in Orders › Renewals (all trainer admins)"
+        : "Could not load the Orders renewals",
+      cardLoading: renewable.loading,
     },
     {
       label: "Overall Sales (all time)",
@@ -152,9 +215,9 @@ export default function SalesKpiCards({ summary, breakdown, renewals, upcoming, 
   ];
 
   return (
-    <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-4 2xl:grid-cols-7 gap-3">
-      {cards.map((c) => (
-        <SalesKpiCard key={c.label} {...c} deltaLabel={compareLabel} loading={loading} />
+    <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-4 gap-3">
+      {cards.map(({ cardLoading, ...c }) => (
+        <SalesKpiCard key={c.label} {...c} deltaLabel={compareLabel} loading={cardLoading ?? loading} />
       ))}
     </div>
   );

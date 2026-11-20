@@ -167,6 +167,18 @@ const formatLastLoggedDate = (dateString) => {
 };
 
 
+// Exact date and time of the last test, e.g. "20 Nov 2026, 7:27 PM", read the same
+// way as above (stored wall-clock time, the "Z" ignored). null when there is no test.
+const formatLastLoggedExact = (dateString) => {
+  if (!dateString) return null;
+  const d = parseServerDate(dateString);
+  if (isNaN(d.getTime())) return null;
+  const date = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  return `${date}, ${time}`;
+};
+
+
   const transformClientData = (apiData) => {
     if (!apiData || !Array.isArray(apiData)) return [];
 
@@ -197,6 +209,7 @@ const formatLastLoggedDate = (dateString) => {
 
       // Last test
       last_logged: formatLastLoggedDate(client.last_logged_date),
+      last_logged_exact: formatLastLoggedExact(client.last_logged_date),
 
       // Level type
       level_type: client.level_type ?? "N/A",
@@ -488,6 +501,11 @@ const formatLastLoggedDate = (dateString) => {
                         <span className="text-[#A1A1A1] text-[12px] font-normal leading-[126%] tracking-[-0.24px]">
                           {client.last_logged}
                         </span>
+                        {client.last_logged_exact && (
+                          <span className="block mt-1 text-[#535359] text-[11px] font-medium leading-[126%] tracking-[-0.22px] whitespace-nowrap">
+                            {client.last_logged_exact}
+                          </span>
+                        )}
                       </td>
 
                       {/* Test Count */}

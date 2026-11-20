@@ -193,7 +193,8 @@ const CARDS = [
     tone: "text-[#A86A00]",
     show: "no_reading",
     sort: "name",
-    details: (row) => [boughtLine(row), `Last reading: ${formatDateTime(row.last_reading)}`],
+    lastReadingColumn: true,
+    details: (row) => [boughtLine(row)],
   },
   {
     key: "not_linked",
@@ -420,6 +421,9 @@ function CardTable({ card, month, search, reloadKey, onOpenProfile, onClearSearc
                 <th className="py-2.5 px-4 font-medium">Client</th>
                 <th className="py-2.5 px-4 font-medium">Profile ID</th>
                 <th className="py-2.5 px-4 font-medium">Details</th>
+                {card.lastReadingColumn && (
+                  <th className="py-2.5 px-4 font-medium whitespace-nowrap">Last reading</th>
+                )}
                 <th className="py-2.5 px-4 font-medium text-right">Status</th>
               </tr>
             </thead>
@@ -464,6 +468,15 @@ function CardTable({ card, month, search, reloadKey, onOpenProfile, onClearSearc
                       <div key={line}>{line}</div>
                     ))}
                   </td>
+                  {card.lastReadingColumn && (
+                    <td className="py-3 px-4 text-[11px] whitespace-nowrap">
+                      {row.last_reading ? (
+                        <span className="text-[#252525] font-medium">{formatDateTime(row.last_reading)}</span>
+                      ) : (
+                        <span className="text-[#E48326] font-medium">Never tested</span>
+                      )}
+                    </td>
+                  )}
                   <td className="py-3 px-4 text-right">
                     <div className="flex flex-col items-end gap-1">
                       <span
