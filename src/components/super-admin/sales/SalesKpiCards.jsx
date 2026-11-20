@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { fetchPaymentTransactionsService } from "@/services/superAdminOrdersService";
 import { formatCount, formatMoney, formatPercent, percentChange } from "./salesFormat";
 import { Skeleton } from "./SalesUi";
 
@@ -87,7 +89,40 @@ export function SalesKpiCard({ label, value, amount, hint, accent, highlight, lo
 const PERIOD_WORD = { week: "this week", month: "this month", year: "this year" };
 
 // overall: view=monthly response (all-time totals), undefined while loading.
+// Renewable customers: the Orders › Renewals tab total (every paid renewal so far,
+// refunded ones included), from the same request as the Orders top cards, so the two
+// numbers always match. Not tied to the period or trainer admin picked here.
+function useRenewalTotals() {
+  const [state, setState] = useState({ loading: true, data: null });
+  useEffect(() => {
+    let alive = true;
+    fetchPaymentTransactionsService({ type: "renewal", paidOnly: true, limit: 1 })
+      .then((res) => {
+        if (!alive) return;
+        if (res?.status === false) throw new Error("failed");
+        const byCur = new Map();
+        for (const row of res?.summary || []) {
+          const cur = row.currency || "usd";
+          byCur.set(cur, (byCur.get(cur) || 0) + (Number(row.amount_paid) || 0) - (Number(row.amount_refunded) || 0));
+        }
+        setState({
+          loading: false,
+          data: {
+            count: res?.pagination?.total || 0,
+            amount: [...byCur.entries()].map(([cur, amt]) => formatMoney(amt, cur)).join(" · "),
+          },
+        });
+      })
+      .catch(() => alive && setState({ loading: false, data: null }));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return state;
+}
+
 export default function SalesKpiCards({ summary, breakdown, renewals, upcoming, overall, previous, compareLabel, period, loading }) {
+  const renewable = useRenewalTotals();
   const s = summary || {};
   const b = breakdown || {};
   const prev = previous?.summary;
@@ -142,6 +177,15 @@ export default function SalesKpiCards({ summary, breakdown, renewals, upcoming, 
       hint: "Plans set to renew from now until the period ends (cancelled plans not counted)",
     },
     {
+      label: "Renewable customers",
+      value: renewable.data ? formatCount(renewable.data.count) : "—",
+      amount: renewable.data?.amount ? `${renewable.data.amount} collected` : undefined,
+      hint: renewable.data
+        ? "All paid renewals so far, as in Orders › Renewals (all trainer admins)"
+        : "Could not load the Orders renewals",
+      cardLoading: renewable.loading,
+    },
+    {
       label: "Overall Sales (all time)",
       value: overall ? formatMoney(overall.totals?.total_sales, overall.currency) : "—",
       amount: overall
@@ -152,9 +196,9 @@ export default function SalesKpiCards({ summary, breakdown, renewals, upcoming, 
   ];
 
   return (
-    <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-4 2xl:grid-cols-7 gap-3">
-      {cards.map((c) => (
-        <SalesKpiCard key={c.label} {...c} deltaLabel={compareLabel} loading={loading} />
+    <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-4 gap-3">
+      {cards.map(({ cardLoading, ...c }) => (
+        <SalesKpiCard key={c.label} {...c} deltaLabel={compareLabel} loading={cardLoading ?? loading} />
       ))}
     </div>
   );
