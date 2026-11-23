@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { fetchCancellationsService, fetchFailedRenewalsService } from "@/services/superAdminOrdersService";
+import { fetchCancellationsService } from "@/services/superAdminOrdersService";
 import { formatCount, formatMoney, formatPercent } from "../salesFormat";
 import { BLUE_GRADIENT, Bone, C, CARD_SHADOW, Delta, Dot } from "./ui";
 
@@ -32,30 +32,6 @@ function useCancellationTotals() {
             scheduled: res?.summary?.scheduled || 0,
             ended: res?.summary?.ended || 0,
           },
-        });
-      })
-      .catch(() => alive && setState({ loading: false, data: null }));
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return state;
-}
-
-// Renewal payments that failed (card declined) or are still unpaid a day later:
-// the same request and numbers as the Orders "Failed renewals" card. Not tied to
-// the dates or TA view. unavailable = backend without view=failed_renewals.
-function useFailedRenewals() {
-  const [state, setState] = useState({ loading: true, data: null });
-  useEffect(() => {
-    let alive = true;
-    fetchFailedRenewalsService({ limit: 1 })
-      .then((res) => {
-        if (!alive) return;
-        if (res?.status === false || !res?.summary) throw new Error("failed");
-        setState({
-          loading: false,
-          data: { count: res.summary.total || 0, declined: res.summary.failed || 0, pending: res.summary.pending || 0 },
         });
       })
       .catch(() => alive && setState({ loading: false, data: null }));
@@ -97,9 +73,20 @@ function Cell({ children, className = "" }) {
   return <div className={`px-6 xl:px-7 py-6 flex flex-col min-w-0 ${className}`}>{children}</div>;
 }
 
-export default function SalesHeadline({ summary, breakdown, retention, previous, monthly, monthlyLoading, compareLabel, loading }) {
+// failedRenewals: useFailedRenewals() state, loaded once by the page and shared
+// with Renewals & Retention.
+export default function SalesHeadline({
+  summary,
+  breakdown,
+  retention,
+  previous,
+  monthly,
+  monthlyLoading,
+  failedRenewals = { loading: true, data: null },
+  compareLabel,
+  loading,
+}) {
   const cancellations = useCancellationTotals();
-  const failedRenewals = useFailedRenewals();
   const s = summary || {};
   const b = breakdown || {};
   const cur = s.currency;
