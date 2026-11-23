@@ -66,7 +66,95 @@ function Breakdown({ parts }) {
 const Note = ({ children }) => <p className="text-[11px] text-[#738298] tracking-[-0.22px] leading-normal mt-auto pt-3">{children}</p>;
 const EmptyNote = ({ children }) => <p className="text-[12px] text-[#A1A1A1] py-8 text-center">{children}</p>;
 
-export default function SalesRetentionPanel({ retention, currency, periodTag, loading, updating, error, onRetry }) {
+// Failed renewal payments (all time, newest first), from Orders' view=failed_renewals.
+// failed: useFailedRenewals() state from the page.
+function FailedColumn({ failed }) {
+  const f = failed?.data;
+  const parts = [
+    { key: "declined", label: "Card declined", count: f?.declined || 0, color: C.red, always: true },
+    { key: "pending", label: "Not paid yet", count: f?.pending || 0, color: C.orange, always: true },
+  ];
+  const rows = f?.rows || [];
+  return (
+    <Column
+      title="Failed renewals"
+      gradient="linear-gradient(135deg, #f0a04b 0%, #e48326 100%)"
+      tag="All time"
+      className="border-t xl:border-t-0 border-[#E1E6ED]"
+      footer={
+        <div className="px-6 py-3 border-t border-[#E1E6ED]">
+          <Link href="/super-admin/orders?tab=failed" className="text-[12px] font-semibold text-[#308BF9] tracking-[-0.24px] hover:underline">
+            See all failed renewals →
+          </Link>
+        </div>
+      }
+    >
+      {failed?.loading ? (
+        <Bone className="h-[220px]" />
+      ) : !f ? (
+        <EmptyNote>Could not load the failed renewals from Orders.</EmptyNote>
+      ) : (
+        <>
+          <Headline value={formatCount(f.count)} word="failed" />
+          <Breakdown parts={parts} />
+          {!f.count ? (
+            <Note>No renewal payment has failed.</Note>
+          ) : (
+            <div className="mt-4 flex flex-col gap-2 max-h-[260px] overflow-y-auto pr-1">
+              {rows.map((r) => {
+                const declined = r.state === "failed";
+                const reason = r.reason?.label || r.reason?.message || r.failure_message;
+                return (
+                  <div key={r.id} className="w-full p-3 rounded-[8px] bg-[#F5F7FA] border border-[#E1E6ED]">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[12px] font-semibold text-[#252525] tracking-[-0.24px] truncate">
+                          {r.customer?.name || r.customer?.email || "—"}
+                        </div>
+                        {r.customer?.name && r.customer?.email && <div className="text-[10px] text-[#738298] truncate">{r.customer.email}</div>}
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-[4px] whitespace-nowrap ${
+                            declined ? "text-[#E74C3C] bg-[#E74C3C]/[0.08]" : "text-[#B7791F] bg-[#FFF6E5]"
+                          }`}
+                        >
+                          {declined ? "Declined" : "Not paid yet"}
+                        </span>
+                        {r.amount_due && (
+                          <span className="text-[11px] font-semibold text-[#252525] tabular-nums">
+                            {formatMoney(r.amount_due.amount, r.amount_due.currency)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {reason && <div className="text-[10px] font-medium text-[#E74C3C] mt-1 break-words">{reason}</div>}
+                    <div className="flex gap-2 mt-1.5 text-[10px] text-[#738298] flex-wrap">
+                      <span>Failed: {formatDate(r.failed_at)}</span>
+                      {r.next_retry_at && (
+                        <>
+                          <span>·</span>
+                          <span>Retry: {formatDate(r.next_retry_at)}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {f.count > rows.length && (
+                <p className="text-[10px] text-[#A1A1A1]">
+                  Showing the newest {formatCount(rows.length)} of {formatCount(f.count)}.
+                </p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </Column>
+  );
+}
+
+export default function SalesRetentionPanel({ retention, currency, periodTag, failedRenewals, loading, updating, error, onRetry }) {
   const r = retention?.renewals;
   const m = retention?.members;
   const cx = retention?.cancellations;
@@ -106,8 +194,8 @@ export default function SalesRetentionPanel({ retention, currency, periodTag, lo
           <ErrorBox message={error} onRetry={onRetry} />
         </div>
       ) : loading ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 px-6 sm:px-8 pb-6">
-          {[0, 1, 2].map((i) => (
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 px-6 sm:px-8 pb-6">
+          {[0, 1, 2, 3].map((i) => (
             <Bone key={i} className="h-[300px]" />
           ))}
         </div>
@@ -116,7 +204,7 @@ export default function SalesRetentionPanel({ retention, currency, periodTag, lo
           <EmptyNote>Renewal and retention data is not available on this environment yet.</EmptyNote>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 border-t border-[#E1E6ED]">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 border-t border-[#E1E6ED]">
           {/* Renewals in the selected dates */}
           <Column
             title="Renewals"
@@ -156,7 +244,7 @@ export default function SalesRetentionPanel({ retention, currency, periodTag, lo
             title="Retention"
             gradient="linear-gradient(135deg, #4da3ff 0%, #308bf9 100%)"
             tag="All time"
-            className="lg:border-r border-t lg:border-t-0 border-[#E1E6ED]"
+            className="xl:border-r border-t lg:border-t-0 border-[#E1E6ED]"
             footer={
               <div className="bg-[#F5F7FA] px-6 py-3 border-t border-[#E1E6ED]">
                 <span className="text-[11px] text-[#738298] tracking-[-0.22px] italic">Counts everyone, not filtered by dates</span>
@@ -184,7 +272,7 @@ export default function SalesRetentionPanel({ retention, currency, periodTag, lo
             title="Cancellations"
             gradient="linear-gradient(135deg, #f07056 0%, #e74c3c 100%)"
             tag={periodTag}
-            className="border-t lg:border-t-0 border-[#E1E6ED]"
+            className="lg:border-r border-t xl:border-t-0 border-[#E1E6ED]"
             footer={
               <div className="px-6 py-3 border-t border-[#E1E6ED]">
                 <Link href="/super-admin/orders?tab=cancellations" className="text-[12px] font-semibold text-[#308BF9] tracking-[-0.24px] hover:underline">
@@ -235,6 +323,8 @@ export default function SalesRetentionPanel({ retention, currency, periodTag, lo
               </>
             )}
           </Column>
+
+          <FailedColumn failed={failedRenewals} />
         </div>
       )}
     </Panel>
