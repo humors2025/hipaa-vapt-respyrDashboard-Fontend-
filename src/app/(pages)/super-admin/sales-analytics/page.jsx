@@ -18,23 +18,17 @@ import {
   shiftAnchor,
   toISODate,
 } from "@/components/super-admin/sales/salesFormat";
-import SalesPeriodFilter from "@/components/super-admin/sales/SalesPeriodFilter";
-import SalesKpiCards from "@/components/super-admin/sales/SalesKpiCards";
-import SalesTrendChart from "@/components/super-admin/sales/SalesTrendChart";
-import SalesSourceDoughnut from "@/components/super-admin/sales/SalesSourceDoughnut";
-import SalesChannelComparison from "@/components/super-admin/sales/SalesChannelComparison";
-import SalesAllMonths from "@/components/super-admin/sales/SalesAllMonths";
-import SalesRetention from "@/components/super-admin/sales/SalesRetention";
-import SalesClientEngagement from "@/components/super-admin/sales/SalesClientEngagement";
-import TopTrainerSales from "@/components/super-admin/sales/TopTrainerSales";
-import PurchaseFilters from "@/components/super-admin/sales/PurchaseFilters";
-import PurchaseTable, { SalesPagination } from "@/components/super-admin/sales/PurchaseTable";
+import SalesHeader from "@/components/super-admin/sales/redesign/SalesHeader";
+import SalesHeadline from "@/components/super-admin/sales/redesign/SalesHeadline";
+import SalesOverall from "@/components/super-admin/sales/redesign/SalesOverall";
+import SalesRetentionPanel from "@/components/super-admin/sales/redesign/SalesRetentionPanel";
+import SalesEngagementPanel from "@/components/super-admin/sales/redesign/SalesEngagementPanel";
+import SalesTopTrainersPanel from "@/components/super-admin/sales/redesign/SalesTopTrainersPanel";
+import SalesPurchasesPanel from "@/components/super-admin/sales/redesign/SalesPurchasesPanel";
 import PurchaseDetailsDrawer from "@/components/super-admin/sales/PurchaseDetailsDrawer";
 import TrainerPurchasesModal from "@/components/super-admin/sales/TrainerPurchasesModal";
-import SalesViewSwitcher from "@/components/super-admin/sales/SalesViewSwitcher";
-import { SalesCard, UpdatingPill } from "@/components/super-admin/sales/SalesUi";
 
-const PAGE_LIMIT = 10;
+const PAGE_LIMIT = 8;
 // Used until the API returns filter_options (the backend's own status list wins).
 const DEFAULT_SUBSCRIPTION_STATUSES = ["active", "expired", "cancelled", "upcoming"];
 const DEFAULT_PAYMENT_STATUSES = ["paid", "refunded", "failed"];
@@ -263,160 +257,125 @@ export default function SuperAdminSalesAnalyticsPage() {
   const ovUpdating = overviewLoading && Boolean(overview);
   const ovError = overviewError;
 
+  // Short label for the coloured tags: "Nov 2026", "Week of Nov 17", "2026".
+  const periodTag =
+    period === "year"
+      ? String(range.from.getFullYear())
+      : period === "week"
+      ? `Week of ${range.from.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+      : range.from.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+
   return (
     <div className="flex flex-col gap-5 pb-8">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="max-w-[640px]">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-[#252525] text-[20px] font-bold leading-tight tracking-[-0.4px]">Sales Analytics</h1>
-            <SalesViewSwitcher trainerAdmins={trainerAdmins} value={trainerAdmin} onChange={changeView} />
-            {isSalesMockData() && (
-              <span className="rounded-full bg-[#FFF4E0] text-[#A66B00] text-[10px] font-semibold px-2.5 py-1 uppercase tracking-wide">
-                Mock data
-              </span>
-            )}
-          </div>
-          <p className="text-[#535359] text-[13px] mt-1">
-            {selectedTa ? (
-              <>
-                Sales from <span className="font-semibold text-[#252525]">{selectedTa.name}</span>&apos;s network: trainers and
-                facilities they onboarded, and website buyers who later linked one of those trainers.
-              </>
-            ) : (
-              "Monitor revenue, purchases, subscription activity, and sales attribution across direct website purchases and trainer-referred purchases."
-            )}
-          </p>
-        </div>
-        <SalesPeriodFilter
-          period={period}
-          onPeriodChange={changePeriod}
-          rangeLabel={rangeLabel}
-          onPrev={() => moveAnchor(-1)}
-          onNext={() => moveAnchor(1)}
-          nextDisabled={nextDisabled}
-        />
-      </div>
+      <SalesHeader
+        trainerAdmins={trainerAdmins}
+        trainerAdmin={trainerAdmin}
+        onTrainerAdminChange={changeView}
+        selectedTa={selectedTa}
+        mock={isSalesMockData()}
+        period={period}
+        onPeriodChange={changePeriod}
+        rangeLabel={rangeLabel}
+        onPrev={() => moveAnchor(-1)}
+        onNext={() => moveAnchor(1)}
+        nextDisabled={nextDisabled}
+      />
 
-      <>
-          <SalesKpiCards
-            summary={ovError ? null : summary}
-            breakdown={ovError ? null : breakdown}
-            renewals={ovError ? null : overview?.retention?.renewals}
-            upcoming={ovError ? null : overview?.retention?.upcoming}
-            overall={monthlyError ? null : monthly}
-            previous={ovError ? null : previousOverview}
-            compareLabel={compareLabel}
-            period={period}
-            loading={ovInitial}
-          />
-
-          <SalesAllMonths data={monthly} loading={monthlyLoading} error={monthlyError} onRetry={loadMonthly} />
-
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <div className="xl:col-span-2 min-w-0">
-              <SalesTrendChart
-                buckets={buckets}
-                trend={overview?.trend}
-                currency={currency}
-                loading={ovInitial}
-                updating={ovUpdating}
-                error={ovError}
-                onRetry={loadOverview}
-                rangeLabel={rangeLabel}
-              />
-            </div>
-            <div className="min-w-0">
-              <SalesSourceDoughnut
-                breakdown={breakdown}
-                currency={currency}
-                loading={ovInitial}
-                updating={ovUpdating}
-                error={ovError}
-                onRetry={loadOverview}
-              />
-            </div>
-          </div>
-
-          <SalesChannelComparison
-            websiteHint={selectedTa ? "Bought on the website, later linked a trainer in this network" : undefined}
-            breakdown={breakdown}
-            summary={summary}
-            loading={ovInitial}
-            updating={ovUpdating}
-            error={ovError}
-            onRetry={loadOverview}
-          />
-
-          <SalesRetention
-            retention={overview?.retention}
-            currency={currency}
-            rangeLabel={rangeLabel}
-            loading={ovInitial}
-            updating={ovUpdating}
-            error={ovError}
-            onRetry={loadOverview}
-          />
-
-          <SalesClientEngagement
-            key={trainerAdmin || "all"}
-            period={period}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            trainerAdmin={trainerAdmin}
-            rangeLabel={rangeLabel}
-          />
-
-          <TopTrainerSales
-            key={`${trainerAdmin || "all"}-${period}-${dateFrom}`}
-            trainers={overview?.top_trainers}
-            onSelect={setSelectedTrainer}
-            trainerNetSales={breakdown?.trainer_code?.net_sales}
-            currency={currency}
-            loading={ovInitial}
-            updating={ovUpdating}
-            error={ovError}
-            onRetry={loadOverview}
-          />
-
-          <SalesCard
-            title="Purchase Details"
-            subtitle={`Customers who purchased during ${rangeLabel}`}
-            action={<UpdatingPill show={purchasesLoading && Boolean(purchases)} />}
+      {ovError && !overview && (
+        <div role="alert" className="rounded-[10px] border border-[#FCA5A5] bg-[#FEF2F2] p-4 flex items-center justify-between gap-3 flex-wrap">
+          <span className="text-[#B91C1C] text-[12px]">{ovError}</span>
+          <button
+            type="button"
+            onClick={loadOverview}
+            className="rounded-full bg-white border border-[#FCA5A5] text-[#B91C1C] text-[11px] font-semibold px-3 py-1 hover:bg-[#FEE2E2] cursor-pointer"
           >
-            <PurchaseFilters
-              source={source}
-              onSourceChange={resetPage(setSource)}
-              search={searchInput}
-              onSearchChange={setSearchInput}
-              searchMinLength={SALES_SEARCH_MIN_LENGTH}
-              subscriptionStatus={subscriptionStatus}
-              onSubscriptionStatusChange={resetPage(setSubscriptionStatus)}
-              paymentStatus={paymentStatus}
-              onPaymentStatusChange={resetPage(setPaymentStatus)}
-              subscriptionStatusOptions={subscriptionOptions}
-              paymentStatusOptions={paymentOptions}
-            />
-            <PurchaseTable
-              rows={purchases?.purchases}
-              loading={purchasesLoading && !purchases}
-              updating={purchasesLoading && Boolean(purchases)}
-              error={purchasesError}
-              onRetry={loadPurchases}
-              onSelect={setSelected}
-              emptyMessage={filtersActive ? "No purchases match these filters." : "No sales found for the selected period."}
-            />
-            {purchases && !purchasesError && (
-              <SalesPagination
-                page={page}
-                limit={PAGE_LIMIT}
-                total={pagination?.total || 0}
-                totalPages={totalPages}
-                disabled={purchasesLoading}
-                onPageChange={(p) => p >= 1 && p <= totalPages && p !== page && setPage(p)}
-              />
-            )}
-          </SalesCard>
-      </>
+            Retry
+          </button>
+        </div>
+      )}
+
+      <SalesHeadline
+        summary={ovError ? null : summary}
+        breakdown={ovError ? null : breakdown}
+        retention={ovError ? null : overview?.retention}
+        previous={ovError ? null : previousOverview}
+        monthly={monthlyError ? null : monthly}
+        monthlyLoading={monthlyLoading}
+        compareLabel={compareLabel}
+        loading={ovInitial}
+      />
+
+      <SalesOverall
+        monthly={monthly}
+        monthlyLoading={monthlyLoading}
+        monthlyError={monthlyError}
+        onRetryMonthly={loadMonthly}
+        buckets={buckets}
+        trend={overview?.trend}
+        breakdown={breakdown}
+        summary={summary}
+        period={period}
+        rangeLabel={rangeLabel}
+        overviewLoading={ovInitial}
+        overviewUpdating={ovUpdating}
+        overviewError={ovError}
+        onRetryOverview={loadOverview}
+      />
+
+      <SalesRetentionPanel
+        retention={overview?.retention}
+        currency={currency}
+        periodTag={periodTag}
+        loading={ovInitial}
+        updating={ovUpdating}
+        error={ovError}
+        onRetry={loadOverview}
+      />
+
+      <SalesEngagementPanel
+        key={trainerAdmin || "all"}
+        period={period}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        trainerAdmin={trainerAdmin}
+        rangeLabel={rangeLabel}
+      />
+
+      <SalesTopTrainersPanel
+        key={`${trainerAdmin || "all"}-${period}-${dateFrom}`}
+        trainers={overview?.top_trainers}
+        onSelect={setSelectedTrainer}
+        trainerNetSales={breakdown?.trainer_code?.net_sales}
+        currency={currency}
+        loading={ovInitial}
+        updating={ovUpdating}
+        error={ovError}
+        onRetry={loadOverview}
+      />
+
+      <SalesPurchasesPanel
+        rangeLabel={rangeLabel}
+        data={purchases}
+        loading={purchasesLoading}
+        error={purchasesError}
+        onRetry={loadPurchases}
+        onSelect={setSelected}
+        source={source}
+        onSourceChange={resetPage(setSource)}
+        search={searchInput}
+        onSearchChange={setSearchInput}
+        searchMinLength={SALES_SEARCH_MIN_LENGTH}
+        subscriptionStatus={subscriptionStatus}
+        onSubscriptionStatusChange={resetPage(setSubscriptionStatus)}
+        paymentStatus={paymentStatus}
+        onPaymentStatusChange={resetPage(setPaymentStatus)}
+        subscriptionOptions={subscriptionOptions}
+        paymentOptions={paymentOptions}
+        page={page}
+        pageSize={PAGE_LIMIT}
+        onPageChange={(p) => p >= 1 && p <= totalPages && p !== page && setPage(p)}
+        filtersActive={filtersActive}
+      />
 
       <TrainerPurchasesModal
         key={selectedTrainer?.partner_code || "none"}
