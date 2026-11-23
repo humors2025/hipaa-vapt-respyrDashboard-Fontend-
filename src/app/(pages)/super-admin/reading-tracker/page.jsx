@@ -125,6 +125,7 @@ const CARDS = [
   },
   {
     key: "total_readings",
+    facilityColumns: true,
     label: "Total Readings",
     field: "readings",
     hint: "Total tests done this month by all clients. Each client's days with and without a reading are in the table.",
@@ -135,6 +136,7 @@ const CARDS = [
   },
   {
     key: "first_today",
+    facilityColumns: true,
     label: "First Reading Today",
     field: "first_today",
     hint: "Clients who did their very first test ever today.",
@@ -145,6 +147,7 @@ const CARDS = [
   },
   {
     key: "first_month",
+    facilityColumns: true,
     label: "First This Month",
     field: "first_month",
     hint: "Clients who did their very first test ever this month.",
@@ -154,6 +157,7 @@ const CARDS = [
   },
   {
     key: "never",
+    facilityColumns: true,
     label: "Never Tested",
     field: "never",
     hint: "Clients signed up in the app who have never done a single test.",
@@ -163,6 +167,7 @@ const CARDS = [
   },
   {
     key: "no_reading",
+    facilityColumns: true,
     label: "Inactive This Month",
     field: "no_reading",
     hint: "Clients signed up in the app who have not done any test this month.",
@@ -173,6 +178,8 @@ const CARDS = [
   },
   {
     key: "not_linked",
+    facilityColumns: true,
+    purchaseColumns: true,
     label: "Not Linked Yet",
     field: "not_linked",
     hint: "Clients who paid but have not signed up in the app yet, so they cannot do tests.",
@@ -301,6 +308,48 @@ function Pager({ pagination, page, loading, setPage }) {
   );
 }
 
+// Facility / Facility code / Facility admin cells: the gym behind the trainer code
+// the purchase was made with (row.facility from the API, null for website buyers or
+// a trainer outside any facility).
+function FacilityCells({ facility }) {
+  const dash = <span className="text-[#A1A1A1]">-</span>;
+  return (
+    <>
+      <td className="py-3 px-4 max-w-[200px]">
+        {facility?.name ? (
+          <div className="text-[#252525] font-medium tracking-[-0.24px] truncate" title={facility.name}>
+            {facility.name}
+          </div>
+        ) : (
+          dash
+        )}
+        {facility?.status === "invited" && <div className="text-[#A1A1A1] text-[10px]">Invited, not set up</div>}
+      </td>
+      <td className="py-3 px-4 whitespace-nowrap">
+        {facility?.partner_code ? (
+          <span className="inline-block rounded-[4px] border border-[#E1E6ED] bg-[#F5F7FA] px-2 py-0.5 text-[10px] font-medium text-[#535359] tracking-[0.3px]">
+            {facility.partner_code}
+          </span>
+        ) : (
+          dash
+        )}
+      </td>
+      <td className="py-3 px-4 max-w-[220px]">
+        {facility?.admin_name || facility?.admin_user_id ? (
+          <>
+            <div className="text-[#252525] font-medium tracking-[-0.24px] truncate">{facility.admin_name || facility.admin_user_id}</div>
+            {facility.admin_name && facility.admin_user_id && (
+              <div className="text-[#A1A1A1] text-[10px] truncate">{facility.admin_user_id}</div>
+            )}
+          </>
+        ) : (
+          dash
+        )}
+      </td>
+    </>
+  );
+}
+
 // Right-hand table: the clients behind the selected card, straight from the API.
 function CardTable({ card, month, search, reloadKey, onOpenProfile, onClearSearch }) {
   const [page, setPage] = useState(1);
@@ -402,9 +451,24 @@ function CardTable({ card, month, search, reloadKey, onOpenProfile, onClearSearc
                 {card.lastReadingColumn && (
                   <th className="py-2.5 px-4 font-medium tracking-[-0.22px] whitespace-nowrap">Last reading</th>
                 )}
-                <th className="py-2.5 px-4 font-medium tracking-[-0.22px] whitespace-nowrap">
-                  {card.daysColumns ? "Profile" : "Profile ID"}
-                </th>
+                {card.purchaseColumns && (
+                  <>
+                    <th className="py-2.5 px-4 font-medium tracking-[-0.22px] whitespace-nowrap">Purchase date</th>
+                    <th className="py-2.5 px-4 font-medium tracking-[-0.22px] whitespace-nowrap text-center">Days since purchase</th>
+                  </>
+                )}
+                {card.facilityColumns && (
+                  <>
+                    <th className="py-2.5 px-4 font-medium tracking-[-0.22px] whitespace-nowrap">Facility</th>
+                    <th className="py-2.5 px-4 font-medium tracking-[-0.22px] whitespace-nowrap">Facility code</th>
+                    <th className="py-2.5 px-4 font-medium tracking-[-0.22px] whitespace-nowrap">Facility admin</th>
+                  </>
+                )}
+                {!card.purchaseColumns && (
+                  <th className="py-2.5 px-4 font-medium tracking-[-0.22px] whitespace-nowrap">
+                    {card.daysColumns ? "Profile" : "Profile ID"}
+                  </th>
+                )}
                 <th className="py-2.5 px-4 font-medium tracking-[-0.22px] text-right">Status</th>
               </tr>
             </thead>
@@ -466,9 +530,26 @@ function CardTable({ card, month, search, reloadKey, onOpenProfile, onClearSearc
                         )}
                       </td>
                     )}
-                    <td className="py-3 px-4 text-[#535359] font-mono text-[11px] whitespace-nowrap">
-                      {row.profile_id || "-"}
-                    </td>
+                    {card.purchaseColumns && (
+                      <>
+                        <td className="py-3 px-4 text-[#535359] text-[11px] whitespace-nowrap">{formatDay(row.purchased_on)}</td>
+                        <td className="py-3 px-4 text-center">
+                          {row.days_since_purchase != null ? (
+                            <span className="inline-flex rounded-full bg-[#FFF4E1] text-[#E48326] text-[11px] font-semibold px-2.5 py-0.5 tabular-nums whitespace-nowrap">
+                              {row.days_since_purchase} day{row.days_since_purchase === 1 ? "" : "s"}
+                            </span>
+                          ) : (
+                            <span className="text-[#A1A1A1]">-</span>
+                          )}
+                        </td>
+                      </>
+                    )}
+                    {card.facilityColumns && <FacilityCells facility={row.facility} />}
+                    {!card.purchaseColumns && (
+                      <td className="py-3 px-4 text-[#535359] font-mono text-[11px] whitespace-nowrap">
+                        {row.profile_id || "-"}
+                      </td>
+                    )}
                     <td className="py-3 px-4 text-right">
                       <span
                         className={`inline-flex rounded-full text-[10px] font-semibold px-2.5 py-0.5 whitespace-nowrap ${
