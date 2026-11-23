@@ -1,24 +1,33 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BarElement, CategoryScale, Chart as ChartJS, LinearScale, Tooltip } from "chart.js";
-import { Bar } from "react-chartjs-2";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from "recharts";
 import * as Dialog from "@radix-ui/react-dialog";
 
-ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip);
-
-// Reading Tracker "Top clients": four lists from the API's `leaders` block (computed
+// Reading Tracker "Top clients": lists from the API's `leaders` block (computed
 // over every paid client for the month, ignoring search / filters / paging):
 //   most_readings · most_missed · lowest (lowest regularity among clients who tested
-//   this month) · most_regular. Each tab shows the top 10 as a bar graph, and the
-//   picked client's month as a readings-per-day graph with a taken / missed strip.
+//   this month) · most_regular, plus the never_tested / not_onboarded / renewed lists.
+// Each card picks a ranking shown as a bar graph; the picked client's month is shown
+// as a readings-per-day graph with a taken / missed strip. "See full list" opens all rows.
+
+// color: strong tone (labels, picked bar); bar: light tone (other bars).
+const TONES = {
+  green: { color: "#3FAF58", bar: "#C3E8CB" },
+  red: { color: "#E74C3C", bar: "#F5C2C7" },
+  orange: { color: "#E48326", bar: "#F5D8B6" },
+  blue: { color: "#308BF9", bar: "#B8D9FB" },
+  muted: { color: "#738298", bar: "#D4D8DE" },
+};
 
 const TABS = [
   {
     key: "most_readings",
     label: "Most readings",
-    color: "#308BF9",
+    tone: "green",
+    chartTitle: "Most readings · top 10",
     hint: "Most breath readings this month (repeat tests count)",
+    barUnit: "readings",
     value: (r) => r.reading_count,
     unit: (v) => `${v} reading${v === 1 ? "" : "s"}`,
     sub: (r) => `${r.taken_days.length} of ${r.counted_days} days`,
@@ -26,8 +35,10 @@ const TABS = [
   {
     key: "most_missed",
     label: "Most missed",
-    color: "#D9534F",
+    tone: "red",
+    chartTitle: "Most missed · top 10",
     hint: "Most days with no reading this month",
+    barUnit: "days missed",
     value: (r) => r.missed_days.length,
     unit: (v) => `${v} day${v === 1 ? "" : "s"} missed`,
     sub: (r) => `${r.reading_count} reading${r.reading_count === 1 ? "" : "s"} · ${r.regularity}% regular`,
@@ -35,8 +46,10 @@ const TABS = [
   {
     key: "lowest",
     label: "Lowest usage",
-    color: "#F5A524",
+    tone: "orange",
+    chartTitle: "Lowest usage · top 10",
     hint: "Tested this month, but on the fewest of their days",
+    barUnit: "% regular",
     value: (r) => r.regularity,
     unit: (v) => `${v}% of days`,
     sub: (r) => `${r.taken_days.length} of ${r.counted_days} days · ${r.reading_count} reading${r.reading_count === 1 ? "" : "s"}`,
@@ -45,8 +58,10 @@ const TABS = [
   {
     key: "most_regular",
     label: "Most regular",
-    color: "#3FAF58",
+    tone: "green",
+    chartTitle: "Most regular · top 10",
     hint: "Read on the highest share of their days (at least 7 days counted)",
+    barUnit: "% regular",
     value: (r) => r.regularity,
     unit: (v) => `${v}% of days`,
     sub: (r) => `${r.taken_days.length} of ${r.counted_days} days · best streak ${r.streak} day${r.streak === 1 ? "" : "s"}`,
@@ -57,8 +72,10 @@ const TABS = [
   {
     key: "never_tested",
     label: "Never taken a reading",
-    color: "#A86A00",
+    tone: "red",
+    chartTitle: "Never taken a reading",
     hint: "App profile linked, but no breath reading ever",
+    barUnit: "days since purchase",
     waiting: true,
     countField: "never",
     value: (r) => r.days_since_purchase,
@@ -68,8 +85,10 @@ const TABS = [
   {
     key: "not_onboarded",
     label: "Bought, not onboarded",
-    color: "#7A8699",
+    tone: "muted",
+    chartTitle: "Not onboarded",
     hint: "Paid, but never set up an app profile",
+    barUnit: "days since purchase",
     waiting: true,
     countField: "not_linked",
     value: (r) => r.days_since_purchase,
@@ -81,8 +100,10 @@ const TABS = [
   {
     key: "renewed",
     label: "Renewed plan",
-    color: "#7B5CD6",
+    tone: "blue",
+    chartTitle: "Renewed plan",
     hint: "Paid again when their plan renewed; bars show % of days with a reading this month",
+    barUnit: "% regular",
     renewal: true,
     countField: "renewed",
     value: (r) => r.regularity,
@@ -90,15 +111,10 @@ const TABS = [
     sub: (r) => `Renewed ${r.renewals}× · last ${shortDate(r.last_renewed)}`,
     percent: true,
   },
-];
+].map((t) => ({ ...t, color: TONES[t.tone].color, bar: TONES[t.tone].bar }));
 
-const tooltipBase = {
-  backgroundColor: "#252525",
-  padding: 10,
-  cornerRadius: 8,
-  titleFont: { size: 11, weight: 600 },
-  bodyFont: { size: 11 },
-};
+const AXIS_TICK = { fontSize: 11, fill: "#738298", fontFamily: "'Poppins', sans-serif" };
+const TIP = "bg-white rounded-[10px] border border-[#E1E6ED] shadow-[0_4px_12px_rgba(37,37,37,0.12)] px-3.5 py-2";
 
 const displayName = (r) => r.name || r.email || r.profile_id || "—";
 const short = (s, n = 18) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -107,70 +123,82 @@ function shortDate(iso) {
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
-// Top-10 horizontal bar graph. Clicking a bar picks that client.
+function TopTooltip({ active, payload, tab }) {
+  if (!active || !payload?.length) return null;
+  const r = payload[0].payload.row;
+  return (
+    <div className={TIP}>
+      <div className="text-[#252525] text-[11px] font-semibold tracking-[-0.22px]">{displayName(r)}</div>
+      <div className="text-[12px] font-bold tracking-[-0.24px] mt-0.5" style={{ color: tab.color }}>
+        {tab.unit(tab.value(r))}
+      </div>
+      <div className="text-[#738298] text-[10px] mt-0.5">{tab.sub(r)}</div>
+    </div>
+  );
+}
+
+// Ranked horizontal bar graph. Clicking a bar picks that client.
 function TopChart({ tab, rows, selected, onSelect }) {
   const data = useMemo(
-    () => ({
-      labels: rows.map((r, i) => `${i + 1}. ${short(displayName(r))}`),
-      datasets: [
-        {
-          data: rows.map(tab.value),
-          backgroundColor: rows.map((r) => (r.row_key === selected ? tab.color : `${tab.color}66`)),
-          borderRadius: 4,
-          maxBarThickness: 18,
-        },
-      ],
-    }),
-    [rows, tab, selected]
-  );
-  const options = useMemo(
-    () => ({
-      indexAxis: "y",
-      responsive: true,
-      maintainAspectRatio: false,
-      onClick: (_e, els) => els[0] && onSelect(rows[els[0].index].row_key),
-      onHover: (e, els) => {
-        if (e.native?.target) e.native.target.style.cursor = els.length ? "pointer" : "default";
-      },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          ...tooltipBase,
-          callbacks: {
-            title: (items) => displayName(rows[items[0].dataIndex]),
-            label: (ctx) => {
-              const r = rows[ctx.dataIndex];
-              return [` ${tab.unit(tab.value(r))}`, ` ${tab.sub(r)}`];
-            },
-          },
-        },
-      },
-      scales: {
-        x: {
-          beginAtZero: true,
-          max: tab.percent ? 100 : undefined,
-          grid: { color: "#F0F3F7" },
-          ticks: {
-            color: "#A1A1A1",
-            font: { size: 10 },
-            precision: 0,
-            callback: (v) => (tab.percent ? `${v}%` : tab.waiting ? `${v}d` : v),
-          },
-        },
-        y: { grid: { display: false }, ticks: { color: "#535359", font: { size: 11 } } },
-      },
-    }),
-    [rows, tab, onSelect]
+    () => rows.map((r, i) => ({ name: `${i + 1}. ${short(displayName(r))}`, value: tab.value(r), key: r.row_key, row: r })),
+    [rows, tab]
   );
   return (
-    <div className="relative" style={{ height: Math.max(140, rows.length * 30 + 30) }}>
-      <Bar data={data} options={options} role="img" aria-label={`${tab.label} top ${rows.length} bar graph`} />
+    <div style={{ height: Math.max(180, rows.length * 34 + 40) }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart layout="vertical" data={data} margin={{ left: 0, right: 16, top: 0, bottom: 0 }}>
+          <CartesianGrid stroke="#F0F1F3" strokeWidth={1} horizontal={false} />
+          <XAxis
+            type="number"
+            tick={AXIS_TICK}
+            tickLine={false}
+            axisLine={{ stroke: "#E1E6ED", strokeWidth: 1 }}
+            allowDecimals={false}
+            domain={tab.percent ? [0, 100] : [0, "auto"]}
+            tickFormatter={(v) => (tab.percent ? `${v}%` : tab.waiting ? `${v}d` : v)}
+          />
+          <YAxis type="category" dataKey="name" width={140} tick={{ ...AXIS_TICK, fill: "#535359" }} tickLine={false} axisLine={false} />
+          <RechartsTooltip content={<TopTooltip tab={tab} />} cursor={{ fill: `${tab.color}10` }} />
+          <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={22} cursor="pointer" onClick={(d) => onSelect(d.key)}>
+            {data.map((d) => (
+              <Cell key={d.key} fill={d.key === selected ? tab.color : tab.bar} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+const STRIP = {
+  taken: { color: "#3FAF58", label: "Took a reading" },
+  missed: { color: "#E74C3C", label: "Missed" },
+  pending: { color: "#C4C9D2", label: "Today, not yet" },
+  none: { color: "#E8ECF0", label: "Not counted" },
+};
+
+function DayTooltip({ active, payload, row }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  const times = (row.reading_times?.[d.iso] || []).map((t) => t.slice(0, 5)).join(", ");
+  const text =
+    d.state === "missed"
+      ? "Missed"
+      : d.state === "pending"
+      ? "No reading yet today"
+      : d.state === "none"
+      ? "Not counted (outside plan dates)"
+      : `${d.count} reading${d.count === 1 ? "" : "s"}${times ? `: ${times}` : ""}`;
+  return (
+    <div className={TIP}>
+      <div className="text-[#252525] text-[11px] font-semibold tracking-[-0.22px]">{shortDate(d.iso)}</div>
+      <div className={`text-[12px] font-bold tracking-[-0.24px] mt-0.5 ${d.state === "taken" ? "text-[#308BF9]" : "text-[#738298]"}`}>{text}</div>
     </div>
   );
 }
 
 // One client's month: readings per day (bars) + a strip of taken / missed / today / not counted.
-function ClientMonth({ row, month, daysInMonth, today, color }) {
+function ClientMonth({ row, month, daysInMonth, today }) {
   const days = useMemo(() => {
     const [y, m] = month.split("-").map(Number);
     const taken = new Set(row.taken_days);
@@ -179,92 +207,50 @@ function ClientMonth({ row, month, daysInMonth, today, color }) {
     return Array.from({ length: daysInMonth }, (_, i) => {
       const iso = new Date(Date.UTC(y, m - 1, i + 1)).toISOString().slice(0, 10);
       const state = taken.has(iso) ? "taken" : missed.has(iso) ? "missed" : pending.has(iso) ? "pending" : "none";
-      return { iso, n: i + 1, state, count: row.reading_times?.[iso]?.length || 0, future: today && iso > today };
+      return { iso, day: String(i + 1), state, count: row.reading_times?.[iso]?.length || 0, future: Boolean(today && iso > today) };
     });
   }, [row, month, daysInMonth, today]);
 
-  const data = useMemo(
-    () => ({
-      labels: days.map((d) => d.n),
-      datasets: [
-        {
-          label: "Readings",
-          data: days.map((d) => d.count),
-          backgroundColor: color,
-          borderRadius: 3,
-          maxBarThickness: 16,
-        },
-      ],
-    }),
-    [days, color]
-  );
-  const options = useMemo(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          ...tooltipBase,
-          callbacks: {
-            title: (items) => shortDate(days[items[0].dataIndex].iso),
-            label: (ctx) => {
-              const d = days[ctx.dataIndex];
-              if (d.state === "missed") return " Missed";
-              if (d.state === "pending") return " No reading yet today";
-              if (d.state === "none") return " Not counted (outside plan dates)";
-              const times = (row.reading_times?.[d.iso] || []).map((t) => t.slice(0, 5)).join(", ");
-              return ` ${d.count} reading${d.count === 1 ? "" : "s"}${times ? `: ${times}` : ""}`;
-            },
-          },
-        },
-      },
-      scales: {
-        x: { grid: { display: false }, ticks: { color: "#A1A1A1", font: { size: 10 } } },
-        y: { beginAtZero: true, grid: { color: "#F0F3F7" }, ticks: { color: "#A1A1A1", font: { size: 10 }, precision: 0 } },
-      },
-    }),
-    [days, row]
-  );
-
-  const strip = { taken: "bg-[#3FAF58]", missed: "bg-[#D9534F]", pending: "bg-[#C9D2DE]", none: "bg-[#F0F3F7]" };
-
   return (
-    <div className="flex flex-col gap-2">
-      <div className="relative h-[180px]">
-        <Bar data={data} options={options} role="img" aria-label={`${displayName(row)} readings per day`} />
+    <div className="flex flex-col">
+      <div style={{ height: 150 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={days} barCategoryGap="6%" maxBarSize={14}>
+            <CartesianGrid stroke="#F0F1F3" strokeWidth={1} vertical={false} />
+            <XAxis dataKey="day" tick={{ ...AXIS_TICK, fontSize: 9 }} tickLine={false} axisLine={{ stroke: "#E1E6ED", strokeWidth: 1 }} interval={0} />
+            <YAxis tick={{ ...AXIS_TICK, fontSize: 10 }} tickLine={false} axisLine={false} width={24} allowDecimals={false} />
+            <RechartsTooltip content={<DayTooltip row={row} />} cursor={{ fill: "rgba(48,139,249,0.04)" }} />
+            <Bar dataKey="count" fill="#A8D4FE" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
       </div>
-      <div className="grid gap-[3px] pl-[26px]" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }} aria-hidden="true">
+      <div className="flex gap-[3px] mt-3 pl-[24px]" aria-hidden="true">
         {days.map((d) => (
-          <span
+          <div
             key={d.iso}
-            title={`${shortDate(d.iso)}: ${d.state === "taken" ? "took a reading" : d.state === "missed" ? "missed" : d.state === "pending" ? "no reading yet today" : "not counted"}`}
-            className={`h-2.5 rounded-[2px] ${strip[d.state]} ${d.future ? "opacity-40" : ""}`}
+            className={`flex-1 h-[14px] rounded-[3px] ${d.future ? "opacity-40" : ""}`}
+            style={{ background: STRIP[d.state].color }}
+            title={`${shortDate(d.iso)}: ${STRIP[d.state].label}`}
           />
         ))}
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[#535359] pl-[26px]">
-        {[
-          ["bg-[#3FAF58]", "Took a reading"],
-          ["bg-[#D9534F]", "Missed"],
-          ["bg-[#C9D2DE]", "Today, not yet"],
-          ["bg-[#F0F3F7]", "Not counted"],
-        ].map(([cls, label]) => (
-          <span key={label} className="inline-flex items-center gap-1.5">
-            <span className={`w-2.5 h-2.5 rounded-[2px] ${cls}`} aria-hidden="true" />
-            {label}
-          </span>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5 pl-[24px]">
+        {Object.values(STRIP).map((s) => (
+          <div key={s.label} className="flex items-center gap-1.5">
+            <span className="w-[10px] h-[10px] rounded-[2px] shrink-0" style={{ background: s.color }} />
+            <span className="text-[#738298] text-[10px] tracking-[-0.2px]">{s.label}</span>
+          </div>
         ))}
       </div>
     </div>
   );
 }
 
-function Fact({ label, value, tone }) {
+function StatBox({ label, value, color = "#252525" }) {
   return (
-    <div className="rounded-[10px] bg-[#F5F7FA] px-3 py-2 min-w-0">
-      <div className="text-[#A1A1A1] text-[10px] font-semibold uppercase tracking-wide truncate">{label}</div>
-      <div className="text-[14px] font-bold tabular-nums truncate" style={{ color: tone || "#252525" }}>
+    <div className="bg-[#F5F7FA] rounded-[10px] px-3 py-2.5 border border-[#E1E6ED] min-w-0">
+      <div className="text-[#738298] text-[9px] font-medium uppercase tracking-[0.4px] truncate">{label}</div>
+      <div className="text-[16px] font-bold tracking-[-0.32px] mt-0.5 leading-tight tabular-nums truncate" style={{ color }}>
         {value}
       </div>
     </div>
@@ -276,13 +262,13 @@ function WaitingDetail({ row, tab }) {
   const status = (row.subscription_status || "unknown").replace(/_/g, " ");
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <Fact label="Bought on" value={shortDate(row.purchased_on)} />
-        <Fact label="Days since buying" value={row.days_since_purchase} tone={tab.color} />
-        <Fact label="Plan" value={status.charAt(0).toUpperCase() + status.slice(1)} />
-        <Fact label="Plan code" value={row.plan_code || "–"} />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+        <StatBox label="Bought on" value={shortDate(row.purchased_on)} />
+        <StatBox label="Days since buying" value={row.days_since_purchase} color={tab.color} />
+        <StatBox label="Plan" value={status.charAt(0).toUpperCase() + status.slice(1)} />
+        <StatBox label="Plan code" value={row.plan_code || "–"} />
       </div>
-      <div className="rounded-[10px] bg-[#F8FAFC] px-3 py-2.5 text-[12px] text-[#535359] leading-relaxed">
+      <div className="rounded-[10px] bg-[#F5F7FA] px-3 py-2.5 text-[12px] text-[#535359] leading-relaxed">
         {row.linked
           ? "This client has an app profile but has never taken a breath reading. They may need help setting up the device."
           : "This buyer paid but has not created or linked an app profile yet, so no readings can be tracked. They may need help getting started in the app."}
@@ -426,7 +412,7 @@ function ListPopup({ tab, rows, total, onClose, onOpenProfile }) {
                                   <td className={td}>
                                     {shortDate(r.last_renewed)}
                                     {r.renewed_this_month && (
-                                      <span className="ml-1.5 rounded-full bg-[#F1ECFC] px-1.5 py-0.5 text-[10px] font-semibold text-[#7B5CD6]">
+                                      <span className="ml-1.5 rounded-full bg-[#E9F3FF] px-1.5 py-0.5 text-[10px] font-semibold text-[#308BF9]">
                                         this month
                                       </span>
                                     )}
@@ -434,8 +420,8 @@ function ListPopup({ tab, rows, total, onClose, onOpenProfile }) {
                                 </>
                               )}
                               <td className={`${td} text-center font-semibold text-[#252525]`}>{r.reading_count}</td>
-                              <td className={`${td} text-center text-[#2E8B47]`}>{r.taken_days.length}</td>
-                              <td className={`${td} text-center text-[#B5363A]`}>{r.missed_days.length}</td>
+                              <td className={`${td} text-center text-[#3FAF58]`}>{r.taken_days.length}</td>
+                              <td className={`${td} text-center text-[#E74C3C]`}>{r.missed_days.length}</td>
                               <td className={`${td} text-center`}>{r.regularity}%</td>
                               <td className={`${td} text-center`}>
                                 {r.streak} day{r.streak === 1 ? "" : "s"}
@@ -483,105 +469,114 @@ export default function ReadingTrackerLeaders({ leaders, summary, month, daysInM
   if (!leaders) return null;
 
   return (
-    <section className="bg-white rounded-[15px] border border-[#E1E6ED] p-5 flex flex-col gap-4 min-w-0">
+    <section className="flex flex-col gap-5 min-w-0">
       <div>
-        <h2 className="text-[#252525] text-[14px] font-bold">Top clients this month</h2>
-        <p className="text-[#A1A1A1] text-[11px] mt-0.5">
-          Across every paid client this month (search and filters below don&apos;t change it). Click a client to see more.
+        <h2 className="text-[#252525] text-[18px] font-semibold tracking-[-0.36px]">Top clients this month</h2>
+        <p className="text-[#535359] text-[13px] mt-1 tracking-[-0.26px]">
+          Click a category card to change the ranking. Click a bar to see that client&apos;s detail. Covers every paid client
+          this month.
         </p>
       </div>
 
       {/* One card per list, showing who is #1 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 2xl:grid-cols-7 gap-3" role="group" aria-label="Top client lists">
+      <div className="flex gap-3 overflow-x-auto p-1 pb-3" role="group" aria-label="Top client lists">
         {TABS.map((t) => {
           const first = leaders[t.key]?.[0];
           const active = t.key === tabKey;
+          const count = countOf(t);
+          let name = null;
+          let stat;
+          let sub;
+          if (t.waiting || t.renewal) {
+            stat = `${count} client${count === 1 ? "" : "s"}`;
+            sub = first
+              ? t.renewal
+                ? `Latest: ${displayName(first)} · ${shortDate(first.last_renewed)}`
+                : `Longest: ${displayName(first)} · ${first.days_since_purchase} days`
+              : "Nobody right now";
+          } else if (first) {
+            name = displayName(first);
+            stat = t.unit(t.value(first));
+            sub = t.sub(first);
+          } else {
+            stat = "—";
+            sub = "No clients yet";
+          }
           return (
-            <div
-              key={t.key}
-              className={`rounded-[10px] border transition-colors min-w-0 flex flex-col ${
-                active ? "bg-white shadow-sm" : "bg-[#F8FAFC] border-transparent hover:border-[#C9D6E8]"
-              }`}
-              style={active ? { borderColor: t.color } : undefined}
-            >
             <button
+              key={t.key}
               type="button"
               aria-pressed={active}
               onClick={() => setTabKey(t.key)}
-              className="text-left p-3 pb-2 cursor-pointer min-w-0 flex-1"
+              className="min-w-[172px] max-w-[220px] flex-shrink-0 bg-white rounded-[15px] border border-[#E1E6ED] text-left transition-all hover:-translate-y-0.5 cursor-pointer flex flex-col"
+              style={{
+                borderTop: `2.5px solid ${t.color}`,
+                ...(active ? { boxShadow: `0 0 0 2px white, 0 0 0 4px ${t.color}` } : {}),
+              }}
             >
-              <div className="text-[12px] font-semibold" style={{ color: t.color }}>
-                {t.label}
+              <div className="p-4 pb-3 flex flex-col flex-1 min-w-0 w-full">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.3px]" style={{ color: t.color }}>
+                  {t.label}
+                </span>
+                {name && <span className="text-[#252525] text-[13px] font-semibold tracking-[-0.26px] mt-1.5 leading-tight truncate">{name}</span>}
+                <span className="text-[#252525] text-[18px] font-bold tracking-[-0.36px] mt-1 leading-none tabular-nums">{stat}</span>
+                <span className="text-[#738298] text-[11px] tracking-[-0.22px] mt-1.5 line-clamp-2">{sub}</span>
               </div>
-              {t.waiting || t.renewal ? (
-                <>
-                  <div className="text-[#252525] text-[18px] font-bold tabular-nums leading-tight mt-0.5">
-                    {countOf(t)} client{countOf(t) === 1 ? "" : "s"}
-                  </div>
-                  <div className="text-[#A1A1A1] text-[11px] truncate">
-                    {first
-                      ? t.renewal
-                        ? `Latest: ${displayName(first)} · ${shortDate(first.last_renewed)}`
-                        : `Longest: ${displayName(first)} · ${first.days_since_purchase} days`
-                      : "Nobody right now"}
-                  </div>
-                </>
-              ) : first ? (
-                <>
-                  <div className="text-[#252525] text-[13px] font-bold truncate mt-0.5">{displayName(first)}</div>
-                  <div className="text-[#252525] text-[18px] font-bold tabular-nums leading-tight">{t.unit(t.value(first))}</div>
-                  <div className="text-[#A1A1A1] text-[11px] truncate">{t.sub(first)}</div>
-                </>
-              ) : (
-                <div className="text-[#A1A1A1] text-[12px] mt-1">No clients yet</div>
-              )}
+              <div className="w-full px-4 py-2.5 border-t border-[#F5F7FA] rounded-b-[15px]" style={{ background: active ? `${t.color}0D` : undefined }}>
+                <span className="text-[11px] font-semibold tracking-[-0.22px]" style={{ color: t.color }}>
+                  {active ? "Active" : "View"}
+                </span>
+              </div>
             </button>
-            <button
-              type="button"
-              onClick={() => setViewKey(t.key)}
-              aria-haspopup="dialog"
-              className="mx-3 mb-3 self-start rounded-[8px] border border-[#E1E6ED] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#308BF9] hover:bg-[#EEF4FE] cursor-pointer"
-            >
-              View
-            </button>
-            </div>
           );
         })}
       </div>
 
       {rows.length === 0 ? (
-        <div className="rounded-[10px] bg-[#F8FAFC] py-8 text-center text-[#A1A1A1] text-[12px]">No clients for this list this month.</div>
+        <div className="bg-white rounded-[15px] border border-[#E1E6ED] py-10 text-center text-[#A1A1A1] text-[12px]">
+          No clients for this list this month.
+        </div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-5">
-          <div className="flex flex-col gap-2 min-w-0">
-            <div className="text-[#A1A1A1] text-[11px] font-semibold uppercase tracking-wide">
-              {tab.label} ·{" "}
-              {tab.waiting
-                ? `${rows.length} client${rows.length === 1 ? "" : "s"}, longest since buying first`
-                : tab.renewal
-                  ? `${rows.length} client${rows.length === 1 ? "" : "s"}, latest renewal first`
-                  : `top ${rows.length}`}{" "}
-              <span className="normal-case font-normal">· {tab.hint}</span>
+        <div className="flex flex-col xl:flex-row gap-5 items-stretch">
+          {/* Left: ranked bar graph */}
+          <div className="flex-1 min-w-0 bg-white rounded-[15px] border border-[#E1E6ED] p-5 flex flex-col">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-[11px] font-medium uppercase tracking-[0.5px]" style={{ color: tab.color }}>
+                  {tab.waiting || tab.renewal ? `${tab.chartTitle} · ${rows.length}` : tab.chartTitle}
+                </h3>
+                <p className="text-[#738298] text-[11px] tracking-[-0.22px] mt-0.5">{tab.hint}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewKey(tab.key)}
+                aria-haspopup="dialog"
+                className="shrink-0 text-[11px] font-semibold text-[#308BF9] hover:underline cursor-pointer whitespace-nowrap"
+              >
+                See full list ›
+              </button>
             </div>
-            {/* keyed by tab: Chart.js keeps the old canvas height when the row count changes */}
+            {/* keyed by tab so the graph height follows the row count */}
             <TopChart key={tabKey} tab={tab} rows={rows} selected={selectedId} onSelect={select} />
+            <div className="text-[#738298] text-[10px] text-right mt-1">{tab.barUnit}</div>
           </div>
 
+          {/* Right: the picked client's detail */}
           {selected && (
-            <div className="flex flex-col gap-3 min-w-0">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex-1 min-w-0 bg-white rounded-[15px] border border-[#E1E6ED] p-5 flex flex-col">
+              <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
                 <div className="min-w-0">
-                  <div className="text-[#252525] text-[14px] font-bold truncate">{displayName(selected)}</div>
-                  <div className="text-[#A1A1A1] text-[11px] truncate">
+                  <h3 className="text-[#252525] text-[16px] font-semibold tracking-[-0.32px] truncate">{displayName(selected)}</h3>
+                  <span className="text-[#738298] text-[11px] tracking-[-0.22px] break-all">
                     {selected.email || "–"} · {selected.profile_id || "No app profile yet"}
-                  </div>
+                  </span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <select
                     aria-label="Pick a client"
                     value={selectedId}
                     onChange={(e) => select(e.target.value)}
-                    className="rounded-[10px] border border-[#E1E6ED] bg-white px-2 py-1.5 text-[11px] max-w-[200px]"
+                    className="rounded-[8px] border border-[#E1E6ED] bg-white text-[12px] text-[#252525] px-3 py-1.5 cursor-pointer focus:outline-none focus:border-[#308BF9] tracking-[-0.24px] max-w-[200px]"
                   >
                     {rows.map((r, i) => (
                       <option key={r.row_key} value={r.row_key}>
@@ -593,32 +588,37 @@ export default function ReadingTrackerLeaders({ leaders, summary, month, daysInM
                     <button
                       type="button"
                       onClick={() => onOpenProfile(selected)}
-                      className="rounded-[10px] border border-[#E1E6ED] px-3 py-1.5 text-[11px] font-semibold text-[#308BF9] hover:bg-[#EEF4FE] cursor-pointer whitespace-nowrap"
+                      className="text-[#308BF9] text-[12px] font-semibold tracking-[-0.24px] whitespace-nowrap cursor-pointer hover:underline"
                     >
                       Open profile ›
                     </button>
                   )}
                 </div>
               </div>
+
               {tab.waiting ? (
                 <WaitingDetail row={selected} tab={tab} />
               ) : (
                 <>
-              {tab.renewal && (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  <Fact label="Renewals" value={`${selected.renewals}×`} tone={tab.color} />
-                  <Fact label="Last renewed" value={shortDate(selected.last_renewed)} />
-                  <Fact label="First bought" value={shortDate(selected.purchased_on)} />
-                </div>
-              )}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                <Fact label="Readings" value={selected.reading_count} />
-                <Fact label="Days taken" value={selected.taken_days.length} tone="#2E8B47" />
-                <Fact label="Days missed" value={selected.missed_days.length} tone="#B5363A" />
-                <Fact label="Regular" value={`${selected.regularity}%`} />
-                <Fact label="Best streak" value={`${selected.streak} day${selected.streak === 1 ? "" : "s"}`} />
-              </div>
-              <ClientMonth row={selected} month={month} daysInMonth={daysInMonth} today={today} color={tab.color} />
+                  {tab.renewal && (
+                    <div className="grid grid-cols-3 gap-2.5 mb-2.5">
+                      <StatBox label="Renewals" value={`${selected.renewals}×`} color={tab.color} />
+                      <StatBox label="Last renewed" value={shortDate(selected.last_renewed)} />
+                      <StatBox label="First bought" value={shortDate(selected.purchased_on)} />
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 mb-4">
+                    <StatBox label="Readings" value={selected.reading_count} />
+                    <StatBox label="Days taken" value={selected.taken_days.length} color="#3FAF58" />
+                    <StatBox
+                      label="Days missed"
+                      value={selected.missed_days.length}
+                      color={selected.missed_days.length > 0 ? "#E74C3C" : "#252525"}
+                    />
+                    <StatBox label="Regular" value={`${selected.regularity}%`} />
+                    <StatBox label="Best streak" value={`${selected.streak} day${selected.streak === 1 ? "" : "s"}`} />
+                  </div>
+                  <ClientMonth row={selected} month={month} daysInMonth={daysInMonth} today={today} />
                 </>
               )}
             </div>
