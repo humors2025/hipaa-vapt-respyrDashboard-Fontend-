@@ -83,6 +83,12 @@ export const fetchUpcomingRenewalsService = async ({ days = 10, search = "", pag
 export const fetchCancellationsService = async ({ state = "all", search = "", page = 1, limit = 20 }) =>
   post({ view: "cancellations", ...(state !== "all" ? { state } : {}), ...(search ? { search } : {}), page, limit });
 
+// Renewal payments that failed (or are still unpaid a day later), newest
+// first, with Stripe's decline reason, the card and the next retry date.
+// state: "all" | "failed" | "pending".
+export const fetchFailedRenewalsService = async ({ state = "all", search = "", page = 1, limit = 20 }) =>
+  post({ view: "failed_renewals", ...(state !== "all" ? { state } : {}), ...(search ? { search } : {}), page, limit });
+
 // Re-attach the subscription's own referral promo code in Stripe so the next
 // renewal bills the referred price again (repairs the pre-5-Oct coupon loss).
 // Idempotent: { repaired: true } when the discount was put back, false with a
