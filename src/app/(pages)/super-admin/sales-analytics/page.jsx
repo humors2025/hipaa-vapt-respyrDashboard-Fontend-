@@ -27,6 +27,7 @@ import SalesTopTrainersPanel from "@/components/super-admin/sales/redesign/Sales
 import SalesPurchasesPanel from "@/components/super-admin/sales/redesign/SalesPurchasesPanel";
 import PurchaseDetailsDrawer from "@/components/super-admin/sales/PurchaseDetailsDrawer";
 import TrainerPurchasesModal from "@/components/super-admin/sales/TrainerPurchasesModal";
+import useFailedRenewals from "@/components/super-admin/sales/redesign/useFailedRenewals";
 
 const PAGE_LIMIT = 8;
 // Used until the API returns filter_options (the backend's own status list wins).
@@ -257,6 +258,9 @@ export default function SuperAdminSalesAnalyticsPage() {
   const ovUpdating = overviewLoading && Boolean(overview);
   const ovError = overviewError;
 
+  // Failed renewal payments (all time), shown in Subscription Activity and Renewals & Retention.
+  const failedRenewals = useFailedRenewals();
+
   // Short label for the coloured tags: "Nov 2026", "Week of Nov 17", "2026".
   const periodTag =
     period === "year"
@@ -301,6 +305,7 @@ export default function SuperAdminSalesAnalyticsPage() {
         previous={ovError ? null : previousOverview}
         monthly={monthlyError ? null : monthly}
         monthlyLoading={monthlyLoading}
+        failedRenewals={failedRenewals}
         compareLabel={compareLabel}
         loading={ovInitial}
       />
@@ -326,6 +331,7 @@ export default function SuperAdminSalesAnalyticsPage() {
         retention={overview?.retention}
         currency={currency}
         periodTag={periodTag}
+        failedRenewals={failedRenewals}
         loading={ovInitial}
         updating={ovUpdating}
         error={ovError}

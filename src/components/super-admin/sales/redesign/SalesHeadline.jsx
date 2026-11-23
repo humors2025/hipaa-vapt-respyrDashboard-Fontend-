@@ -73,7 +73,19 @@ function Cell({ children, className = "" }) {
   return <div className={`px-6 xl:px-7 py-6 flex flex-col min-w-0 ${className}`}>{children}</div>;
 }
 
-export default function SalesHeadline({ summary, breakdown, retention, previous, monthly, monthlyLoading, compareLabel, loading }) {
+// failedRenewals: useFailedRenewals() state, loaded once by the page and shared
+// with Renewals & Retention.
+export default function SalesHeadline({
+  summary,
+  breakdown,
+  retention,
+  previous,
+  monthly,
+  monthlyLoading,
+  failedRenewals = { loading: true, data: null },
+  compareLabel,
+  loading,
+}) {
   const cancellations = useCancellationTotals();
   const s = summary || {};
   const b = breakdown || {};
@@ -158,7 +170,7 @@ export default function SalesHeadline({ summary, breakdown, retention, previous,
           <div className="px-7 pt-4 pb-3 border-b border-[#E1E6ED]">
             <span className="text-[14px] font-semibold text-[#252525] tracking-[-0.28px]">Subscription Activity</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3">
             <Cell className="sm:border-r border-[#E1E6ED]">
               <div className="flex items-center gap-2">
                 <Dot color={C.green} />
@@ -177,7 +189,7 @@ export default function SalesHeadline({ summary, breakdown, retention, previous,
               )}
               <OrdersLink href="/super-admin/orders?tab=renewals" />
             </Cell>
-            <Cell className="bg-[#FFFBF0] border-t sm:border-t-0 border-[#E1E6ED]">
+            <Cell className="bg-[#FFFBF0] border-t sm:border-t-0 sm:border-r border-[#E1E6ED]">
               <div className="flex items-center gap-2">
                 <Dot color="#D4A017" />
                 <span className="text-[13px] font-semibold text-[#9A7613] tracking-[-0.26px]">Upcoming</span>
@@ -191,6 +203,27 @@ export default function SalesHeadline({ summary, breakdown, retention, previous,
                 Set to renew from now until the period ends (cancelled plans not counted)
               </span>
               <OrdersLink href="/super-admin/orders?tab=upcoming" className="text-[#7A6A1A]" />
+            </Cell>
+            <Cell className="bg-[#FFF5F5] border-t sm:border-t-0 border-[#E1E6ED]">
+              <div className="flex items-center gap-2">
+                <Dot color={C.red} />
+                <span className="text-[13px] font-semibold text-[#B5363A] tracking-[-0.26px]">Failed renewals</span>
+              </div>
+              {failedRenewals.loading ? (
+                <Bone className="h-9 w-16 mt-2.5 !bg-[#F8E1E1]" />
+              ) : (
+                <Big className={failedRenewals.data?.count > 0 ? "!text-[#B5363A]" : ""}>
+                  {failedRenewals.data ? formatCount(failedRenewals.data.count) : "—"}
+                </Big>
+              )}
+              <span className="text-[12px] text-[#9B4A4A] tracking-[-0.24px] leading-normal mt-2">
+                {failedRenewals.data
+                  ? `${formatCount(failedRenewals.data.declined)} declined · ${formatCount(failedRenewals.data.pending)} not paid yet · all time, as in Orders`
+                  : failedRenewals.loading
+                  ? "Renewal payments that did not go through"
+                  : "Could not load the Orders failed renewals"}
+              </span>
+              <OrdersLink href="/super-admin/orders?tab=failed" className="text-[#B5363A]" />
             </Cell>
           </div>
         </Strip>
