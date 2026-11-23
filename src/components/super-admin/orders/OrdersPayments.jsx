@@ -1193,14 +1193,36 @@ function netByCurrency(summary) {
   return [...byCur.entries()].map(([cur, amt]) => formatMoney(amt, cur)).join(" · ");
 }
 
-// Five count cards at the top of every tab except Test codes: total sales (first payments
-// + renewals), first payments, renewals, cancellations, upcoming renewals.
+// Six count cards at the top of every tab except Test codes: total sales (first payments
+// + renewals), first payments, renewals, cancellations, upcoming renewals, failed
+// renewals (clicking that one opens the Failed renewals tab).
 // Each comes from its own request with limit 1, since only the totals matter.
 // Sales count paid invoices (refunded ones included, as on the Renewals tab);
 // failed and open attempts are left out.
-function PaymentsOverview() {
+function PaymentsOverview({ onOpenTab }) {
   const [stats, setStats] = useState(null);
   const [failed, setFailed] = useState(false);
+  // Loaded on its own so a backend without view=failed_renewals (prod before
+  // the merge) only blanks this card, not the other five.
+  const [failedRenewals, setFailedRenewals] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetchFailedRenewalsService({ limit: 1 })
+      .then((res) => {
+        if (!alive) return;
+        if (res?.status === false || !res?.summary) throw new Error("failed");
+        setFailedRenewals({
+          count: res.summary.total || 0,
+          declined: res.summary.failed || 0,
+          pending: res.summary.pending || 0,
+        });
+      })
+      .catch(() => alive && setFailedRenewals({ unavailable: true }));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -1237,24 +1259,54 @@ function PaymentsOverview() {
     { key: "renew", label: "Renewal sales", hint: "Plans that renewed and were paid", accent: "#7C3AED" },
     { key: "cancel", label: "Cancellations", hint: null, accent: "#DC2626" },
     { key: "upcoming", label: "Upcoming renewals", hint: `Renewing in the next ${UPCOMING_DAYS} days`, accent: "#D97706" },
+    { key: "failedRenewals", label: "Failed renewals", hint: "Renewal payments that did not go through", accent: "#B5363A", tab: "failed" },
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
       {cards.map((c) => {
-        const s = stats?.[c.key];
+        const s = c.key === "failedRenewals" ? failedRenewals : stats?.[c.key];
         const hint =
-          c.key === "cancel" && s ? `${s.scheduled} still active, won't renew · ${s.ended} ended` : c.key === "cancel" ? "Members who cancelled" : c.hint;
-        return (
-          <div key={c.key} className="rounded-[12px] border border-[#E1E6ED] bg-white px-4 py-3 flex flex-col gap-1" style={{ borderTop: `3px solid ${c.accent}` }}>
+          c.key === "cancel" && s
+            ? `${s.scheduled} still active, won't renew · ${s.ended} ended`
+            : c.key === "cancel"
+              ? "Members who cancelled"
+              : c.key === "failedRenewals" && s?.unavailable
+                ? "Not available yet"
+                : c.key === "failedRenewals" && s
+                  ? `${s.declined} declined · ${s.pending} not paid yet`
+                  : c.hint;
+        const body = (
+          <>
             <span className="text-[#535359] text-[11px] font-semibold">{c.label}</span>
-            {s ? (
-              <span className="text-[#252525] text-[22px] font-bold tabular-nums leading-tight">{s.count.toLocaleString()}</span>
+            {s?.unavailable ? (
+              <span className="text-[#A1A1A1] text-[22px] font-bold leading-tight">—</span>
+            ) : s ? (
+              <span className={`text-[22px] font-bold tabular-nums leading-tight ${c.key === "failedRenewals" && s.count > 0 ? "text-[#B5363A]" : "text-[#252525]"}`}>
+                {s.count.toLocaleString()}
+              </span>
             ) : (
               <Skeleton className="h-[26px] w-12" />
             )}
             {s?.amount ? <span className="text-[#252525] text-[12px] font-semibold tabular-nums">{s.amount}</span> : null}
             <span className="text-[#A1A1A1] text-[11px] leading-snug">{hint}</span>
+          </>
+        );
+        const cls = "rounded-[12px] border border-[#E1E6ED] bg-white px-4 py-3 flex flex-col gap-1 text-left";
+        return c.tab && onOpenTab ? (
+          <button
+            key={c.key}
+            type="button"
+            onClick={() => onOpenTab(c.tab)}
+            title="Open the Failed renewals tab"
+            className={`${cls} cursor-pointer hover:border-[#B5363A] hover:bg-[#FFF8F8] transition-colors`}
+            style={{ borderTop: `3px solid ${c.accent}` }}
+          >
+            {body}
+          </button>
+        ) : (
+          <div key={c.key} className={cls} style={{ borderTop: `3px solid ${c.accent}` }}>
+            {body}
           </div>
         );
       })}
@@ -1474,7 +1526,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
           })}
         </div>
 
-        {tab !== "codes" && <PaymentsOverview />}
+        {tab !== "codes" && <PaymentsOverview onOpenTab={changeTab} />}
 
         {paymentsLike && <PaymentSummary summary={current?.summary} />}
 
