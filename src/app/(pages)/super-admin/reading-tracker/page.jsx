@@ -86,12 +86,12 @@ const createdLabel = (row) =>
 const dayTimesLine = (row, day) =>
   `${formatDay(day)}: ${row.reading_times[day].map(formatTime).join(", ")}`;
 
-// One card per number at the top. `show` and `sort` pick the popup's clients from the API,
-// `details` is what the popup says about each one.
+// One card per number on the left. `show` and `sort` pick the table's clients from the API;
+// `details` becomes the row tooltip; `daysColumns` swaps Email for Days With / Without / Total.
 const CARDS = [
   {
     key: "paid",
-    label: "Paid profiles",
+    label: "Paid Profiles",
     field: "paid_profiles",
     hint: "All clients with a paid plan this month, including those not signed up in the app yet.",
     show: "all",
@@ -99,10 +99,9 @@ const CARDS = [
   },
   {
     key: "took_today",
-    label: "Took a reading today",
+    label: "Tested Today",
     field: "took_today",
     hint: "Number of clients who did at least one test today. A client who tested 3 times counts once.",
-    tone: "text-[#308BF9]",
     todayOnly: true,
     show: "taken_today",
     sort: "name",
@@ -110,22 +109,30 @@ const CARDS = [
   },
   {
     key: "missed_today",
-    label: "Total reading missed today",
+    label: "Missed Today",
     // Linked clients with no test yet today: the chart's "pending" count for today.
     count: (res) => res?.charts?.daily?.find((d) => d.day === res.today)?.pending ?? 0,
     hint: "Clients signed up in the app who have not done any test today yet.",
-    tone: "text-[#B5363A]",
     todayOnly: true,
     show: "pending_today",
     sort: "name",
     details: (row) => [boughtLine(row), `Last reading: ${formatDateTime(row.last_reading)}`],
   },
   {
+    key: "total_readings",
+    label: "Total Readings",
+    field: "readings",
+    hint: "Total tests done this month by all clients. Each client's days with and without a reading are in the table.",
+    show: "all",
+    sort: "most_taken",
+    daysColumns: true,
+    details: (row) => [readingsLabel(row.reading_count), ...row.taken_days.map((day) => dayTimesLine(row, day))],
+  },
+  {
     key: "first_today",
-    label: "First reading today",
+    label: "First Reading Today",
     field: "first_today",
     hint: "Clients who did their very first test ever today.",
-    tone: "text-[#308BF9]",
     todayOnly: true,
     show: "first_today",
     sort: "name",
@@ -133,64 +140,27 @@ const CARDS = [
   },
   {
     key: "first_month",
-    label: "First reading this month",
+    label: "First This Month",
     field: "first_month",
     hint: "Clients who did their very first test ever this month.",
-    tone: "text-[#308BF9]",
     show: "first_month",
     sort: "name",
     details: (row) => [`First reading: ${formatDateTime(row.first_reading)}`],
   },
   {
     key: "never",
-    label: "Never taken a reading",
+    label: "Never Tested",
     field: "never",
     hint: "Clients signed up in the app who have never done a single test.",
-    tone: "text-[#A86A00]",
     show: "never",
     sort: "name",
     details: (row) => [boughtLine(row)],
   },
   {
-    key: "days_taken",
-    label: "Days with a reading",
-    field: "taken_days",
-    hint: "Every client's days with a test this month, added together. E.g. 2 clients who each tested on 3 days = 6.",
-    tone: "text-[#1F7A4A]",
-    show: "taken_month",
-    sort: "most_taken",
-    details: (row) => [
-      `${row.taken_days.length} day${row.taken_days.length === 1 ? "" : "s"}: ${row.taken_days.map(shortDay).join(", ")}`,
-    ],
-  },
-  {
-    key: "total_readings",
-    label: "Total readings",
-    field: "readings",
-    hint: "Total tests done this month by all clients. A client who tested 3 times in a day counts as 3.",
-    tone: "text-[#1F7A4A]",
-    show: "taken_month",
-    sort: "most_taken",
-    details: (row) => [readingsLabel(row.reading_count), ...row.taken_days.map((day) => dayTimesLine(row, day))],
-  },
-  {
-    key: "days_missed",
-    label: "Days without a reading",
-    field: "missed_days",
-    hint: "Every client's days with no test this month, added together. Counted from the day they paid; today is not counted.",
-    tone: "text-[#B5363A]",
-    show: "missed_month",
-    sort: "most_missed",
-    details: (row) => [
-      `${row.missed_days.length} day${row.missed_days.length === 1 ? "" : "s"}: ${row.missed_days.map(shortDay).join(", ")}`,
-    ],
-  },
-  {
     key: "no_reading",
-    label: "No reading this month",
+    label: "Inactive This Month",
     field: "no_reading",
     hint: "Clients signed up in the app who have not done any test this month.",
-    tone: "text-[#A86A00]",
     show: "no_reading",
     sort: "name",
     lastReadingColumn: true,
@@ -198,15 +168,30 @@ const CARDS = [
   },
   {
     key: "not_linked",
-    label: "Not linked yet",
+    label: "Not Linked Yet",
     field: "not_linked",
     hint: "Clients who paid but have not signed up in the app yet, so they cannot do tests.",
-    tone: "text-[#A1A1A1]",
     show: "not_linked",
     sort: "name",
     details: (row) => [boughtLine(row)],
   },
 ];
+
+// Status pill per row: today's test state while the current month is shown, else the plan.
+function rowStatus(row, today, isCurrentMonth) {
+  if (!row.linked) return "not_linked";
+  if (isCurrentMonth && row.today_count > 0) return "tested";
+  if (isCurrentMonth && row.pending_days?.includes(today)) return "missed";
+  return row.subscription_status || "unknown";
+}
+
+const ROW_STATUS_STYLES = {
+  tested: "bg-[#EAFFEF] text-[#3FAF58]",
+  active: "bg-[#EAFFEF] text-[#3FAF58]",
+  trialing: "bg-[#EAFFEF] text-[#3FAF58]",
+  missed: "bg-[#FDECEE] text-[#E74C3C]",
+  not_linked: "bg-[#F5F7FA] text-[#738298]",
+};
 
 const cardValue = (card, res) => (card.count ? card.count(res) : res?.summary?.[card.field]);
 
@@ -218,9 +203,7 @@ const CARD_LOOK = {
   first_today: { tone: "green", icon: "plus" },
   first_month: { tone: "blue", icon: "star" },
   never: { tone: "orange", icon: "alert" },
-  days_taken: { tone: "green", icon: "calendar" },
   total_readings: { tone: "blue", icon: "chart" },
-  days_missed: { tone: "red", icon: "calendarX" },
   no_reading: { tone: "orange", icon: "pause" },
   not_linked: { tone: "muted", icon: "unlink" },
 };
@@ -244,23 +227,6 @@ function MetricIcon({ type }) {
         <svg {...props}>
           <path d="M3 12l2.5-3 2.5 1.5L11 6l2 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
           <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.2" />
-        </svg>
-      );
-    case "calendar":
-      return (
-        <svg {...props}>
-          <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.2" />
-          <path d="M2 6.5h12" stroke="currentColor" strokeWidth="1.2" />
-          <circle cx="5.5" cy="9.5" r="1" fill="currentColor" />
-          <circle cx="8" cy="9.5" r="1" fill="currentColor" />
-        </svg>
-      );
-    case "calendarX":
-      return (
-        <svg {...props}>
-          <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.2" />
-          <path d="M2 6.5h12" stroke="currentColor" strokeWidth="1.2" />
-          <path d="M6.5 9l3 3M9.5 9l-3 3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
         </svg>
       );
     case "plus":
@@ -370,21 +336,21 @@ function CardTable({ card, month, search, reloadKey, onOpenProfile, onClearSearc
   const rows = data?.rows ?? [];
   const pagination = data?.pagination;
   const tone = toneOf(card);
+  const isCurrentMonth = !!data?.today && data.month === data.today.slice(0, 7);
 
   return (
     <div className="bg-white rounded-[15px] border border-[#E1E6ED] overflow-hidden">
-      <div className="flex items-start justify-between gap-3 px-5 py-3 border-b border-[#F5F7FA]">
+      <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-[#F5F7FA]">
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
             <div className={`w-2 h-2 rounded-full shrink-0 ${tone.dot}`} />
-            <span className="text-[#252525] text-[13px] font-semibold tracking-[-0.26px]">
+            <span title={card.hint} className="text-[#252525] text-[13px] font-semibold tracking-[-0.26px]">
               {card.label}
             </span>
             <span className="rounded-full bg-[#F5F7FA] text-[#535359] text-[11px] font-semibold px-2 py-0.5 tabular-nums">
               {pagination?.total ?? (loading ? "…" : 0)}
             </span>
           </div>
-          <p className="text-[#A1A1A1] text-[11px] mt-1 tracking-[-0.22px]">{card.hint}</p>
         </div>
         {search && (
           <button
@@ -413,88 +379,103 @@ function CardTable({ card, month, search, reloadKey, onOpenProfile, onClearSearc
           {search ? "No clients match your search." : "No clients here."}
         </div>
       ) : (
-        <div className={`max-h-[640px] overflow-auto ${loading ? "opacity-60" : ""}`}>
+        <div className={`max-h-[calc(100vh-320px)] min-h-[320px] overflow-auto ${loading ? "opacity-60" : ""}`}>
           <table className="w-full text-[12px]">
             <thead className="sticky top-0 z-10">
               <tr className="bg-[#F5F7FA] text-[#738298] text-left">
-                <th className="py-2.5 px-5 font-medium w-10">#</th>
-                <th className="py-2.5 px-4 font-medium">Client</th>
-                <th className="py-2.5 px-4 font-medium">Profile ID</th>
-                <th className="py-2.5 px-4 font-medium">Details</th>
-                {card.lastReadingColumn && (
-                  <th className="py-2.5 px-4 font-medium whitespace-nowrap">Last reading</th>
+                <th className="py-2.5 px-5 font-medium tracking-[-0.22px] w-10">#</th>
+                <th className="py-2.5 px-4 font-medium tracking-[-0.22px]">Client</th>
+                {card.daysColumns ? (
+                  <>
+                    <th className="py-2.5 px-4 font-medium tracking-[-0.22px] text-center whitespace-nowrap">Days With</th>
+                    <th className="py-2.5 px-4 font-medium tracking-[-0.22px] text-center whitespace-nowrap">Days Without</th>
+                    <th className="py-2.5 px-4 font-medium tracking-[-0.22px] text-center">Total</th>
+                  </>
+                ) : (
+                  <th className="py-2.5 px-4 font-medium tracking-[-0.22px]">Email</th>
                 )}
-                <th className="py-2.5 px-4 font-medium text-right">Status</th>
+                {card.lastReadingColumn && (
+                  <th className="py-2.5 px-4 font-medium tracking-[-0.22px] whitespace-nowrap">Last reading</th>
+                )}
+                <th className="py-2.5 px-4 font-medium tracking-[-0.22px] whitespace-nowrap">
+                  {card.daysColumns ? "Profile" : "Profile ID"}
+                </th>
+                <th className="py-2.5 px-4 font-medium tracking-[-0.22px] text-right">Status</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, i) => (
-                <tr
-                  key={row.profile_id || row.email || row.purchased_on}
-                  className="border-t border-[#F5F7FA] hover:bg-[#F8FAFC] transition-colors align-top"
-                >
-                  <td className="py-3 px-5 text-[#A1A1A1] tabular-nums">
-                    {((pagination?.page || 1) - 1) * POPUP_LIMIT + i + 1}
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-start gap-2.5">
-                      <div className="w-7 h-7 rounded-full bg-[#F5F7FA] flex items-center justify-center text-[#738298] text-[11px] font-semibold shrink-0 uppercase">
-                        {(row.name || row.email || "?").charAt(0)}
-                      </div>
-                      <div className="min-w-0">
-                        {row.linked ? (
+              {rows.map((row, i) => {
+                const status = rowStatus(row, data.today, isCurrentMonth);
+                return (
+                  <tr
+                    key={row.profile_id || row.email || row.purchased_on}
+                    title={card.details(row, data.today).join("\n")}
+                    className="border-t border-[#F5F7FA] hover:bg-[#F8FAFC] transition-colors"
+                  >
+                    <td className="py-3 px-5 text-[#A1A1A1] tabular-nums">
+                      {((pagination?.page || 1) - 1) * POPUP_LIMIT + i + 1}
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-full bg-[#F5F7FA] flex items-center justify-center text-[#738298] text-[11px] font-semibold shrink-0 uppercase">
+                          {(row.name || row.email || "?").charAt(0)}
+                        </div>
+                        {row.linked && row.profile_id ? (
                           <button
                             type="button"
                             onClick={() => onOpenProfile(row)}
                             className="text-[#252525] font-medium hover:text-[#308BF9] text-left cursor-pointer tracking-[-0.24px]"
                           >
-                            {row.name || row.profile_id}
+                            {row.name || "Unnamed"}
                           </button>
                         ) : (
-                          <div className="text-[#252525] font-medium tracking-[-0.24px]">{row.name || "–"}</div>
-                        )}
-                        <div className="text-[#535359] text-[11px] break-all">{row.email || "–"}</div>
-                        {createdLabel(row) && (
-                          <div className="text-[#A1A1A1] text-[10px] whitespace-nowrap">{createdLabel(row)}</div>
+                          <span className="text-[#252525] font-medium tracking-[-0.24px]">{row.name || "Unnamed"}</span>
                         )}
                       </div>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-[#535359] font-mono text-[11px] whitespace-nowrap">
-                    {row.profile_id || "No profile ID yet"}
-                  </td>
-                  <td className="py-3 px-4 text-[#535359] text-[11px] min-w-[200px]">
-                    {card.details(row, data.today).map((line) => (
-                      <div key={line}>{line}</div>
-                    ))}
-                  </td>
-                  {card.lastReadingColumn && (
-                    <td className="py-3 px-4 text-[11px] whitespace-nowrap">
-                      {row.last_reading ? (
-                        <span className="text-[#252525] font-medium">{formatDateTime(row.last_reading)}</span>
-                      ) : (
-                        <span className="text-[#E48326] font-medium">Never tested</span>
-                      )}
                     </td>
-                  )}
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex flex-col items-end gap-1">
+                    {card.daysColumns ? (
+                      <>
+                        <td className="py-3 px-4 text-center">
+                          <span className="inline-flex rounded-full bg-[#EAFFEF] text-[#3FAF58] text-[11px] font-semibold px-2.5 py-0.5 tabular-nums">
+                            {row.taken_days?.length ?? 0}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="inline-flex rounded-full bg-[#FDECEE] text-[#E74C3C] text-[11px] font-semibold px-2.5 py-0.5 tabular-nums">
+                            {row.missed_days?.length ?? 0}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="text-[#308BF9] text-[12px] font-bold tabular-nums">{row.reading_count ?? 0}</span>
+                        </td>
+                      </>
+                    ) : (
+                      <td className="py-3 px-4 text-[#535359] tracking-[-0.24px] break-all">{row.email || "-"}</td>
+                    )}
+                    {card.lastReadingColumn && (
+                      <td className="py-3 px-4 text-[11px] whitespace-nowrap">
+                        {row.last_reading ? (
+                          <span className="text-[#252525] font-medium">{formatDateTime(row.last_reading)}</span>
+                        ) : (
+                          <span className="text-[#E48326] font-medium">Never tested</span>
+                        )}
+                      </td>
+                    )}
+                    <td className="py-3 px-4 text-[#535359] font-mono text-[11px] whitespace-nowrap">
+                      {row.profile_id || "-"}
+                    </td>
+                    <td className="py-3 px-4 text-right">
                       <span
-                        className={`inline-flex rounded-full text-[10px] font-semibold px-2.5 py-0.5 capitalize whitespace-nowrap ${
-                          STATUS_STYLES[row.subscription_status] || "bg-[#F1F3F5] text-[#535359]"
+                        className={`inline-flex rounded-full text-[10px] font-semibold px-2.5 py-0.5 whitespace-nowrap ${
+                          ROW_STATUS_STYLES[status] || "bg-[#FFF4E1] text-[#E48326]"
                         }`}
                       >
-                        {statusLabel(row)}
+                        {status.replace(/_/g, " ")}
                       </span>
-                      {!row.linked && (
-                        <span className="inline-flex rounded-full text-[10px] font-semibold px-2.5 py-0.5 bg-[#F5F7FA] text-[#738298] whitespace-nowrap">
-                          Not linked
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -651,9 +632,8 @@ export default function ReadingTrackerPage() {
             Reading Tracker
           </h1>
           <p className="text-[#535359] text-[13px] mt-1 tracking-[-0.26px] max-w-[720px]">
-            Clients with a successful payment in Orders › Payments, and the days they took or
-            missed a breath reading. A day is marked missed once it has ended in US Pacific time.
-            Reading dates and times are as stored with each test.
+            Clients with a successful payment, and the days they took or missed a breath reading.
+            A day is marked missed once it has ended in US Pacific time.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -706,7 +686,7 @@ export default function ReadingTrackerPage() {
             <div className="text-[40px] font-bold leading-none mt-1 tracking-[-1px]">
               {valueOrPulse(heroCard, "w-14 h-10 bg-white/10")}
             </div>
-            <div className="text-[11px] opacity-60 mt-2 tracking-[-0.22px]">{heroCard.hint}</div>
+            <div className="text-[11px] opacity-50 mt-2 tracking-[-0.22px]">Click to view all paid clients</div>
           </button>
 
           {tileCards.length > 0 && (
