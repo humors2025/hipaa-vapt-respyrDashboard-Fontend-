@@ -10,6 +10,8 @@
 //   Cancellations  members who cancelled, newest first: still inside their paid
 //               period (won't renew) or already ended, with what they paid and
 //               Stripe's cancellation reason
+//   Failed renewals  renewal payments that failed (or are still unpaid a day
+//               later), with the reason from Stripe, the card and the next retry
 //   Test codes  super admin only (showTestCodes), behind its own Google
 //               Authenticator unlock (same authenticator as Settings)
 //
@@ -27,6 +29,7 @@ import {
   fetchTestCodesService,
   fetchUpcomingRenewalsService,
   fetchCancellationsService,
+  fetchFailedRenewalsService,
   generateTestCodesService,
   restoreSubscriptionDiscountService,
   refreshTrackingService,
@@ -54,6 +57,7 @@ const TABS = [
   { value: "renewals", label: "Renewals" },
   { value: "upcoming", label: "Upcoming renewals" },
   { value: "cancellations", label: "Cancellations" },
+  { value: "failed", label: "Failed renewals" },
   { value: "codes", label: "Test codes" },
 ];
 
@@ -405,7 +409,20 @@ function PaymentsTable({ rows, ...shell }) {
             <td className={`${td} text-[#535359] whitespace-nowrap`}>
               {r.period_start ? `${formatDate(r.period_start)} – ${formatDate(r.period_end)}` : <Dash />}
             </td>
-            <td className={`${td} text-right tabular-nums text-[#252525] font-semibold whitespace-nowrap`}>{formatMoney(r.amount_paid, cur)}</td>
+            <td className={`${td} text-right tabular-nums whitespace-nowrap`}>
+              {/* A failed / open invoice collected nothing: show what Stripe tried to charge. */}
+              {(r.status === "failed" || r.status === "open") && r.amount_due ? (
+                <>
+                  <div className="text-[#A1A1A1] font-semibold">{formatMoney(r.amount_paid, cur)}</div>
+                  <div className={`text-[11px] ${r.status === "failed" ? "text-[#B5363A]" : "text-[#A66B00]"}`}>
+                    {r.status === "failed" ? "Tried " : "Due "}
+                    {formatMoney(r.amount_due.amount, r.amount_due.currency || cur)}
+                  </div>
+                </>
+              ) : (
+                <span className="text-[#252525] font-semibold">{formatMoney(r.amount_paid, cur)}</span>
+              )}
+            </td>
             <td className={`${td} text-right tabular-nums whitespace-nowrap`}>
               {Number(r.amount_refunded) > 0 ? <span className="text-[#A66B00]">−{formatMoney(r.amount_refunded, cur)}</span> : <Dash />}
             </td>
@@ -591,6 +608,138 @@ function CancellationsTable({ rows, ...shell }) {
                     ? `Ended ${formatDate(r.access_ends)}`
                     : "Ended"}
               </div>
+            </td>
+          </tr>
+        );
+      })}
+    </TableShell>
+  );
+}
+
+const FAILED_STATE_LABEL = { failed: "Failed", pending: "Not paid yet" };
+
+// Renewal payments that did not go through: why (Stripe's decline reason in
+// plain words), the card, the attempts and Stripe's next retry.
+function FailedRenewalsTable({ rows, ...shell }) {
+  return (
+    <TableShell
+      {...shell}
+      empty={!rows?.length}
+      minWidth="min-w-[1500px]"
+      head={
+        <>
+          <th scope="col" className={th}>Failed on</th>
+          <th scope="col" className={th}>Customer</th>
+          <th scope="col" className={th}>Code</th>
+          <th scope="col" className={th}>Facility</th>
+          <th scope="col" className={th}>Renewal</th>
+          <th scope="col" className={`${th} text-right`}>Amount</th>
+          <th scope="col" className={th}>Reason</th>
+          <th scope="col" className={th}>Card</th>
+          <th scope="col" className={th}>Retry</th>
+          <th scope="col" className={th}>Plan now</th>
+        </>
+      }
+    >
+      {rows?.map((r) => {
+        const plan = describePlan(r.plan || {});
+        const label = r.reason?.label || null;
+        const message = r.reason?.message || r.failure_message || null;
+        const code = r.reason?.decline_code || r.reason?.code || null;
+        const card = r.card;
+        const expired =
+          card?.exp_year && card?.exp_month && new Date(card.exp_year, card.exp_month, 1).getTime() <= Date.now();
+        const retry = r.next_retry_at ? renewsIn(r.next_retry_at) : null;
+        return (
+          <tr key={r.id} className="border-t border-[#F5F7FA] align-top">
+            <td className={`${td} whitespace-nowrap`}>
+              <div className="text-[#535359]">{r.failed_at ? formatDate(r.failed_at, true) : <Dash />}</div>
+              <span
+                className={`inline-block mt-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                  r.state === "failed" ? "bg-[#FDECEC] text-[#B5363A]" : "bg-[#FFF4E0] text-[#A66B00]"
+                }`}
+              >
+                {FAILED_STATE_LABEL[r.state] || humanizeStatus(r.state)}
+              </span>
+            </td>
+            <td className={`${td} max-w-[220px]`}>
+              <Customer customer={r.customer} />
+              {r.customer?.phone && <div className="text-[#535359] text-[11px] truncate">{r.customer.phone}</div>}
+            </td>
+            <td className={`${td} whitespace-nowrap`}>
+              <CodeCell row={r} />
+            </td>
+            <td className={`${td} max-w-[200px]`}>
+              <FacilityName facility={r.facility} />
+              {(r.facility?.admin_name || r.facility?.admin_user_id) && (
+                <div className="text-[#A1A1A1] text-[11px] truncate">Admin: {r.facility.admin_name || r.facility.admin_user_id}</div>
+              )}
+            </td>
+            <td className={`${td} whitespace-nowrap`}>
+              <div className="text-[#252525]">{r.renewal_number ? `${ordinal(r.renewal_number)} renewal` : <Dash />}</div>
+              {r.period_start && (
+                <div className="text-[#A1A1A1] text-[11px]">
+                  {formatDate(r.period_start)} – {formatDate(r.period_end)}
+                </div>
+              )}
+            </td>
+            <td className={`${td} text-right tabular-nums whitespace-nowrap text-[#252525] font-semibold`}>
+              {r.amount_due ? formatMoney(r.amount_due.amount, r.amount_due.currency) : <Dash />}
+            </td>
+            <td className={`${td} max-w-[280px]`}>
+              {label || message ? (
+                <>
+                  <div className="text-[#B5363A] font-semibold">{label || message}</div>
+                  {label && message && message !== label && (
+                    <div className="text-[#535359] text-[11px] break-words">Stripe: {message}</div>
+                  )}
+                  {code && <div className="text-[#A1A1A1] text-[10px] font-mono">{code}</div>}
+                </>
+              ) : (
+                <span className="text-[#A1A1A1] text-[11px]">
+                  {r.state === "pending" ? "No answer from the bank yet" : "Stripe gave no reason"}
+                </span>
+              )}
+            </td>
+            <td className={`${td} whitespace-nowrap`}>
+              {card?.last4 ? (
+                <>
+                  <div className="text-[#252525]">
+                    {card.brand ? humanizeStatus(card.brand) : "Card"} •••• {card.last4}
+                  </div>
+                  {card.exp_month && card.exp_year && (
+                    <div className={`text-[11px] ${expired ? "text-[#B5363A] font-semibold" : "text-[#A1A1A1]"}`}>
+                      {expired ? "Expired " : "Expires "}
+                      {String(card.exp_month).padStart(2, "0")}/{String(card.exp_year).slice(-2)}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <Dash />
+              )}
+            </td>
+            <td className={`${td} whitespace-nowrap`}>
+              {r.paid_since ? (
+                <div className="text-[#16A34A] font-semibold">Paid since {formatDate(r.paid_since)}</div>
+              ) : r.next_retry_at ? (
+                <>
+                  <div className="text-[#252525]">Next try {formatDate(r.next_retry_at)}</div>
+                  {retry && <div className={`text-[11px] ${retry.tone}`}>{retry.text}</div>}
+                </>
+              ) : r.attempt_count != null ? (
+                <div className="text-[#B5363A]">No more retries</div>
+              ) : (
+                <Dash />
+              )}
+              {r.attempt_count ? (
+                <div className="text-[#A1A1A1] text-[11px]">
+                  {r.attempt_count} attempt{r.attempt_count === 1 ? "" : "s"} so far
+                </div>
+              ) : null}
+            </td>
+            <td className={td}>
+              {plan.status ? <StatusBadge status={plan.status} /> : <Dash />}
+              {plan.note && <div className={`text-[11px] mt-1 whitespace-nowrap ${plan.note.tone}`}>{plan.note.text}</div>}
             </td>
           </tr>
         );
@@ -1173,12 +1322,14 @@ export default function OrdersPayments({ showTestCodes = false }) {
               })
             : tab === "cancellations"
               ? await fetchCancellationsService({ state: status, search, page, limit: PAGE_LIMIT })
-              : await fetchUpcomingRenewalsService({ days: UPCOMING_DAYS, search, page, limit: PAGE_LIMIT });
+              : tab === "failed"
+                ? await fetchFailedRenewalsService({ state: status, search, page, limit: PAGE_LIMIT })
+                : await fetchUpcomingRenewalsService({ days: UPCOMING_DAYS, search, page, limit: PAGE_LIMIT });
       if (id !== reqId.current) return;
       if (res?.status === false) throw new Error(res?.message || "Failed to load data");
       // Renewals come back as view "payments" and upcoming as
       // "upcoming_renewals": tag them with their tab.
-      setData(tab === "renewals" || tab === "upcoming" ? { ...res, view: tab } : res);
+      setData(tab === "renewals" || tab === "upcoming" || tab === "failed" ? { ...res, view: tab } : res);
     } catch (err) {
       if (id !== reqId.current) return;
       const msg = errorMessage(err, "Failed to load data");
@@ -1280,7 +1431,9 @@ export default function OrdersPayments({ showTestCodes = false }) {
                   ? "Upcoming renewals"
                   : tab === "cancellations"
                     ? "Cancellations"
-                    : "Test onboarding codes"
+                    : tab === "failed"
+                      ? "Failed renewals"
+                      : "Test onboarding codes"
         }
         subtitle={
           tab === "shipping"
@@ -1295,7 +1448,9 @@ export default function OrdersPayments({ showTestCodes = false }) {
                   ? `Members whose plan renews in the next ${UPCOMING_DAYS} days, soonest first. Cancelled plans are left out. Renewal amount is the member's price: the discounted referral price when they bought with a partner code, list price otherwise.`
                   : tab === "cancellations"
                     ? "Members who cancelled their plan, newest first. A member who cancels keeps access until the end of the period they paid for, then the plan ends and is not renewed. Reason comes from Stripe (and the member's own feedback when they gave it)."
-                    : "Free single-use codes for testing app onboarding — redeemed like a purchase code, but with no payment, sales or commission behind them."
+                    : tab === "failed"
+                      ? "Renewal payments that did not go through, newest first: Failed when the bank or Stripe declined the charge, Not paid yet when there is still no answer a day later. Reason is Stripe's decline reason in plain words. Stripe retries a failed renewal automatically; a retry that succeeds removes the row from this list."
+                      : "Free single-use codes for testing app onboarding — redeemed like a purchase code, but with no payment, sales or commission behind them."
         }
         action={<UpdatingPill show={loading && Boolean(current)} />}
       >
@@ -1350,6 +1505,22 @@ export default function OrdersPayments({ showTestCodes = false }) {
           </div>
         )}
 
+        {tab === "failed" && current?.summary && (
+          <div className="flex flex-wrap gap-2">
+            {[
+              [current.summary.total, "failed renewals in total"],
+              [current.summary.failed, "declined"],
+              [current.summary.pending, "not paid yet"],
+              [current.summary.last_30_days, "in the last 30 days"],
+            ].map(([n, label]) => (
+              <div key={label} className="rounded-[10px] bg-[#F5F7FA] px-3 py-2 text-[12px] flex items-center gap-2">
+                <span className="text-[#252525] font-semibold tabular-nums">{n || 0}</span>
+                <span className="text-[#535359]">{label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {tab === "codes" && (
           <SettingsLockGate kind="testCodes">{(relock) => <TestCodesPanel onLocked={relock} />}</SettingsLockGate>
         )}
@@ -1367,7 +1538,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
                   ? "Search name, email, phone, city, postal code or code"
                   : tab === "upcoming"
                     ? "Search name, email or code"
-                    : tab === "cancellations"
+                    : tab === "cancellations" || tab === "failed"
                       ? "Search name, email, profile ID or code"
                     : "Search name, email, invoice or code"
               }
@@ -1386,7 +1557,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
               {refreshingTracking ? "Checking FedEx…" : "Refresh tracking"}
             </button>
           )}
-          {(paymentsLike || tab === "cancellations") && (
+          {(paymentsLike || tab === "cancellations" || tab === "failed") && (
             <label className="flex flex-col gap-1 min-w-[170px]">
               <span className="text-[#535359] text-[11px] font-semibold">Status</span>
               <select
@@ -1395,13 +1566,22 @@ export default function OrdersPayments({ showTestCodes = false }) {
                   setStatus(e.target.value);
                   setPage(1);
                 }}
-                aria-label={tab === "cancellations" ? "Cancellation status" : "Payment status"}
+                aria-label={tab === "cancellations" ? "Cancellation status" : tab === "failed" ? "Failed renewal status" : "Payment status"}
                 className="w-full rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] text-[#252525] focus:outline-none focus:border-[#308BF9] transition-colors cursor-pointer"
               >
                 <option value="all">All</option>
-                {(tab === "cancellations" ? current?.state_options || ["scheduled", "ended"] : statusOptions).map((o) => (
+                {(tab === "cancellations"
+                  ? current?.state_options || ["scheduled", "ended"]
+                  : tab === "failed"
+                    ? current?.state_options || ["failed", "pending"]
+                    : statusOptions
+                ).map((o) => (
                   <option key={o} value={o}>
-                    {tab === "cancellations" ? CANCEL_STATE_LABEL[o] || humanizeStatus(o) : humanizeStatus(o)}
+                    {tab === "cancellations"
+                      ? CANCEL_STATE_LABEL[o] || humanizeStatus(o)
+                      : tab === "failed"
+                        ? FAILED_STATE_LABEL[o] || humanizeStatus(o)
+                        : humanizeStatus(o)}
                   </option>
                 ))}
               </select>
@@ -1448,6 +1628,12 @@ export default function OrdersPayments({ showTestCodes = false }) {
             {...shell}
             emptyMessage={filtersActive ? "No cancellations match these filters." : "No one has cancelled yet."}
           />
+        ) : tab === "failed" ? (
+          <FailedRenewalsTable
+            rows={current?.failed_renewals}
+            {...shell}
+            emptyMessage={filtersActive ? "No failed renewals match these filters." : "No failed renewals. Every renewal so far went through."}
+          />
         ) : null}
 
         {tab !== "codes" && current && !error && (
@@ -1458,7 +1644,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
             totalPages={totalPages}
             disabled={loading}
             noun={
-              tab === "shipping" ? "addresses" : tab === "payments" ? "payments" : tab === "cancellations" ? "cancellations" : "renewals"
+              tab === "shipping" ? "addresses" : tab === "payments" ? "payments" : tab === "cancellations" ? "cancellations" : tab === "failed" ? "failed renewals" : "renewals"
             }
             onPageChange={(p) => p >= 1 && p <= totalPages && p !== page && setPage(p)}
           />
