@@ -52,12 +52,21 @@ const post = (payload) =>
     timeoutMs: 29000,
   });
 
-export const fetchShippingAddressesService = async ({ search = "", page = 1, limit = 20 }) =>
-  post({ view: "shipping", ...(search ? { search } : {}), page, limit });
+// facilityId (optional, every list): only one facility's network: the
+// facility's and its facility admin's codes plus its trainers.
+const fac = (facilityId) => (facilityId ? { facility_id: facilityId } : {});
 
-export const fetchPaymentTransactionsService = async ({ status = "all", type = "all", paidOnly = false, search = "", page = 1, limit = 20 }) =>
+// Facilities with their facility admin, for the Orders facility filter:
+// { facilities: [ { id, name, partner_code, status, admin_user_id, admin_name } ] }
+export const fetchOrdersFacilityOptionsService = async () => post({ view: "facility_options" });
+
+export const fetchShippingAddressesService = async ({ search = "", page = 1, limit = 20, facilityId = null }) =>
+  post({ view: "shipping", ...(search ? { search } : {}), ...fac(facilityId), page, limit });
+
+export const fetchPaymentTransactionsService = async ({ status = "all", type = "all", paidOnly = false, search = "", page = 1, limit = 20, facilityId = null }) =>
   post({
     view: "payments",
+    ...fac(facilityId),
     status,
     ...(type !== "all" ? { type } : {}),
     ...(paidOnly ? { paid_only: true } : {}),
@@ -66,8 +75,8 @@ export const fetchPaymentTransactionsService = async ({ status = "all", type = "
     limit,
   });
 
-export const fetchUpcomingRenewalsService = async ({ days = 10, search = "", page = 1, limit = 20 }) =>
-  post({ view: "upcoming_renewals", days, ...(search ? { search } : {}), page, limit });
+export const fetchUpcomingRenewalsService = async ({ days = 10, search = "", page = 1, limit = 20, facilityId = null }) =>
+  post({ view: "upcoming_renewals", days, ...(search ? { search } : {}), ...fac(facilityId), page, limit });
 
 // cancellations → { status, cancellations: [ { id, canceled_at, customer: { name, email, phone,
 //              profile_id }, partner_code, facility, purchased_at,
@@ -80,14 +89,14 @@ export const fetchUpcomingRenewalsService = async ({ days = 10, search = "", pag
 //              summary: { total, scheduled, ended, last_30_days }, state_options, pagination }
 //            Members who cancelled, newest cancellation first. state narrows to
 //            scheduled or ended.
-export const fetchCancellationsService = async ({ state = "all", search = "", page = 1, limit = 20 }) =>
-  post({ view: "cancellations", ...(state !== "all" ? { state } : {}), ...(search ? { search } : {}), page, limit });
+export const fetchCancellationsService = async ({ state = "all", search = "", page = 1, limit = 20, facilityId = null }) =>
+  post({ view: "cancellations", ...(state !== "all" ? { state } : {}), ...(search ? { search } : {}), ...fac(facilityId), page, limit });
 
 // Renewal payments that failed (or are still unpaid a day later), newest
 // first, with Stripe's decline reason, the card and the next retry date.
 // state: "all" | "failed" | "pending".
-export const fetchFailedRenewalsService = async ({ state = "all", search = "", page = 1, limit = 20 }) =>
-  post({ view: "failed_renewals", ...(state !== "all" ? { state } : {}), ...(search ? { search } : {}), page, limit });
+export const fetchFailedRenewalsService = async ({ state = "all", search = "", page = 1, limit = 20, facilityId = null }) =>
+  post({ view: "failed_renewals", ...(state !== "all" ? { state } : {}), ...(search ? { search } : {}), ...fac(facilityId), page, limit });
 
 // Re-attach the subscription's own referral promo code in Stripe so the next
 // renewal bills the referred price again (repairs the pre-5-Oct coupon loss).
