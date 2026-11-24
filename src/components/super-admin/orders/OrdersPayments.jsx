@@ -37,10 +37,19 @@ import {
 } from "@/services/superAdminOrdersService";
 import TrackingCell from "@/components/super-admin/orders/ShipmentTracking";
 
-// FedEx tracking on the Shipping tab (column, Refresh tracking button, subtitle
-// line). Hidden 20 Nov 2026, shown again 24 Nov 2026 for UAT testing; set to
-// false to hide it.
-const SHOW_FEDEX_TRACKING = true;
+// FedEx tracking on the Shipping tab (status + Add tracking under the address,
+// Refresh tracking button, subtitle line). Hidden 20 Nov 2026; since 24 Nov 2026
+// shown only on UAT / local hosts for testing and hidden on production
+// (admin.rysflo.com). Decided after mount so server and client render alike.
+const FEDEX_TRACKING_HOSTS = ["uat-frontend.d2jln4krjgobeh.amplifyapp.com", "localhost", "127.0.0.1"];
+function useShowFedexTracking() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const host = window.location.hostname;
+    setShow(FEDEX_TRACKING_HOSTS.includes(host) || host.startsWith("192.168."));
+  }, []);
+  return show;
+}
 import { formatDate, formatMoney, humanizeStatus } from "@/components/super-admin/sales/salesFormat";
 import { SalesCard, UpdatingPill, Skeleton, EmptyState, SectionError, StatusBadge } from "@/components/super-admin/sales/SalesUi";
 import { SalesPagination } from "@/components/super-admin/sales/PurchaseTable";
@@ -268,6 +277,7 @@ function FacilityAdmin({ facility }) {
 }
 
 function ShippingTable({ rows, canEditTracking = false, onTrackingChange, ...shell }) {
+  const SHOW_FEDEX_TRACKING = useShowFedexTracking();
   return (
     <TableShell
       {...shell}
@@ -1406,6 +1416,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshingTracking, setRefreshingTracking] = useState(false);
+  const SHOW_FEDEX_TRACKING = useShowFedexTracking();
   const reqId = useRef(0);
 
   // Open a tab straight from a link, e.g. /super-admin/orders?tab=cancellations.
