@@ -271,7 +271,7 @@ function ShippingTable({ rows, canEditTracking = false, onTrackingChange, ...she
     <TableShell
       {...shell}
       empty={!rows?.length}
-      minWidth={SHOW_FEDEX_TRACKING ? "min-w-[1640px]" : "min-w-[1460px]"}
+      minWidth="min-w-[1460px]"
       head={
         <>
           <th scope="col" className={th}>Purchased</th>
@@ -284,7 +284,6 @@ function ShippingTable({ rows, canEditTracking = false, onTrackingChange, ...she
           <th scope="col" className={th}>Facility admin</th>
           <th scope="col" className={th}>Plan period</th>
           <th scope="col" className={th}>Subscription</th>
-          {SHOW_FEDEX_TRACKING && <th scope="col" className={th}>FedEx tracking</th>}
         </>
       }
     >
@@ -327,6 +326,13 @@ function ShippingTable({ rows, canEditTracking = false, onTrackingChange, ...she
               ) : (
                 <Dash />
               )}
+              {/* FedEx delivery status sits under the address (no own column, so
+                  the table does not need to scroll); details open in a popup. */}
+              {SHOW_FEDEX_TRACKING && (
+                <div className="mt-2">
+                  <TrackingCell row={r} canEdit={canEditTracking} onChange={onTrackingChange} />
+                </div>
+              )}
             </td>
             <td className={`${td} whitespace-nowrap`}>
               <CodeCell row={r} />
@@ -358,11 +364,6 @@ function ShippingTable({ rows, canEditTracking = false, onTrackingChange, ...she
               <StatusBadge status={plan.status} />
               {plan.note && <div className={`text-[11px] mt-1 whitespace-nowrap ${plan.note.tone}`}>{plan.note.text}</div>}
             </td>
-            {SHOW_FEDEX_TRACKING && (
-              <td className={td}>
-                <TrackingCell row={r} canEdit={canEditTracking} onChange={onTrackingChange} />
-              </td>
-            )}
           </tr>
         );
       })}

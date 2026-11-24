@@ -243,8 +243,10 @@ export default function TrackingCell({ row, canEdit = false, onChange }) {
     const delivery = deliveryLine(t);
     cell = (
       <div className="flex flex-col items-start gap-1">
-        <TrackingBadge t={t} />
-        {delivery && <div className={`text-[11px] whitespace-nowrap ${delivery.cls}`}>{delivery.text}</div>}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <TrackingBadge t={t} />
+          {delivery && <span className={`text-[11px] whitespace-nowrap ${delivery.cls}`}>{delivery.text}</span>}
+        </div>
         <button
           type="button"
           onClick={() => openPopup(false)}
