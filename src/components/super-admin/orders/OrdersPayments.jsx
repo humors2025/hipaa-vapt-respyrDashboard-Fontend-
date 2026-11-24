@@ -30,6 +30,7 @@ import {
   fetchUpcomingRenewalsService,
   fetchCancellationsService,
   fetchFailedRenewalsService,
+  fetchOrdersFacilityOptionsService,
   generateTestCodesService,
   restoreSubscriptionDiscountService,
   refreshTrackingService,
@@ -37,8 +38,9 @@ import {
 import TrackingCell from "@/components/super-admin/orders/ShipmentTracking";
 
 // FedEx tracking on the Shipping tab (column, Refresh tracking button, subtitle
-// line). Hidden for now on request (20 Nov 2026); set to true to bring it back.
-const SHOW_FEDEX_TRACKING = false;
+// line). Hidden 20 Nov 2026, shown again 24 Nov 2026 for UAT testing; set to
+// false to hide it.
+const SHOW_FEDEX_TRACKING = true;
 import { formatDate, formatMoney, humanizeStatus } from "@/components/super-admin/sales/salesFormat";
 import { SalesCard, UpdatingPill, Skeleton, EmptyState, SectionError, StatusBadge } from "@/components/super-admin/sales/SalesUi";
 import { SalesPagination } from "@/components/super-admin/sales/PurchaseTable";
@@ -270,7 +272,7 @@ function ShippingTable({ rows, canEditTracking = false, onTrackingChange, ...she
     <TableShell
       {...shell}
       empty={!rows?.length}
-      minWidth={SHOW_FEDEX_TRACKING ? "min-w-[1640px]" : "min-w-[1460px]"}
+      minWidth="min-w-[1460px]"
       head={
         <>
           <th scope="col" className={th}>Purchased</th>
@@ -283,7 +285,6 @@ function ShippingTable({ rows, canEditTracking = false, onTrackingChange, ...she
           <th scope="col" className={th}>Facility admin</th>
           <th scope="col" className={th}>Plan period</th>
           <th scope="col" className={th}>Subscription</th>
-          {SHOW_FEDEX_TRACKING && <th scope="col" className={th}>FedEx tracking</th>}
         </>
       }
     >
@@ -326,6 +327,13 @@ function ShippingTable({ rows, canEditTracking = false, onTrackingChange, ...she
               ) : (
                 <Dash />
               )}
+              {/* FedEx delivery status sits under the address (no own column, so
+                  the table does not need to scroll); details open in a popup. */}
+              {SHOW_FEDEX_TRACKING && (
+                <div className="mt-2">
+                  <TrackingCell row={r} canEdit={canEditTracking} onChange={onTrackingChange} />
+                </div>
+              )}
             </td>
             <td className={`${td} whitespace-nowrap`}>
               <CodeCell row={r} />
@@ -357,11 +365,6 @@ function ShippingTable({ rows, canEditTracking = false, onTrackingChange, ...she
               <StatusBadge status={plan.status} />
               {plan.note && <div className={`text-[11px] mt-1 whitespace-nowrap ${plan.note.tone}`}>{plan.note.text}</div>}
             </td>
-            {SHOW_FEDEX_TRACKING && (
-              <td className={td}>
-                <TrackingCell row={r} canEdit={canEditTracking} onChange={onTrackingChange} />
-              </td>
-            )}
           </tr>
         );
       })}
@@ -1199,7 +1202,7 @@ function netByCurrency(summary) {
 // Each comes from its own request with limit 1, since only the totals matter.
 // Sales count paid invoices (refunded ones included, as on the Renewals tab);
 // failed and open attempts are left out.
-function PaymentsOverview({ onOpenTab }) {
+function PaymentsOverview({ onOpenTab, facilityId = null }) {
   const [stats, setStats] = useState(null);
   const [failed, setFailed] = useState(false);
   // Loaded on its own so a backend without view=failed_renewals (prod before
@@ -1208,7 +1211,8 @@ function PaymentsOverview({ onOpenTab }) {
 
   useEffect(() => {
     let alive = true;
-    fetchFailedRenewalsService({ limit: 1 })
+    setFailedRenewals(null);
+    fetchFailedRenewalsService({ limit: 1, facilityId })
       .then((res) => {
         if (!alive) return;
         if (res?.status === false || !res?.summary) throw new Error("failed");
@@ -1222,15 +1226,17 @@ function PaymentsOverview({ onOpenTab }) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [facilityId]);
 
   useEffect(() => {
     let alive = true;
+    setStats(null);
+    setFailed(false);
     Promise.all([
-      fetchPaymentTransactionsService({ type: "first_payment", paidOnly: true, limit: 1 }),
-      fetchPaymentTransactionsService({ type: "renewal", paidOnly: true, limit: 1 }),
-      fetchCancellationsService({ limit: 1 }),
-      fetchUpcomingRenewalsService({ days: UPCOMING_DAYS, limit: 1 }),
+      fetchPaymentTransactionsService({ type: "first_payment", paidOnly: true, limit: 1, facilityId }),
+      fetchPaymentTransactionsService({ type: "renewal", paidOnly: true, limit: 1, facilityId }),
+      fetchCancellationsService({ limit: 1, facilityId }),
+      fetchUpcomingRenewalsService({ days: UPCOMING_DAYS, limit: 1, facilityId }),
     ])
       .then(([first, renew, cancel, upcoming]) => {
         if (!alive) return;
@@ -1249,7 +1255,7 @@ function PaymentsOverview({ onOpenTab }) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [facilityId]);
 
   if (failed) return <p className="text-[#A66B00] text-[12px]">Could not load the sales totals.</p>;
 
@@ -1314,6 +1320,77 @@ function PaymentsOverview({ onOpenTab }) {
   );
 }
 
+// Facility filter above the count cards: pick by facility or by its facility
+// admin (both pickers set the same facility). Scopes the cards and every tab.
+function FacilityFilter({ facilities, value, onChange }) {
+  const byName = (a, b) => String(a.name || "").localeCompare(String(b.name || ""));
+  const adminLabel = (f) => f.admin_name || f.admin_user_id || "No facility admin";
+  const byFacility = [...facilities].sort(byName);
+  const byAdmin = facilities.filter((f) => f.admin_user_id).sort((a, b) => adminLabel(a).localeCompare(adminLabel(b)) || byName(a, b));
+  // An admin with more than one facility gets one option per facility.
+  const adminCount = new Map();
+  for (const f of byAdmin) adminCount.set(f.admin_user_id, (adminCount.get(f.admin_user_id) || 0) + 1);
+  const selected = value ? facilities.find((f) => f.id === value) : null;
+  const selectCls =
+    "w-full rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] text-[#252525] focus:outline-none focus:border-[#308BF9] transition-colors cursor-pointer";
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 w-full sm:w-auto sm:min-w-[240px]">
+          <span className="text-[#535359] text-[11px] font-semibold">Facility</span>
+          <select value={value || "all"} onChange={(e) => onChange(e.target.value)} aria-label="Filter by facility" className={selectCls}>
+            <option value="all">All facilities</option>
+            {byFacility.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name || `Facility #${f.id}`}
+                {f.status && f.status !== "active" ? ` (${humanizeStatus(f.status)})` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 w-full sm:w-auto sm:min-w-[240px]">
+          <span className="text-[#535359] text-[11px] font-semibold">Facility admin</span>
+          <select
+            value={selected?.admin_user_id ? selected.id : "all"}
+            onChange={(e) => onChange(e.target.value)}
+            aria-label="Filter by facility admin"
+            className={selectCls}
+          >
+            <option value="all">All facility admins</option>
+            {byAdmin.map((f) => (
+              <option key={f.id} value={f.id}>
+                {adminLabel(f)}
+                {adminCount.get(f.admin_user_id) > 1 ? ` (${f.name || `Facility #${f.id}`})` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange("all")}
+            className="rounded-[10px] border border-[#E1E6ED] bg-white px-3 py-2 text-[12px] font-semibold text-[#535359] hover:bg-[#EEF4FE] hover:text-[#308BF9] cursor-pointer transition-colors"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      {selected && (
+        <p className="text-[#535359] text-[12px]">
+          Showing <span className="font-semibold text-[#252525]">{selected.name || `Facility #${selected.id}`}</span>
+          {selected.admin_user_id ? (
+            <>
+              {" "}· facility admin <span className="font-semibold text-[#252525]">{adminLabel(selected)}</span>
+            </>
+          ) : null}
+          : sales through the facility, its facility admin and its trainers. The cards and every tab below count only these.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function OrdersPayments({ showTestCodes = false }) {
   const tabs = showTestCodes ? TABS : TABS.filter((t) => t.value !== "codes");
   const [tab, setTab] = useState("shipping");
@@ -1321,6 +1398,9 @@ export default function OrdersPayments({ showTestCodes = false }) {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  // Facility filter: scopes the count cards and every tab's list.
+  const [facilityId, setFacilityId] = useState(null);
+  const [facilities, setFacilities] = useState(null);
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1361,7 +1441,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
     try {
       const res =
         tab === "shipping"
-          ? await fetchShippingAddressesService({ search, page, limit: PAGE_LIMIT })
+          ? await fetchShippingAddressesService({ search, page, limit: PAGE_LIMIT, facilityId })
           : tab === "payments" || tab === "renewals"
             ? await fetchPaymentTransactionsService({
                 status,
@@ -1371,12 +1451,13 @@ export default function OrdersPayments({ showTestCodes = false }) {
                 search,
                 page,
                 limit: PAGE_LIMIT,
+                facilityId,
               })
             : tab === "cancellations"
-              ? await fetchCancellationsService({ state: status, search, page, limit: PAGE_LIMIT })
+              ? await fetchCancellationsService({ state: status, search, page, limit: PAGE_LIMIT, facilityId })
               : tab === "failed"
-                ? await fetchFailedRenewalsService({ state: status, search, page, limit: PAGE_LIMIT })
-                : await fetchUpcomingRenewalsService({ days: UPCOMING_DAYS, search, page, limit: PAGE_LIMIT });
+                ? await fetchFailedRenewalsService({ state: status, search, page, limit: PAGE_LIMIT, facilityId })
+                : await fetchUpcomingRenewalsService({ days: UPCOMING_DAYS, search, page, limit: PAGE_LIMIT, facilityId });
       if (id !== reqId.current) return;
       if (res?.status === false) throw new Error(res?.message || "Failed to load data");
       // Renewals come back as view "payments" and upcoming as
@@ -1390,11 +1471,35 @@ export default function OrdersPayments({ showTestCodes = false }) {
     } finally {
       if (id === reqId.current) setLoading(false);
     }
-  }, [tab, status, search, page]);
+  }, [tab, status, search, page, facilityId]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // Facilities for the filter (once). A backend without facility_options
+  // (prod before the merge) just hides the filter.
+  useEffect(() => {
+    let alive = true;
+    fetchOrdersFacilityOptionsService()
+      .then((res) => {
+        if (!alive) return;
+        if (res?.status === false || !Array.isArray(res?.facilities)) throw new Error("failed");
+        setFacilities(res.facilities);
+      })
+      .catch(() => alive && setFacilities([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const changeFacility = (value) => {
+    const id = value && value !== "all" ? Number(value) : null;
+    if (id === facilityId) return;
+    trackEvent("Orders Facility Filtered", { filtered: Boolean(id) });
+    setFacilityId(id);
+    setPage(1);
+  };
 
   // Put a row's new FedEx tracking (or null after removing it) into the list
   // on screen without reloading the page.
@@ -1449,7 +1554,7 @@ export default function OrdersPayments({ showTestCodes = false }) {
   const totalPages = Math.max(1, pagination?.total_pages || 1);
   const trimmed = searchInput.trim();
   const tooShort = trimmed.length > 0 && trimmed.length < ORDERS_SEARCH_MIN_LENGTH;
-  const filtersActive = Boolean(search) || status !== "all";
+  const filtersActive = Boolean(search) || status !== "all" || Boolean(facilityId);
   const statusOptions = current?.status_options || (tab === "renewals" ? RENEWED_STATUSES : DEFAULT_PAYMENT_STATUSES);
   // Renewals is the Payments list narrowed to paid renewal invoices: same
   // search, status filter and summary chips.
@@ -1526,7 +1631,11 @@ export default function OrdersPayments({ showTestCodes = false }) {
           })}
         </div>
 
-        {tab !== "codes" && <PaymentsOverview onOpenTab={changeTab} />}
+        {tab !== "codes" && facilities?.length > 0 && (
+          <FacilityFilter facilities={facilities} value={facilityId} onChange={changeFacility} />
+        )}
+
+        {tab !== "codes" && <PaymentsOverview onOpenTab={changeTab} facilityId={facilityId} />}
 
         {paymentsLike && <PaymentSummary summary={current?.summary} />}
 
