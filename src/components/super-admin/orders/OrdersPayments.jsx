@@ -37,8 +37,9 @@ import {
 import TrackingCell from "@/components/super-admin/orders/ShipmentTracking";
 
 // FedEx tracking on the Shipping tab (column, Refresh tracking button, subtitle
-// line). Hidden for now on request (20 Nov 2026); set to true to bring it back.
-const SHOW_FEDEX_TRACKING = false;
+// line). Hidden 20 Nov 2026, shown again 24 Nov 2026 for UAT testing; set to
+// false to hide it.
+const SHOW_FEDEX_TRACKING = true;
 import { formatDate, formatMoney, humanizeStatus } from "@/components/super-admin/sales/salesFormat";
 import { SalesCard, UpdatingPill, Skeleton, EmptyState, SectionError, StatusBadge } from "@/components/super-admin/sales/SalesUi";
 import { SalesPagination } from "@/components/super-admin/sales/PurchaseTable";
