@@ -94,7 +94,12 @@ export const API_ENDPOINTS = {
     FOODLOG: `/${API_VERSION}/dietitian/api/web/food-log`
   },
   MACROSANALYSIS: {
-    GETMACROSUMMARY: `/${API_VERSION}/dietitian/api/web/get_macro_summary_by_date`
+    GETMACROSUMMARY: `/${API_VERSION}/dietitian/api/web/get_macro_summary_by_date`,
+    // Hand-edited macros with a date range; the diet-plan worker uses them
+    // instead of the test's macros while the range covers the plan week.
+    GETMACROOVERRIDES: `/${API_VERSION}/dietitian/api/web/get_macro_overrides`,
+    SAVEMACROOVERRIDE: `/${API_VERSION}/dietitian/api/web/save_macro_override`,
+    REMOVEMACROOVERRIDE: `/${API_VERSION}/dietitian/api/web/remove_macro_override`,
   },
   HABITMONITORING: {
     GETHABITSDATA: `/${API_VERSION}/dietitian/api/web/habits-manager`

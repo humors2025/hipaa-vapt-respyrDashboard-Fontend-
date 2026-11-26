@@ -1008,6 +1008,41 @@ export const fetchMacroSummaryByDate = async (profileId, date) => {
 
 
 
+// ─── Edited macros (Macros Analysis tab) ─────────────────────────────────────
+// The backend records who edited from the verified access token; the values
+// below are only for showing "Saving as …" in the form.
+export function getAccessTokenEditor() {
+  const decoded = decodeAccessTokenFromCookie();
+  if (!decoded) return null;
+  return {
+    user_id: decoded.user_id ?? decoded.dietician?.user_id ?? decoded.dietician?.email ?? null,
+    name: decoded.dietician?.name ?? decoded.name ?? null,
+    role: decoded.role ?? decoded.dietician?.role ?? null,
+    view_only: decoded.view_only === true,
+  };
+}
+
+const macroOverrideRequest = (endpoint, profileId, extra = {}) =>
+  apiFetcher(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      profile_id: profileId,
+      dietitian_id: getDietitianIdFromAccessToken(),
+      ...extra,
+    }),
+  });
+
+export const fetchMacroOverrides = (profileId) =>
+  macroOverrideRequest(API_ENDPOINTS.MACROSANALYSIS.GETMACROOVERRIDES, profileId);
+
+// values: { protein_g, carbs_g, fat_g, fiber_g, valid_from, valid_to, note?, base_test_id? }
+export const saveMacroOverride = (profileId, values) =>
+  macroOverrideRequest(API_ENDPOINTS.MACROSANALYSIS.SAVEMACROOVERRIDE, profileId, values);
+
+export const removeMacroOverride = (profileId, id) =>
+  macroOverrideRequest(API_ENDPOINTS.MACROSANALYSIS.REMOVEMACROOVERRIDE, profileId, { id });
+
 export const fetchHabitsMonitoringData = async (profileId, dietitianId) => {
   // Current date as YYYY-MM-DD (local time).
   const now = new Date();
