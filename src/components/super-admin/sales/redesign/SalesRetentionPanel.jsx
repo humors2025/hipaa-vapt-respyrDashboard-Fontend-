@@ -287,6 +287,12 @@ export default function SalesRetentionPanel({ retention, currency, periodTag, fa
               <>
                 <Headline value={formatCount(cx.total || 0)} word="cancelled" />
                 <Breakdown parts={cancelParts} />
+                {cx.came_back > 0 && (
+                  <p className="text-[11px] text-[#2F855A] tracking-[-0.22px] leading-normal pt-3">
+                    {formatCount(cx.came_back)} {cx.came_back === 1 ? "member" : "members"} who cancelled in these dates renewed
+                    later, so {cx.came_back === 1 ? "is" : "are"} counted under Renewals, not here.
+                  </p>
+                )}
                 {!cx.total ? (
                   <Note>Nobody cancelled in these dates.</Note>
                 ) : (
