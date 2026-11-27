@@ -215,6 +215,16 @@ export function describePlan(r) {
 const th = "py-2.5 px-2.5 font-semibold whitespace-nowrap";
 const td = "py-2.5 px-2.5";
 
+// Member who cancelled, let the plan end, then bought again: counted as a
+// renewal (backend services/rejoinedMembers.js).
+export function RejoinedBadge({ date }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-[4px] whitespace-nowrap text-[#2F855A] bg-[#E6F6EC]">
+      Re-joined Again{date ? ` · ${formatDate(date)}` : ""}
+    </span>
+  );
+}
+
 export function TableShell({ loading, error, onRetry, empty, emptyMessage, updating, minWidth, head, children }) {
   if (error) return <SectionError message={error} onRetry={onRetry} />;
   if (loading) {
@@ -421,7 +431,14 @@ function PaymentsTable({ rows, ...shell }) {
             <td className={`${td} whitespace-nowrap`}>
               <CodeCell row={r} />
             </td>
-            <td className={`${td} text-[#535359] whitespace-nowrap`}>{PAYMENT_TYPE_LABEL[r.type] || humanizeStatus(r.type)}</td>
+            <td className={`${td} text-[#535359] whitespace-nowrap`}>
+              {PAYMENT_TYPE_LABEL[r.type] || humanizeStatus(r.type)}
+              {r.rejoined && (
+                <div className="mt-1">
+                  <RejoinedBadge />
+                </div>
+              )}
+            </td>
             <td className={`${td} text-[#535359] whitespace-nowrap`}>
               {r.period_start ? `${formatDate(r.period_start)} – ${formatDate(r.period_end)}` : <Dash />}
             </td>
@@ -503,7 +520,9 @@ function RenewalsTable({ rows, ...shell }) {
             <td className={`${td} max-w-[200px]`}>
               <FacilityAdmin facility={r.facility} />
             </td>
-            <td className={`${td} text-[#252525] whitespace-nowrap`}>{r.renewal_number ? ordinal(r.renewal_number) : <Dash />}</td>
+            <td className={`${td} text-[#252525] whitespace-nowrap`}>
+              {r.rejoined ? <RejoinedBadge /> : r.renewal_number ? ordinal(r.renewal_number) : <Dash />}
+            </td>
             <td className={`${td} text-[#535359] whitespace-nowrap`}>
               {r.period_start ? `${formatDate(r.period_start)} – ${formatDate(r.period_end)}` : <Dash />}
             </td>
@@ -624,6 +643,11 @@ function CancellationsTable({ rows, ...shell }) {
                     ? `Ended ${formatDate(r.access_ends)}`
                     : "Ended"}
               </div>
+              {r.rejoined_at && (
+                <div className="mt-1">
+                  <RejoinedBadge date={r.rejoined_at} />
+                </div>
+              )}
             </td>
           </tr>
         );

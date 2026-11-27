@@ -288,10 +288,32 @@ export default function SalesRetentionPanel({ retention, currency, periodTag, fa
                 <Headline value={formatCount(cx.total || 0)} word="cancelled" />
                 <Breakdown parts={cancelParts} />
                 {cx.came_back > 0 && (
-                  <p className="text-[11px] text-[#2F855A] tracking-[-0.22px] leading-normal pt-3">
-                    {formatCount(cx.came_back)} {cx.came_back === 1 ? "member" : "members"} who cancelled in these dates renewed
-                    later, so {cx.came_back === 1 ? "is" : "are"} counted under Renewals, not here.
-                  </p>
+                  <div className="mt-3">
+                    <p className="text-[11px] text-[#2F855A] tracking-[-0.22px] leading-normal">
+                      {formatCount(cx.came_back)} {cx.came_back === 1 ? "member" : "members"} who cancelled in these dates
+                      Re-joined Again, so {cx.came_back === 1 ? "is" : "are"} counted under Renewals, not here.
+                    </p>
+                    <div className="mt-2 flex flex-col gap-2 max-h-[160px] overflow-y-auto pr-1">
+                      {(cx.rejoined || []).map((c) => (
+                        <div key={c.id || c.email} className="w-full p-3 rounded-[8px] bg-[#F3FBF6] border border-[#CDEBD8]">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="text-[12px] font-semibold text-[#252525] tracking-[-0.24px] truncate">{c.name || c.email || "—"}</div>
+                              {c.name && c.email && <div className="text-[10px] text-[#738298] truncate">{c.email}</div>}
+                            </div>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-[4px] whitespace-nowrap text-[#2F855A] bg-[#E6F6EC]">
+                              Re-joined Again
+                            </span>
+                          </div>
+                          <div className="flex gap-2 mt-1.5 text-[10px] text-[#738298] flex-wrap">
+                            <span>Left: {formatDate(c.canceled_at)}</span>
+                            <span>·</span>
+                            <span>Re-joined: {formatDate(c.rejoined_at)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
                 {!cx.total ? (
                   <Note>Nobody cancelled in these dates.</Note>
