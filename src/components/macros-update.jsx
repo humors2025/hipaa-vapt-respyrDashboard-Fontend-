@@ -192,7 +192,7 @@ export default function MacrosUpdate({ title = "Macros Update", activeTab, edite
 
   const totalCalories = Number(weeklyData?.calories || 0);
   const description = showEdited
-    ? `Edited macros${editedMacros.edited_by?.name ? ` by ${editedMacros.edited_by.name}` : ""}, used for the diet plan ${niceDate(editedMacros.valid_from)} – ${niceDate(editedMacros.valid_to)}${editedMacros.applies_now ? " (this week's plan)" : ""}. Arrows show the change from the test's macros.`
+    ? `Edited macros${editedMacros.edited_by?.name ? ` by ${editedMacros.edited_by.name}` : ""}, used for the diet plan ${niceDate(editedMacros.valid_from)} – ${niceDate(editedMacros.valid_to)}${editedMacros.applies_now ? " (this week's plan)" : ""}. Arrows show the change from the real macros.`
     : weeklyData?.note || "";
   const unit = "Kcal";
 
@@ -465,7 +465,7 @@ const macros = [
               className="flex p-[2px] bg-white border border-[#E1E6ED] rounded-[6px]"
             >
               {[
-                { key: "original", label: "Test" },
+                { key: "original", label: "Real" },
                 { key: "edited", label: "Edited" },
               ].map((opt) => (
                 <button
