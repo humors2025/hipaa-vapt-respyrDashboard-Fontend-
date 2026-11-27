@@ -44,6 +44,11 @@ const fmt = (v) =>
     ? "—"
     : Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 });
 
+// "Use until" must give 7 to 60 days, counting the start and end day
+// (same rule as the backend, services/macroOverrides.js).
+const MIN_RANGE_DAYS = 7;
+const MAX_RANGE_DAYS = 60;
+
 function addDays(ymd, days) {
   const [y, m, d] = ymd.split("-").map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
@@ -162,6 +167,8 @@ function EditModal({ initial, realLabel, real, editor, today, saving, error, onC
     if (!values.valid_from || !values.valid_to) return "Pick the start and end dates";
     if (values.valid_from < today) return "Start date cannot be in the past";
     if (values.valid_to < values.valid_from) return "End date must be on or after the start date";
+    if (rangeDays < MIN_RANGE_DAYS) return `Use until must be at least ${MIN_RANGE_DAYS} days`;
+    if (rangeDays > MAX_RANGE_DAYS) return `Use until can be at most ${MAX_RANGE_DAYS} days`;
     return null;
   })();
 
@@ -227,7 +234,17 @@ function EditModal({ initial, realLabel, real, editor, today, saving, error, onC
               type="date"
               min={today}
               value={values.valid_from}
-              onChange={(e) => set("valid_from", e.target.value)}
+              onChange={(e) => {
+                const from = e.target.value;
+                // Keep "Use until" inside 7–60 days of the new start date.
+                setValues((prev) => {
+                  if (!from) return { ...prev, valid_from: from };
+                  const lo = addDays(from, MIN_RANGE_DAYS - 1);
+                  const hi = addDays(from, MAX_RANGE_DAYS - 1);
+                  const to = prev.valid_to && prev.valid_to >= lo && prev.valid_to <= hi ? prev.valid_to : lo;
+                  return { ...prev, valid_from: from, valid_to: to };
+                });
+              }}
               className="border border-[#E1E6ED] rounded-[6px] px-3 py-2 text-[13px] text-[#252525] outline-none focus:border-[#308BF9]"
             />
           </label>
@@ -235,16 +252,18 @@ function EditModal({ initial, realLabel, real, editor, today, saving, error, onC
             <span className="text-[#535359] text-[11px] font-semibold">Use until</span>
             <input
               type="date"
-              min={values.valid_from || today}
+              min={addDays(values.valid_from || today, MIN_RANGE_DAYS - 1)}
+              max={addDays(values.valid_from || today, MAX_RANGE_DAYS - 1)}
               value={values.valid_to}
               onChange={(e) => set("valid_to", e.target.value)}
               className="border border-[#E1E6ED] rounded-[6px] px-3 py-2 text-[13px] text-[#252525] outline-none focus:border-[#308BF9]"
             />
           </label>
         </div>
-        {rangeDays > 0 ? (
-          <p className="text-[#738298] text-[11px] -mt-2">{rangeDays} day{rangeDays === 1 ? "" : "s"} (India dates, same as the diet plan weeks)</p>
-        ) : null}
+        <p className="text-[#738298] text-[11px] -mt-2">
+          {rangeDays > 0 ? `${rangeDays} day${rangeDays === 1 ? "" : "s"} · ` : ""}
+          Pick {MIN_RANGE_DAYS} to {MAX_RANGE_DAYS} days (India dates, same as the diet plan weeks)
+        </p>
 
         <label className="flex flex-col gap-1">
           <span className="text-[#535359] text-[11px] font-semibold">Note (optional)</span>
