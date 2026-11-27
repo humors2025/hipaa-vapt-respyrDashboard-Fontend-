@@ -99,8 +99,44 @@ const oneEndRoundedPlugin = {
   },
 };
 
-export default function MacrosUpdate({ title = "Macros Update", activeTab }) {
+function niceDate(ymd) {
+  if (!ymd) return "";
+  const [y, m, d] = String(ymd).slice(0, 10).split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
+
+// % change of each macro from the test's value to the edited value, in the
+// same shape as macro_change_from_previous so the arrows render the same way.
+function changesBetween(from, to) {
+  if (!from || !to) return null;
+  const out = {};
+  for (const k of ["carbs_g", "fat_g", "protein_g", "fiber_g"]) {
+    const a = Number(from[k]);
+    const b = Number(to[k]);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || a === b) continue;
+    out[k] = {
+      change_percent: Math.round((Math.abs(b - a) / a) * 1000) / 10,
+      change_type: b > a ? "increase" : "decrease",
+    };
+  }
+  return out;
+}
+
+export default function MacrosUpdate({ title = "Macros Update", activeTab, editedMacros = null }) {
   const chartRef = useRef(null);
+  // "edited" | "original" — only matters when an edit exists (Macros tab).
+  const [view, setView] = useState("edited");
+  const hasEdit = activeTab === "macros" && Boolean(editedMacros?.edited_macro_summary);
+  const showEdited = hasEdit && view === "edited";
+
+  // A new or changed edit (e.g. just saved) → show it.
+  useEffect(() => {
+    if (editedMacros?.id) setView("edited");
+  }, [editedMacros?.id, editedMacros?.created_at]);
   const [labels, setLabels] = useState([]);
   const prevDataRef = useRef(null);
   const [showCalculationPopup, setShowCalculationPopup] = useState(false);
@@ -124,20 +160,27 @@ export default function MacrosUpdate({ title = "Macros Update", activeTab }) {
   }, []);
 
   // Determine which data to use based on activeTab
+  const testSummary = macroSummaryData?.current_data?.final_macro_summary || null;
+
   const weeklyData = useMemo(() => {
-    if (activeTab === "macros" && macroSummaryData?.current_data?.final_macro_summary) {
-      return macroSummaryData.current_data.final_macro_summary;
+    if (showEdited) return editedMacros.edited_macro_summary;
+    if (activeTab === "macros" && testSummary) {
+      return testSummary;
     }
     return dietAnalysisData?.data?.food_json?.weekly_json_data || {};
-  }, [activeTab, macroSummaryData, dietAnalysisData]);
+  }, [activeTab, showEdited, editedMacros, testSummary, dietAnalysisData]);
 
-  // Get change data for macros tab
+  // Get change data for macros tab: edited view → change from the test's
+  // macros; test view → change from the previous test.
   const macroChanges = useMemo(() => {
+    if (showEdited) {
+      return changesBetween(editedMacros.original_macro_summary || testSummary, editedMacros.edited_macro_summary);
+    }
     if (activeTab === "macros" && macroSummaryData?.macro_change_from_previous) {
       return macroSummaryData.macro_change_from_previous;
     }
     return null;
-  }, [activeTab, macroSummaryData]);
+  }, [activeTab, showEdited, editedMacros, testSummary, macroSummaryData]);
 
   // Get previous data for comparison
   const previousData = useMemo(() => {
@@ -148,7 +191,9 @@ export default function MacrosUpdate({ title = "Macros Update", activeTab }) {
   }, [activeTab, macroSummaryData]);
 
   const totalCalories = Number(weeklyData?.calories || 0);
-  const description = weeklyData?.note || "";
+  const description = showEdited
+    ? `Edited macros${editedMacros.edited_by?.name ? ` by ${editedMacros.edited_by.name}` : ""}, used for the diet plan ${niceDate(editedMacros.valid_from)} – ${niceDate(editedMacros.valid_to)}${editedMacros.applies_now ? " (this week's plan)" : ""}. Arrows show the change from the test's macros.`
+    : weeklyData?.note || "";
   const unit = "Kcal";
 
   // Helper function to format change display
@@ -413,6 +458,31 @@ const macros = [
           </p>
 
           {/* <ViewCalculationButton /> */}
+          {hasEdit ? (
+            <div
+              role="tablist"
+              aria-label="Which macros to show"
+              className="flex p-[2px] bg-white border border-[#E1E6ED] rounded-[6px]"
+            >
+              {[
+                { key: "original", label: "Test" },
+                { key: "edited", label: "Edited" },
+              ].map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === opt.key}
+                  onClick={() => setView(opt.key)}
+                  className={`px-[10px] py-[3px] rounded-[4px] text-[11px] font-semibold cursor-pointer ${
+                    view === opt.key ? "bg-[#308BF9] text-white" : "text-[#535359] hover:bg-[#F0F6FF]"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         {hasData ? (
@@ -422,8 +492,12 @@ const macros = [
                 <Doughnut ref={chartRef} data={donutData} options={donutOptions} />
 
                 <div className="absolute inset-0 flex flex-col gap-[2px] items-center justify-center pointer-events-none">
-                  <p className="text-[#535359] text-[10px] font-semibold leading-[110%] tracking-[-0.2px] capitalize">
-                    Calories
+                  <p
+                    className={`text-[10px] font-semibold leading-[110%] tracking-[-0.2px] capitalize ${
+                      showEdited ? "text-[#308BF9]" : "text-[#535359]"
+                    }`}
+                  >
+                    {showEdited ? "Edited calories" : "Calories"}
                   </p>
                   <p className="text-[#252525] text-[40px] font-normal leading-normal tracking-[-0.8px]">
                     {totalCalories.toFixed(2)}

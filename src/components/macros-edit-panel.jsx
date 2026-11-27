@@ -150,8 +150,43 @@ function CompareTable({ real, edited, realLabel }) {
 
 function EditModal({ initial, realLabel, real, editor, today, saving, error, onCancel, onSave }) {
   const [values, setValues] = useState(initial);
-  const set = (k, v) => setValues((prev) => ({ ...prev, [k]: v }));
+  // What the user typed in Calories; null = show the worked-out number.
+  const [calInput, setCalInput] = useState(null);
+  const set = (k, v) => {
+    if (FIELDS.some((f) => f.key === k)) setCalInput(null);
+    setValues((prev) => ({ ...prev, [k]: v }));
+  };
   const calories = caloriesOf(values, real);
+
+  // Typing calories rescales carbs, fat, protein and fibre by one factor (same
+  // split as now) so the worked-out calories land on the typed number.
+  const setCalories = (raw) => {
+    setCalInput(raw);
+    const target = Number(raw);
+    if (raw === "" || !Number.isFinite(target) || target <= 0) return;
+    setValues((prev) => {
+      const src = kcalSum(prev) > 0 ? prev : real && kcalSum(real) > 0 ? real : null;
+      if (!src) return prev;
+      // caloriesOf = base.calories + kcalSum(m) - kcalSum(base), so the macros
+      // need kcalSum(m) = target - base.calories + kcalSum(base).
+      const base = real && Number(real.calories) > 0 ? real : null;
+      const needed = base ? target - Number(base.calories) + kcalSum(base) : target;
+      if (needed <= 0) return prev;
+      const factor = needed / kcalSum(src);
+      const next = { ...prev };
+      for (const f of FIELDS) {
+        next[f.key] = String(Math.round(Number(src[f.key] || 0) * factor * 10) / 10);
+      }
+      return next;
+    });
+  };
+  const calTooLow = (() => {
+    if (calInput === null || calInput === "") return false;
+    const t = Number(calInput);
+    if (!Number.isFinite(t) || t <= 0) return true;
+    const base = real && Number(real.calories) > 0 ? real : null;
+    return base ? t - Number(base.calories) + kcalSum(base) <= 0 : false;
+  })();
   const rangeDays =
     values.valid_from && values.valid_to
       ? Math.round((new Date(values.valid_to) - new Date(values.valid_from)) / 86400000) + 1
@@ -214,17 +249,34 @@ function EditModal({ initial, realLabel, real, editor, today, saving, error, onC
           ))}
         </div>
 
-        <div className="flex items-center justify-between bg-[#F5F7FA] rounded-[8px] px-3 py-2">
-          <span className="text-[#535359] text-[12px] font-semibold">Calories (worked out)</span>
-          <span className="text-[#252525] text-[14px] font-semibold">
-            {fmt(calories)} kcal
+        <label className="flex flex-col gap-1 bg-[#F5F7FA] rounded-[8px] px-3 py-2">
+          <span className="flex items-center gap-[5px] text-[#535359] text-[11px] font-semibold">
+            <span className="w-[6px] h-[6px] rounded-full bg-[#535359]" />
+            Calories (kcal)
             {real?.calories ? (
-              <span className="text-[#738298] text-[11px] font-normal"> · test {fmt(real.calories)}</span>
+              <span className="font-normal text-[#738298]">· test {fmt(real.calories)}</span>
             ) : null}
           </span>
-        </div>
-        <p className="text-[#738298] text-[10px] -mt-2">
-          {real ? `${realLabel} calories, changed by` : "Worked out as"} protein 4 · carbs 4 · fat 9 · fibre 2 kcal per gram.
+          <input
+            type="number"
+            min="0"
+            step="1"
+            inputMode="numeric"
+            value={calInput ?? (Number.isFinite(calories) ? String(calories) : "")}
+            onChange={(e) => setCalories(e.target.value)}
+            onBlur={() => setCalInput(null)}
+            className={`border rounded-[6px] px-3 py-2 text-[13px] text-[#252525] bg-white outline-none focus:border-[#308BF9] ${
+              calTooLow ? "border-[#D64545]" : "border-[#E1E6ED]"
+            }`}
+          />
+          {calTooLow ? (
+            <span className="text-[#D64545] text-[10px]">Calories are too low to work out the macros.</span>
+          ) : null}
+        </label>
+        <p className="text-[#738298] text-[10px] -mt-2 leading-[140%]">
+          Change calories and carbs, fat, protein and fibre change with it, keeping the same split. Change a
+          macro and calories are worked out again ({real ? `${realLabel} calories, changed by` : "worked out as"}{" "}
+          protein 4 · carbs 4 · fat 9 · fibre 2 kcal per gram).
         </p>
 
         <div className="grid grid-cols-2 gap-3">
@@ -324,7 +376,7 @@ function EditModal({ initial, realLabel, real, editor, today, saving, error, onC
   );
 }
 
-export default function MacrosEditPanel({ activeTab }) {
+export default function MacrosEditPanel({ activeTab, onFeaturedChange }) {
   const macroSummaryData = useSelector(selectMacroSummaryData);
   const [profileId, setProfileId] = useState(null);
   const [state, setState] = useState({ loading: true, error: null, data: null });
@@ -374,6 +426,11 @@ export default function MacrosEditPanel({ activeTab }) {
   }, [overrides, data]);
 
   const appliesNow = featured && data?.applies_to_current_plan_week === featured.id;
+
+  // Let the Macros Analysis graph offer an "Edited" view of this edit.
+  useEffect(() => {
+    onFeaturedChange?.(featured ? { ...featured, applies_now: Boolean(appliesNow) } : null);
+  }, [featured, appliesNow, onFeaturedChange]);
 
   // Real macros of the test selected on the left (date strip).
   const selectedReal = macroSummaryData?.current_data?.final_macro_summary || null;
